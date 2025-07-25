@@ -41,10 +41,10 @@ CREATE TABLE IF NOT EXISTS trade_log (
 );
 """
 
-conn = sqlite3.connect(DB_PATH)
+conn = sqlite3.connect('db/bot.db')
 cur = conn.cursor()
 cur.executescript(schema)
 conn.commit()
 conn.close()
 
-print(f"✅ DB initialized at {DB_PATH}")
+print(f"✅ DB initialized at {'db/bot.db'}")
