@@ -33,8 +33,8 @@
         <td>{{ bot.mode }}</td>
         <td>{{ bot.note }}</td>
         <td>
-        <a class="btn btn-sm btn-outline-primary" href="/bots/{{ b.id }}/edit">Edit</a>
-        <form action="/bots/{{ b.id }}/toggle" method="post" style="display:inline;">
+        <a class="btn btn-sm btn-outline-primary" href="/bots/{{ bot.id }}/edit">Edit</a>
+        <form action="/bots/{{ bot.id }}/toggle" method="post" style="display:inline;">
             <button class="btn btn-sm btn-outline-warning" type="submit">Toggle</button>
         </form>
         </td>
