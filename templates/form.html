@@ -11,7 +11,7 @@
     <select name="timeframe" class="form-select" required>
       {% set tfs = ['1m','5m','15m','1h','4h','1d'] %}
       {% for tf in tfs %}
-        <option value="{{ tf }}" {% if bot and bot.timeframe==tf %}selected{% endif %}>{{ tf }}</option>
+        <option value="{{ tf }}" {% if bot and bot.timeframes==tf %}selected{% endif %}>{{ tf }}</option>
       {% endfor %}
     </select>
   </div>
