@@ -16,6 +16,8 @@ def logs():
 
 @app.route('/bots/new', methods=['GET', 'POST'])
 def new_bot():
+    if request.method == 'GET':
+        return render_template('haihaihi', bot=None)
     if request.method == 'POST':
         data = {
             'coin': request.form['coin'].upper(),
