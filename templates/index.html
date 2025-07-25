@@ -11,6 +11,8 @@
       <th>SL%</th>
       <th>Status</th>
       <th>Mode</th>
+      <th>Note</th>
+      <th>Action</th>
     </tr>
   </thead>
   <tbody>
@@ -29,6 +31,13 @@
           {% endif %}
         </td>
         <td>{{ bot.mode }}</td>
+        <td>{{ bot.note }}</td>
+        <td>
+        <a class="btn btn-sm btn-outline-primary" href="/bots/{{ b.id }}/edit">Edit</a>
+        <form action="/bots/{{ b.id }}/toggle" method="post" style="display:inline;">
+            <button class="btn btn-sm btn-outline-warning" type="submit">Toggle</button>
+        </form>
+        </td>
       </tr>
     {% endfor %}
   </tbody>
