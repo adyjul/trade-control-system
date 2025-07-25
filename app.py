@@ -17,7 +17,7 @@ def logs():
 @app.route('/bots/new', methods=['GET', 'POST'])
 def new_bot():
     if request.method == 'GET':
-        return render_template('haihaihi', bot=None)
+        return render_template('form.html', bot=None)
     if request.method == 'POST':
         data = {
             'coin': request.form['coin'].upper(),
@@ -31,7 +31,7 @@ def new_bot():
         }
         insert_bot(data)
         return redirect(url_for('index'))
-    return render_template('form.html', bot=None)
+    
 
 @app.route('/bots/<int:bot_id>/edit', methods=['GET', 'POST'])
 def edit_bot(bot_id):
