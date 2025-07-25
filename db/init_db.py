@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from config import DB_PATH
+# from config import DB_PATH
 
 os.makedirs(os.path.dirname('db/bot.db'), exist_ok=True)
 
