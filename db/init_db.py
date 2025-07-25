@@ -2,7 +2,7 @@ import sqlite3
 import os
 from config import DB_PATH
 
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+os.makedirs(os.path.dirname('db/bot.db'), exist_ok=True)
 
 schema = r"""
 CREATE TABLE IF NOT EXISTS bot_settings (
