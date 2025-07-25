@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>Daftar Bot Aktif</h3>
+<table class="table table-bordered table-hover">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Coin</th>
+      <th>Timeframe</th>
+      <th>TP%</th>
+      <th>SL%</th>
+      <th>Status</th>
+      <th>Mode</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for bot in bots %}
+      <tr>
+        <td>{{ bot.id }}</td>
+        <td>{{ bot.coin }}</td>
+        <td>{{ bot.timeframe }}</td>
+        <td>{{ bot.tp_percent }}</td>
+        <td>{{ bot.sl_percent }}</td>
+        <td>
+          {% if bot.active %}
+            <span class="badge bg-success">Active</span>
+          {% else %}
+            <span class="badge bg-secondary">Inactive</span>
+          {% endif %}
+        </td>
+        <td>{{ bot.mode }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
