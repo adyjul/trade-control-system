@@ -28,7 +28,8 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
 
         # ambil 6 candle ke depan
         # future_slice = df.loc[idxs[i+1:i+1+look_ahead]]
-        future_slice = df.iloc[idx_start+1:idx_start+7]
+        # future_slice = df.iloc[idx_start+1:idx_start+7]
+        future_slice = df.iloc[idx_start+1:idx_start+1+look_ahead]
         for _, f in future_slice.iterrows():
             if signal == 'LONG':
                 if f['high'] >= tp:
@@ -48,19 +49,15 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
 
 
 def detect_signal(row):
-    # versi “v2” yang kamu kirim (dengan filter ATR & RSI SHORT)
-    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-    #     return 'HOLD'
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+        return 'HOLD'
 
-    # Filter ATR (hindari market flat)
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
-    # LONG
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
         return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
-    # SHORT + filter RSI jenuh jual
     if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
         if row['rsi'] < 35:
             return 'HOLD'
