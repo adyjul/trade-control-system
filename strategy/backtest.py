@@ -24,9 +24,11 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
         signal = row['signal']
         tp = row['tp_price']
         sl = row['sl_price']
+        idx_start = df.index.get_loc(row.name)
 
         # ambil 6 candle ke depan
-        future_slice = df.loc[idxs[i+1:i+1+look_ahead]]
+        # future_slice = df.loc[idxs[i+1:i+1+look_ahead]]
+        future_slice = df.iloc[idx_start+1:idx_start+7]
         for _, f in future_slice.iterrows():
             if signal == 'LONG':
                 if f['high'] >= tp:
