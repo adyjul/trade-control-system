@@ -1,8 +1,11 @@
 from functools import wraps
-from flask import Flask, render_template, request, Response, redirect, url_for, jsonify
+from flask import Flask, render_template, request, Response, redirect, url_for, jsonify, render_template
 from utils.db import get_all_bots, get_bot, insert_bot, update_bot, toggle_bot, get_logs
 from db import init_db  # to ensure import side effect? we used separate file, so just run once manually
 import os
+import pandas as pd
+from strategy.backtest import run_full_backtest
+import shutil
 
 USERNAME = os.getenv("WEB_USERNAME", "admin")
 PASSWORD = os.getenv("WEB_PASSWORD", "secret")
@@ -94,6 +97,38 @@ def toggle(bot_id):
 def api_active_bots():
     from utils.db import get_active_bots
     return jsonify(get_active_bots())
+
+@app.route("/backtest-summary")
+def backtest_summary():
+    result_folder = "/root/trade-control-system/backtest_result_test/"
+    summary_file = os.path.join(result_folder, "summary_backtest.xlsx")
+
+    if not os.path.exists(summary_file):
+        return "⚠️ Summary belum tersedia. Silakan jalankan backtest dulu."
+
+    df = pd.read_excel(summary_file)
+    summary = df.to_dict(orient="records")
+    return render_template("summary.html", summary=summary)
+
+@app.route("/backtest/new", methods=["GET", "POST"])
+def backtest_new():
+    if request.method == "POST":
+        pair = request.form["pair"].upper()
+        tf = request.form["timeframe"]
+        res = run_full_backtest(pair, tf)
+        # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
+        # bisa diarahkan ke halaman summary / tampilkan hasil single pair
+        return render_template("backtest_result.html", result=res)
+
+    return render_template("backtest_form.html")  # form input pair/tf
+
+
+@app.route('/backtest/summary')
+def backtest_summary():
+    df = pd.read_excel("/root/trade-control-system/backtest_result_test/summary_backtest.xlsx")
+    summary = df.to_dict(orient='records')
+    return render_template("summary_backtest.html", summary=summary)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📈 Summary Backtest</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body class="section">
+    <div class="container">
+        <h1 class="title">📊 Summary Hasil Backtest</h1>
+
+        <table class="table is-striped is-fullwidth is-hoverable">
+            <thead>
+                <tr>
+                    <th>Pair</th>
+                    <th>Total Sinyal</th>
+                    <th>TP</th>
+                    <th>SL</th>
+                    <th>NO HIT</th>
+                    <th>TP Rate (%)</th>
+                    <th>SL Rate (%)</th>
+                    <th>No-Hit Rate (%)</th>
+                    <th>Excel</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in summary %}
+                <tr>
+                    <td><strong>{{ row['Pair'] }}</strong></td>
+                    <td>{{ row['Total Sinyal'] }}</td>
+                    <td>{{ row['TP'] }}</td>
+                    <td>{{ row['SL'] }}</td>
+                    <td>{{ row['NO HIT'] }}</td>
+                    <td>{{ row['TP Rate (%)'] }}</td>
+                    <td>{{ row['SL Rate (%)'] }}</td>
+                    <td>{{ row['No-Hit Rate (%)'] }}</td>
+                    <td>
+                        <a href="/static/backtest_result/hasil_backtest_{{ row['Pair'].lower() }}.xlsx" target="_blank">
+                            📥
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="mt-4">
+            <a class="button is-link" href="{{ url_for('backtest_new') }}">🔁 Backtest Baru</a>
+        </div>
+    </div>
+</body>
+</html>

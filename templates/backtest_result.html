@@ -1,0 +1,43 @@
+<!-- templates/backtest_result.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hasil Backtest</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body class="section">
+    <div class="container">
+        <h1 class="title">📊 Hasil Backtest {{ result.pair }} ({{ result.timeframe }})</h1>
+
+        <table class="table is-striped is-fullwidth">
+            <thead>
+                <tr>
+                    <th>Total Sinyal</th>
+                    <th>TP</th>
+                    <th>SL</th>
+                    <th>No Hit</th>
+                    <th>TP Rate (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ result.total }}</td>
+                    <td>{{ result.tp }}</td>
+                    <td>{{ result.sl }}</td>
+                    <td>{{ result.no_hit }}</td>
+                    <td>{{ result.tp_rate }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="mt-4">
+            <a class="button is-link" href="{{ url_for('backtest_new') }}">🔁 Backtest Lagi</a>
+            {% if result.result_path %}
+                <a class="button is-success" href="/static/backtest_result/{{ result.pair.lower() }}_{{ result.timeframe }}.xlsx" target="_blank">
+                    📥 Download Excel
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
