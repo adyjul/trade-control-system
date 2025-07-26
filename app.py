@@ -113,6 +113,8 @@ def api_active_bots():
 @app.route("/backtest/new", methods=["GET", "POST"])
 def backtest_new():
     if request.method == "POST":
+        raw_data = request.form['data']  # "ada,dada"
+        data_list = raw_data.split(',')  # ['ada', 'dada']
         pair = request.form["pair"].upper()
         tf = request.form["timeframe"]
         limit = request.form["limit"]

@@ -67,7 +67,7 @@ def detect_signal(row):
 
 
 def run_full_backtest(
-    pair: str,
+    pair,
     timeframe: str,
     limit: int,
     look_ahead: int = 6,
@@ -86,6 +86,9 @@ def run_full_backtest(
     """
     os.makedirs(data_dir, exist_ok=True)
     os.makedirs(result_dir, exist_ok=True)
+
+    print(pair)
+    exit()
 
     client: Client = get_client()
     interval = BINANCE_INTERVAL_MAP[timeframe]
