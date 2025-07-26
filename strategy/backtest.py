@@ -211,6 +211,10 @@ def run_full_backtest(
                     })
 
             if summaries:
+                summary_df["TP (%)"] = (summary_df["TP"] / summary_df["Total Sinyal"] * 100).round(2)
+                summary_df["SL (%)"] = (summary_df["SL"] / summary_df["Total Sinyal"] * 100).round(2)
+                summary_df["NO HIT (%)"] = (summary_df["NO HIT"] / summary_df["Total Sinyal"] * 100).round(2)
+                
                 summary_df = pd.DataFrame(summaries).sort_values(by="TP Rate (%)", ascending=False)
                 summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
 
