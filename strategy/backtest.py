@@ -55,6 +55,12 @@ def detect_signal(row):
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
+     # --- Validasi candlestick: hindari doji/spinning top ---
+    candle_body = abs(row['close'] - row['open'])
+    candle_range = row['high'] - row['low']
+    if candle_range == 0 or candle_body < 0.3 * candle_range:
+        return 'HOLD'
+
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
         return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
