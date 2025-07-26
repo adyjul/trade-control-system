@@ -60,7 +60,7 @@ def update_bot(bot_id: int, data: Dict[str, Any]):
             (
                 data['coin'], data['timeframe'], data['tp_percent'], data['sl_percent'],
                 data.get('atr_multiplier', 1.0), data.get('active', 1),
-                data.get('mode', 'LIVE'), data.get('note'),, data.get('atr_filter', 1), data.get('best_pair', 1), bot_id
+                data.get('mode', 'LIVE'), data.get('note'), data.get('atr_filter', 1), data.get('best_pair', 1), bot_id
             )
         )
         conn.commit()
