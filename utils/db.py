@@ -37,13 +37,13 @@ def insert_bot(data: Dict[str, Any]) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             """
-            INSERT INTO bot_settings (coin, timeframe, tp_percent, sl_percent, atr_multiplier, active, mode, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO bot_settings (coin, timeframe, tp_percent, sl_percent, atr_multiplier, active, mode, note,atr_filter, best_pair)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data['coin'], data['timeframe'], data['tp_percent'], data['sl_percent'],
                 data.get('atr_multiplier', 1.0), data.get('active', 1),
-                data.get('mode', 'LIVE'), data.get('note')
+                data.get('mode', 'LIVE'), data.get('note'), data.get('filter_atr', 1), data.get('best_pair', 1)
             )
         )
         conn.commit()
@@ -54,13 +54,13 @@ def update_bot(bot_id: int, data: Dict[str, Any]):
         conn.execute(
             """
             UPDATE bot_settings
-            SET coin=?, timeframe=?, tp_percent=?, sl_percent=?, atr_multiplier=?, active=?, mode=?, note=?, updated_at=CURRENT_TIMESTAMP
+            SET coin=?, timeframe=?, tp_percent=?, sl_percent=?, atr_multiplier=?, active=?, mode=?, note=?, atr_filter=?, best_pair=?, updated_at=CURRENT_TIMESTAMP
             WHERE id=?
             """,
             (
                 data['coin'], data['timeframe'], data['tp_percent'], data['sl_percent'],
                 data.get('atr_multiplier', 1.0), data.get('active', 1),
-                data.get('mode', 'LIVE'), data.get('note'), bot_id
+                data.get('mode', 'LIVE'), data.get('note'),, data.get('filter_atr', 1), data.get('best_pair', 1), bot_id
             )
         )
         conn.commit()
