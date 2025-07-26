@@ -5,4 +5,5 @@
 /strategy/__init__.py
 /backtest_result_test
 /data_backtest
+/logs
 .env
