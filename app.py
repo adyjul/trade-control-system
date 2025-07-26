@@ -114,8 +114,8 @@ def api_active_bots():
 def backtest_new():
     if request.method == "POST":
         raw_data = request.form['pair']  # "ada,dada"
-        data_list = raw_data.split(',')  # ['ada', 'dada']
-        pair = request.form["pair"].upper()
+        pair = raw_data.split(',')  # ['ada', 'dada']
+        # pair = request.form["pair"].upper()
         tf = request.form["timeframe"]
         limit = request.form["limit"]
         res = run_full_backtest(pair, tf, limit)
