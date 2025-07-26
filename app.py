@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import Flask, render_template, request, Response, redirect, url_for, jsonify, render_template
+from flask import Flask, render_template, request, Response, redirect, url_for, jsonify, render_template, url_for
 from utils.db import get_all_bots, get_bot, insert_bot, update_bot, toggle_bot, get_logs
 from db import init_db  # to ensure import side effect? we used separate file, so just run once manually
 import os
@@ -121,7 +121,8 @@ def backtest_new():
         res = run_full_backtest(pairs, tf, limit)
         # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
         # bisa diarahkan ke halaman summary / tampilkan hasil single pair
-        return render_template("summary_backtest.html", result=res)
+        # return render_template("summary_backtest.html", result=res)
+        return redirect(url_for('backtest/summary'))
 
     return render_template("backtest_form.html")  # form input pair/tf
 
