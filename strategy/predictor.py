@@ -2,10 +2,11 @@ import os
 import pandas as pd
 import ta
 from binance.client import Client
-from datetime import datetime
+from datetime import datetime, timezone
 from utils.db import get_active_bots  # Ambil list pair+tf aktif dari DB
 from utils.binance_client import get_client
-from utils.timeframes import BINANCE_INTERVAL_MAP
+from utils.timeframes import BINANCE_INTERVAL_MAP, is_time_to_run
+import glob
 
 DATA_DIR = "./data_predict"
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -28,12 +29,27 @@ def detect_signal(row):
 
     return 'HOLD'
 
+# === Bersihkan folder data predict (opsional)
+def clear_folder(folder_path):
+    for file_path in glob.glob(os.path.join(folder_path, '*')):
+        try:
+            os.remove(file_path)
+            print(f"🗑️ Deleted: {file_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to delete {file_path}: {e}")
 
 def run_predict():
     client: Client = get_client()
     active_bots = get_active_bots()
+    now = datetime.now(timezone.utc)
+
+    clear_folder(DATA_DIR)  # Kosongkan folder sinyal & data full sebelum scrape
 
     for bot in active_bots:
+        tf = bot['timeframe']
+        if not is_time_to_run(tf, now):
+            continue
+
         pair_text = bot['pair']
         pairs = pair_text.split(',')
         timeframe = bot['timeframe']
@@ -49,7 +65,7 @@ def run_predict():
                 ])
 
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                df[['open','high','low','close','volume']] = df[['open','high','low','close','volume']].astype(float)
+                df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                 df.set_index('timestamp', inplace=True)
 
                 # Indikator
@@ -60,8 +76,14 @@ def run_predict():
                 df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
                 df['volume_sma20'] = df['volume'].rolling(window=20).mean()
 
+                # Deteksi sinyal
                 df['signal'] = df.apply(detect_signal, axis=1)
 
+                # Simpan data full OHLCV + indikator
+                full_out_path = os.path.join(DATA_DIR, f"{pair}_{timeframe}_full.xlsx")
+                df.to_excel(full_out_path)
+
+                # Ambil sinyal terbaru (bar terakhir)
                 last_row = df.iloc[-1]
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     signal_out = {
@@ -69,17 +91,19 @@ def run_predict():
                         "timeframe": timeframe,
                         "signal": last_row['signal'],
                         "entry_price": last_row['close'],
-                        "timestamp": last_row.name.isoformat()
+                        "atr": last_row['atr'],
+                        "timestamp_utc": last_row.name.tz_localize("UTC").isoformat(),
+                        "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).isoformat()
                     }
-                    out_path = os.path.join(DATA_DIR, f"{pair}_{timeframe}.xlsx")
-                    pd.DataFrame([signal_out]).to_excel(out_path, index=False)
-                    print(f"✅ Signal saved: {pair} {timeframe} → {signal_out['signal']}")
+
+                    signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                    pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
+                    print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
                 else:
                     print(f"⏭️ No signal for {pair} {timeframe}")
 
             except Exception as e:
                 print(f"❌ Error for {pair}: {e}")
-
 
 if __name__ == "__main__":
     run_predict()

@@ -16,6 +16,14 @@ def should_run_this_tf(tf: str, now: datetime) -> bool:
         return now.minute == 0 and now.hour == 0
     return False
 
+def is_time_to_run(tf: str, now: datetime) -> bool:
+    tf_minutes = {
+        "1m": 1, "5m": 5, "15m": 15, "30m": 30,
+        "1h": 60, "2h": 120, "4h": 240, "1d": 1440
+    }[tf.lower()]
+    minute_of_day = now.hour * 60 + now.minute
+    return (minute_of_day % tf_minutes) == 0
+
 BINANCE_INTERVAL_MAP = {
     '1m': '1m',
     '5m': '5m',
