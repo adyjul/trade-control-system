@@ -128,7 +128,7 @@ def backtest_new():
 
 @app.route('/backtest/summary')
 def backtest_summary():
-    df = pd.read_excel("/root/trade-control-system/backtest_result_test/summary_backtest.xlsx")
+    df = pd.read_excel("/root/trade-control-system/backtest_result/summary_backtest.xlsx")
     summary = df.to_dict(orient='records')
     return render_template("summary_backtest.html", summary=summary)
 
