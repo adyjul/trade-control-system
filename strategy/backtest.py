@@ -88,7 +88,7 @@ def run_full_backtest(
     os.makedirs(result_dir, exist_ok=True)
 
     print(pair)
-    exit()
+    # exit()
 
     client: Client = get_client()
     interval = BINANCE_INTERVAL_MAP[timeframe]
