@@ -98,17 +98,17 @@ def api_active_bots():
     from utils.db import get_active_bots
     return jsonify(get_active_bots())
 
-@app.route("/backtest-summary")
-def backtest_summary():
-    result_folder = "/root/trade-control-system/backtest_result_test/"
-    summary_file = os.path.join(result_folder, "summary_backtest.xlsx")
+# @app.route("/backtest-summary")
+# def backtest_summary():
+#     result_folder = "/root/trade-control-system/backtest_result_test/"
+#     summary_file = os.path.join(result_folder, "summary_backtest.xlsx")
 
-    if not os.path.exists(summary_file):
-        return "⚠️ Summary belum tersedia. Silakan jalankan backtest dulu."
+#     if not os.path.exists(summary_file):
+#         return "⚠️ Summary belum tersedia. Silakan jalankan backtest dulu."
 
-    df = pd.read_excel(summary_file)
-    summary = df.to_dict(orient="records")
-    return render_template("summary.html", summary=summary)
+#     df = pd.read_excel(summary_file)
+#     summary = df.to_dict(orient="records")
+#     return render_template("summary.html", summary=summary)
 
 @app.route("/backtest/new", methods=["GET", "POST"])
 def backtest_new():
