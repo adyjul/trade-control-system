@@ -122,7 +122,7 @@ def backtest_new():
         # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
         # bisa diarahkan ke halaman summary / tampilkan hasil single pair
         # return render_template("summary_backtest.html", result=res)
-        return redirect(url_for('backtest/summary'))
+        return redirect(url_for('/backtest/summary'))
 
     return render_template("backtest_form.html")  # form input pair/tf
 
