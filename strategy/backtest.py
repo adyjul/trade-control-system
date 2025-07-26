@@ -67,7 +67,7 @@ def detect_signal(row):
 
 
 def run_full_backtest(
-    pair,
+    pairs,
     timeframe: str,
     limit: int,
     look_ahead: int = 6,
@@ -87,121 +87,118 @@ def run_full_backtest(
     os.makedirs(data_dir, exist_ok=True)
     os.makedirs(result_dir, exist_ok=True)
 
-    print(pair)
-    return
-    # exit()
-
     client: Client = get_client()
     interval = BINANCE_INTERVAL_MAP[timeframe]
 
-    # --- scrape data ---
-    klines = client.futures_klines(symbol=pair, interval=interval, limit=limit)
-    df = pd.DataFrame(klines, columns=[
-        'timestamp', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_asset_volume', 'number_of_trades',
-        'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore'
-    ])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df[['open','high','low','close','volume']] = df[['open','high','low','close','volume']].astype(float)
-    df.set_index('timestamp', inplace=True)
+    for pair in pairs:
+        # --- scrape data ---
+        klines = client.futures_klines(symbol=pair, interval=interval, limit=limit)
+        df = pd.DataFrame(klines, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_asset_volume', 'number_of_trades',
+            'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore'
+        ])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df[['open','high','low','close','volume']] = df[['open','high','low','close','volume']].astype(float)
+        df.set_index('timestamp', inplace=True)
 
-    # simpan raw
-    raw_path = os.path.join(data_dir, f"{pair}_{timeframe}.csv")
-    df.to_csv(raw_path)
+        # simpan raw
+        raw_path = os.path.join(data_dir, f"{pair}_{timeframe}.csv")
+        df.to_csv(raw_path)
 
-    # --- indikator ---
-    macd = ta.trend.MACD(df['close'], window_slow=26, window_fast=12, window_sign=9)
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
-    df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
-    df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
-    df['volume_sma20'] = df['volume'].rolling(window=20).mean()
+        # --- indikator ---
+        macd = ta.trend.MACD(df['close'], window_slow=26, window_fast=12, window_sign=9)
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+        df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
+        df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
+        df['volume_sma20'] = df['volume'].rolling(window=20).mean()
 
-    # --- sinyal ---
-    df['signal'] = df.apply(detect_signal, axis=1)
-    df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
-    if df.empty:
-        # tidak ada sinyal sama sekali
+        # --- sinyal ---
+        df['signal'] = df.apply(detect_signal, axis=1)
+        df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
+        if df.empty:
+            # tidak ada sinyal sama sekali
+            out_path = os.path.join(result_dir, f"hasil_backtest_{pair.lower()}_{timeframe}.xlsx")
+            pd.DataFrame(columns=[
+                'signal','entry_price','tp_price','sl_price','exit_status'
+            ]).to_excel(out_path, index=False)
+            return {
+                "pair": pair,
+                "timeframe": timeframe,
+                "total": 0,
+                "tp": 0,
+                "sl": 0,
+                "no_hit": 0,
+                "tp_rate": 0.0,
+                "result_path": out_path
+            }
+
+        # --- TP/SL ATR ---
+        df['entry_price'] = df['close']
+        df['tp_price'] = df['entry_price'] + df['atr'] * tp_atr_mult
+        df['sl_price'] = df['entry_price'] - df['atr'] * sl_atr_mult
+        df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
+        df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
+
+        # --- evaluasi ---
+        df = evaluate_tp_sl(df, look_ahead=look_ahead)
+
+        # --- simpan hasil pair ---
         out_path = os.path.join(result_dir, f"hasil_backtest_{pair.lower()}_{timeframe}.xlsx")
-        pd.DataFrame(columns=[
-            'signal','entry_price','tp_price','sl_price','exit_status'
-        ]).to_excel(out_path, index=False)
-        return {
+        df.to_excel(out_path)
+
+        # --- summary single pair ---
+        total = len(df)
+        tp = (df['exit_status'] == 'TP HIT').sum()
+        sl = (df['exit_status'] == 'SL HIT').sum()
+        no_hit = (df['exit_status'] == 'NO HIT').sum()
+        tp_rate = round(tp / total * 100, 2) if total > 0 else 0.0
+
+        single_summary = {
             "pair": pair,
             "timeframe": timeframe,
-            "total": 0,
-            "tp": 0,
-            "sl": 0,
-            "no_hit": 0,
-            "tp_rate": 0.0,
+            "total": total,
+            "tp": tp,
+            "sl": sl,
+            "no_hit": no_hit,
+            "tp_rate": tp_rate,
             "result_path": out_path
         }
 
-    # --- TP/SL ATR ---
-    df['entry_price'] = df['close']
-    df['tp_price'] = df['entry_price'] + df['atr'] * tp_atr_mult
-    df['sl_price'] = df['entry_price'] - df['atr'] * sl_atr_mult
-    df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
-    df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
+        # --- (opsional) regenerate summary keseluruhan ---
+        if save_summary:
+            summaries = []
+            for f in os.listdir(result_dir):
+                if f.startswith("hasil_backtest_") and f.endswith(".xlsx"):
+                    _pair_tf = f.replace("hasil_backtest_", "").replace(".xlsx", "")
+                    parts = _pair_tf.split("_")
+                    if len(parts) >= 2:
+                        _pair = "_".join(parts[:-1]).upper()
+                        _tf = parts[-1]
+                    else:
+                        _pair = _pair_tf.upper()
+                        _tf = timeframe
 
-    # --- evaluasi ---
-    df = evaluate_tp_sl(df, look_ahead=look_ahead)
+                    _df = pd.read_excel(os.path.join(result_dir, f))
+                    _total = len(_df)
+                    _tp = (_df['exit_status'] == 'TP HIT').sum() if _total else 0
+                    _sl = (_df['exit_status'] == 'SL HIT').sum() if _total else 0
+                    _no = (_df['exit_status'] == 'NO HIT').sum() if _total else 0
+                    _rate = round(_tp / _total * 100, 2) if _total else 0.0
 
-    # --- simpan hasil pair ---
-    out_path = os.path.join(result_dir, f"hasil_backtest_{pair.lower()}_{timeframe}.xlsx")
-    df.to_excel(out_path)
+                    summaries.append({
+                        "Pair": _pair,
+                        "Timeframe": _tf,
+                        "Total Sinyal": _total,
+                        "TP": _tp,
+                        "SL": _sl,
+                        "NO HIT": _no,
+                        "TP Rate (%)": _rate
+                    })
 
-    # --- summary single pair ---
-    total = len(df)
-    tp = (df['exit_status'] == 'TP HIT').sum()
-    sl = (df['exit_status'] == 'SL HIT').sum()
-    no_hit = (df['exit_status'] == 'NO HIT').sum()
-    tp_rate = round(tp / total * 100, 2) if total > 0 else 0.0
+            if summaries:
+                summary_df = pd.DataFrame(summaries).sort_values(by="TP Rate (%)", ascending=False)
+                summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
 
-    single_summary = {
-        "pair": pair,
-        "timeframe": timeframe,
-        "total": total,
-        "tp": tp,
-        "sl": sl,
-        "no_hit": no_hit,
-        "tp_rate": tp_rate,
-        "result_path": out_path
-    }
-
-    # --- (opsional) regenerate summary keseluruhan ---
-    if save_summary:
-        summaries = []
-        for f in os.listdir(result_dir):
-            if f.startswith("hasil_backtest_") and f.endswith(".xlsx"):
-                _pair_tf = f.replace("hasil_backtest_", "").replace(".xlsx", "")
-                parts = _pair_tf.split("_")
-                if len(parts) >= 2:
-                    _pair = "_".join(parts[:-1]).upper()
-                    _tf = parts[-1]
-                else:
-                    _pair = _pair_tf.upper()
-                    _tf = timeframe
-
-                _df = pd.read_excel(os.path.join(result_dir, f))
-                _total = len(_df)
-                _tp = (_df['exit_status'] == 'TP HIT').sum() if _total else 0
-                _sl = (_df['exit_status'] == 'SL HIT').sum() if _total else 0
-                _no = (_df['exit_status'] == 'NO HIT').sum() if _total else 0
-                _rate = round(_tp / _total * 100, 2) if _total else 0.0
-
-                summaries.append({
-                    "Pair": _pair,
-                    "Timeframe": _tf,
-                    "Total Sinyal": _total,
-                    "TP": _tp,
-                    "SL": _sl,
-                    "NO HIT": _no,
-                    "TP Rate (%)": _rate
-                })
-
-        if summaries:
-            summary_df = pd.DataFrame(summaries).sort_values(by="TP Rate (%)", ascending=False)
-            summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
-
-    return single_summary
+        return single_summary

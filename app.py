@@ -114,14 +114,13 @@ def api_active_bots():
 def backtest_new():
     if request.method == "POST":
         raw_data = request.form['pair']  # "ada,dada"
-        pair = raw_data.split(',')  # ['ada', 'dada']
+        pairs = raw_data.split(',')  # ['ada', 'dada']
         # pair = request.form["pair"].upper()
         tf = request.form["timeframe"]
         limit = request.form["limit"]
-        res = run_full_backtest(pair, tf, limit)
+        res = run_full_backtest(pairs, tf, limit)
         # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
         # bisa diarahkan ke halaman summary / tampilkan hasil single pair
-        return
         return render_template("backtest_result.html", result=res)
 
     return render_template("backtest_form.html")  # form input pair/tf
