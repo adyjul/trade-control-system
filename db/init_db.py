@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     sl_percent REAL NOT NULL,
     atr_multiplier REAL DEFAULT 1.0, -- keep for future
     active INTEGER DEFAULT 1,
+    filter_atr INTEGER DEFAULT 1,
+    best_pair INTEGER DEFAULT 1,
     mode TEXT DEFAULT 'LIVE',        -- LIVE / PAPER
     note TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

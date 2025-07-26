@@ -38,6 +38,8 @@ def run_predict():
         timeframe = bot['timeframe']
         interval = BINANCE_INTERVAL_MAP[timeframe]
 
+        
+
         try:
             klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
             df = pd.DataFrame(klines, columns=[
