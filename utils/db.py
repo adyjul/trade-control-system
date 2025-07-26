@@ -37,7 +37,7 @@ def insert_bot(data: Dict[str, Any]) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             """
-            INSERT INTO bot_settings (coin, timeframe, tp_percent, sl_percent, atr_multiplier, active, mode, note,atr_filter, best_pair)
+            INSERT INTO bot_settings (coin, timeframe, tp_percent, sl_percent, atr_multiplier, active, mode, note,filter_atr, best_pair)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -54,7 +54,7 @@ def update_bot(bot_id: int, data: Dict[str, Any]):
         conn.execute(
             """
             UPDATE bot_settings
-            SET coin=?, timeframe=?, tp_percent=?, sl_percent=?, atr_multiplier=?, active=?, mode=?, note=?, atr_filter=?, best_pair=?, updated_at=CURRENT_TIMESTAMP
+            SET coin=?, timeframe=?, tp_percent=?, sl_percent=?, atr_multiplier=?, active=?, mode=?, note=?, filter_atr=?, best_pair=?, updated_at=CURRENT_TIMESTAMP
             WHERE id=?
             """,
             (
