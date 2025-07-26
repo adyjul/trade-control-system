@@ -66,9 +66,10 @@ def new_bot():
 @app.route('/bots/<int:bot_id>/delete', methods=['POST'])
 @requires_auth
 def delete_bot(bot_id):
-    print(bot_id)
-    delete_bot(bot_id)
-    return redirect(url_for('index'))
+    if request.method == 'POST':
+        print(bot_id)
+        delete_bot(bot_id)
+        return redirect(url_for('index'))
     
 
 @app.route('/bots/<int:bot_id>/edit', methods=['GET', 'POST'])
