@@ -7,6 +7,8 @@ from utils.db import get_active_bots  # Ambil list pair+tf aktif dari DB
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP, is_time_to_run
 import glob
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 DATA_DIR = "./data_predict"
 os.makedirs(DATA_DIR, exist_ok=True)
