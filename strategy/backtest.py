@@ -49,8 +49,8 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
 
 def detect_signal(row):
     # versi “v2” yang kamu kirim (dengan filter ATR & RSI SHORT)
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    #     return 'HOLD'
 
     # Filter ATR (hindari market flat)
     if row['atr'] < 0.005 * row['close']:
