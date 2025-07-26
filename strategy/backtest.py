@@ -88,6 +88,7 @@ def run_full_backtest(
     os.makedirs(result_dir, exist_ok=True)
 
     print(pair)
+    return
     # exit()
 
     client: Client = get_client()
