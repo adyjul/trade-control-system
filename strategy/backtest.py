@@ -13,7 +13,7 @@ from utils.timeframes import BINANCE_INTERVAL_MAP
 DEFAULT_DATA_DIR = "./data_backtest"
 DEFAULT_RESULT_DIR = "./backtest_result"
 
-def evaluate_tp_sl(df: pd.DataFrame, look_ahead=6) -> pd.DataFrame:
+def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
     """
     Evaluasi TP / SL dengan melihat N (look_ahead) candle setelah sinyal keluar.
     """
