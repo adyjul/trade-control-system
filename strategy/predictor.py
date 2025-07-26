@@ -1,106 +1,83 @@
+import os
 import pandas as pd
 import ta
-from datetime import datetime, timedelta, timezone
 from binance.client import Client
-import os
-
+from datetime import datetime
+from utils.db import get_active_bots  # Ambil list pair+tf aktif dari DB
+from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
-from config import DATA_DIR, PREDICT_DIR, TIMEZONE_OFFSET_HOURS
 
+DATA_DIR = "./data_predict"
 os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(PREDICT_DIR, exist_ok=True)
 
-# --- Logika sinyal yang kamu punya ---
+# === Logika Sinyal ===
 def detect_signal(row):
     if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
         return 'HOLD'
-    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
-    elif row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-        return 'SHORT'
-    else:
+
+    if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
-def fetch_klines(client: Client, symbol: str, tf: str, limit: int = 100):
-    interval = BINANCE_INTERVAL_MAP[tf]
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+        if row['rsi'] < 35:
+            return 'HOLD'
+        return 'SHORT'
 
-    now = datetime.now(timezone.utc)
-    rounded = now.replace(second=0, microsecond=0)
-    if tf == '1h':
-        rounded = rounded.replace(minute=0)
-    elif tf == '4h':
-        m = rounded.hour % 4
-        rounded = rounded.replace(hour=rounded.hour - m, minute=0)
-    elif tf == '15m':
-        m = rounded.minute % 15
-        rounded = rounded.replace(minute=rounded.minute - m)
-
-    end_time_dt = rounded - timedelta(seconds=1)
-    end_time = int(end_time_dt.timestamp() * 1000)
-
-    klines = client.futures_klines(symbol=symbol, interval=interval, limit=limit, endTime=end_time)
-    df = pd.DataFrame(klines, columns=[
-        'timestamp', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_asset_volume', 'number_of_trades',
-        'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore'
-    ])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
-    df.set_index('timestamp', inplace=True)
-    return df
+    return 'HOLD'
 
 
-def generate_signal(client: Client, symbol: str, tf: str, tp_percent: float, sl_percent: float, atr_multiplier: float = 1.0, save_excel: bool = False):
-    df = fetch_klines(client, symbol, tf, limit=100)
-    data_path = os.path.join(DATA_DIR, f"{symbol}_{tf}.csv")
-    df.to_csv(data_path)
+def run_predict():
+    client: Client = get_client()
+    active_bots = get_active_bots()
 
-    macd_ind = ta.trend.MACD(df['close'])
-    df['macd'] = macd_ind.macd()
-    df['macd_signal'] = macd_ind.macd_signal()
-    df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
-    df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
-    df['volume_sma20'] = df['volume'].rolling(window=20).mean()
+    for bot in active_bots:
+        pair = bot['pair']
+        timeframe = bot['timeframe']
+        interval = BINANCE_INTERVAL_MAP[timeframe]
 
-    df['signal'] = df.apply(detect_signal, axis=1)
-    df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
-    if df.empty:
-        return None
+        try:
+            klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
+            df = pd.DataFrame(klines, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_asset_volume', 'number_of_trades',
+                'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore'
+            ])
 
-    last = df.iloc[-1].copy()
-    entry_price = last['close']
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df[['open','high','low','close','volume']] = df[['open','high','low','close','volume']].astype(float)
+            df.set_index('timestamp', inplace=True)
 
-    # TP/SL from percent (not ATR)
-    if last['signal'] == 'LONG':
-        tp_price = entry_price * (1 + tp_percent / 100.0)
-        sl_price = entry_price * (1 - sl_percent / 100.0)
-    else:  # SHORT
-        tp_price = entry_price * (1 - tp_percent / 100.0)
-        sl_price = entry_price * (1 + sl_percent / 100.0)
+            # Indikator
+            macd = ta.trend.MACD(df['close'])
+            df['macd'] = macd.macd()
+            df['macd_signal'] = macd.macd_signal()
+            df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
+            df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
+            df['volume_sma20'] = df['volume'].rolling(window=20).mean()
 
-    last['entry_price'] = entry_price
-    last['tp_price'] = tp_price
-    last['sl_price'] = sl_price
+            df['signal'] = df.apply(detect_signal, axis=1)
 
-    last['timestamp_utc'] = last.name
-    last['timestamp_wib'] = last.name + pd.Timedelta(hours=TIMEZONE_OFFSET_HOURS)
+            last_row = df.iloc[-1]
+            if last_row['signal'] in ['LONG', 'SHORT']:
+                signal_out = {
+                    "pair": pair,
+                    "timeframe": timeframe,
+                    "signal": last_row['signal'],
+                    "entry_price": last_row['close'],
+                    "timestamp": last_row.name.isoformat()
+                }
+                out_path = os.path.join(DATA_DIR, f"{pair}_{timeframe}.xlsx")
+                pd.DataFrame([signal_out]).to_excel(out_path, index=False)
+                print(f"✅ Signal saved: {pair} {timeframe} → {signal_out['signal']}")
+            else:
+                print(f"⏭️ No signal for {pair} {timeframe}")
 
-    result = {
-        'symbol': symbol,
-        'timeframe': tf,
-        'signal': last['signal'],
-        'entry_price': entry_price,
-        'tp_price': tp_price,
-        'sl_price': sl_price,
-        'atr': last['atr'],
-        'close': last['close'],
-        'timestamp_utc': last['timestamp_utc'],
-        'timestamp_wib': last['timestamp_wib']
-    }
+        except Exception as e:
+            print(f"❌ Error for {pair}: {e}")
 
-    if save_excel:
-        out_path = os.path.join(PREDICT_DIR, f"prediksi_{symbol}_{tf}.xlsx")
-        pd.DataFrame([result]).to_excel(out_path, index=False)
 
-    return result
+if __name__ == "__main__":
+    run_predict()
