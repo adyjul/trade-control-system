@@ -7,3 +7,19 @@
 /data_backtest
 /logs
 .env
+
+# Python
+__pycache__/
+*.pyc
+
+# Database
+*.db
+
+# Log & runtime data
+logs/
+*.log
+*.xlsx
+
+# VSCode/IDE
+.vscode/
+.idea/
