@@ -45,7 +45,9 @@
         </td>
         <td>
         <a class="btn btn-sm btn-outline-primary" href="/bots/{{ bot.id }}/edit">Edit</a>
-        <a class="btn btn-sm btn-outline-danger" href="/bots/{{ bot.id }}/delete" onclick="return confirm('Apakah Anda yakin ingin menghapus bot ini?')">Hapus</a>
+        <form action="/bots/{{ bot.id }}/delete">
+            <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Apakah Anda yakin ingin menghapus bot ini?')">Delete</button>
+        </form>
         <form action="/bots/{{ bot.id }}/toggle" method="post" style="display:inline;">
             <button class="btn btn-sm btn-outline-warning" type="submit">Toggle</button>
         </form>
