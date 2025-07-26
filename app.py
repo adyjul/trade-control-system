@@ -67,7 +67,6 @@ def new_bot():
 @requires_auth
 def delete_bot(bot_id):
     if request.method == 'POST':
-        print(bot_id)
         delete_bot_id(bot_id)
         return redirect(url_for('index'))
     
