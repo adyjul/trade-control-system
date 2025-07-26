@@ -26,9 +26,9 @@
     </table>
 
     <div class="mt-4">
-        <a class="button is-link" href="{{ url_for('backtest_new') }}">🔁 Backtest Lagi</a>
+        <a class="button btn btn-primary is-link" href="{{ url_for('backtest_new') }}">🔁 Backtest Lagi</a>
         {% if result.result_path %}
-            <a class="button is-success" href="/static/backtest_result/{{ result.pair.lower() }}_{{ result.timeframe }}.xlsx" target="_blank">
+            <a class="button is-success  btn btn-danger" href="/static/backtest_result/{{ result.pair.lower() }}_{{ result.timeframe }}.xlsx" target="_blank">
                 📥 Download Excel
             </a>
         {% endif %}

@@ -69,7 +69,7 @@ def detect_signal(row):
 def run_full_backtest(
     pair: str,
     timeframe: str,
-    limit: int = 1000,
+    limit: int,
     look_ahead: int = 6,
     tp_atr_mult: float = 1.0,
     sl_atr_mult: float = 1.0,

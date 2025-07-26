@@ -115,7 +115,8 @@ def backtest_new():
     if request.method == "POST":
         pair = request.form["pair"].upper()
         tf = request.form["timeframe"]
-        res = run_full_backtest(pair, tf)
+        limit = request.form["limit"]
+        res = run_full_backtest(pair, tf, limit)
         # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
         # bisa diarahkan ke halaman summary / tampilkan hasil single pair
         return render_template("backtest_result.html", result=res)
