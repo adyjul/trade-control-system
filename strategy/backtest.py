@@ -224,4 +224,5 @@ def run_full_backtest(
                 summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
 
     # return single_summary
+    print(summaries)
     return summaries
