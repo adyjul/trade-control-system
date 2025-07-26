@@ -62,6 +62,12 @@ def new_bot():
         }
         insert_bot(data)
         return redirect(url_for('index'))
+
+@app.route('/bots/<int:bot_id>/delete', methods=['POST'])
+@requires_auth
+def delete_bot(bot_id):
+    delete_bot(bot_id)
+    return redirect(url_for('index'))
     
 
 @app.route('/bots/<int:bot_id>/edit', methods=['GET', 'POST'])
