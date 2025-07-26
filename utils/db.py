@@ -65,7 +65,7 @@ def update_bot(bot_id: int, data: Dict[str, Any]):
         )
         conn.commit()
 
-def delete_bot(bot_id: int):
+def delete_bot_id(bot_id: int):
     with get_conn() as conn:
         conn.execute("DELETE FROM bot_settings WHERE id=?", (bot_id,))
         conn.commit()

@@ -1,6 +1,6 @@
 from functools import wraps
 from flask import Flask, render_template, request, Response, redirect, url_for, jsonify, render_template, url_for
-from utils.db import get_all_bots, get_bot, insert_bot, update_bot, toggle_bot, get_logs
+from utils.db import get_all_bots, get_bot, insert_bot, update_bot, toggle_bot, get_logs, delete_bot_id
 from db import init_db  # to ensure import side effect? we used separate file, so just run once manually
 import os
 import pandas as pd
@@ -68,7 +68,7 @@ def new_bot():
 def delete_bot(bot_id):
     if request.method == 'POST':
         print(bot_id)
-        delete_bot(bot_id)
+        delete_bot_id(bot_id)
         return redirect(url_for('index'))
     
 
