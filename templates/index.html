@@ -2,7 +2,7 @@
 {% block content %}
 <h3>Daftar Bot Aktif</h3>
 <a href="/bots/new" class="btn btn-primary">Tambah Bot</a>
-<table class="table table-bordered table-hover">
+<table class="table table-bordered table-hover table-responsive-md">
   <thead>
     <tr>
       <th>ID</th>
@@ -13,6 +13,8 @@
       <th>Status</th>
       <th>Mode</th>
       <th>Note</th>
+      <th>Best Pair</th>
+      <th>atr_filter</th>
       <th>Action</th>
     </tr>
   </thead>
@@ -33,6 +35,14 @@
         </td>
         <td>{{ bot.mode }}</td>
         <td>{{ bot.note }}</td>
+        <td>{{ bot.best_pair }}</td>
+        <td>
+          {% if bot.atr_filter %}
+            <span class="badge bg-success">Active</span>
+          {% else %}
+            <span class="badge bg-secondary">Inactive</span>
+          {% endif %}
+        </td>
         <td>
         <a class="btn btn-sm btn-outline-primary" href="/bots/{{ bot.id }}/edit">Edit</a>
         <form action="/bots/{{ bot.id }}/toggle" method="post" style="display:inline;">
