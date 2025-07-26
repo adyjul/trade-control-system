@@ -1,3 +1,5 @@
+{% extends 'base.html' %}
+{% block content %}
 <form method="POST">
   <label>Pair:</label><br>
   <input type="text" name="pair" placeholder="contoh: INJUSDT" required><br>
@@ -8,3 +10,4 @@
   </select><br><br>
   <button type="submit">🔁 Jalankan Backtest</button>
 </form>
+{% endblock %}
