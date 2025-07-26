@@ -1,5 +1,6 @@
 #!/bin/bash
 cd /root/trade-control-system
 source venv/bin/activate
-python strategy/predictor.py
-python strategy/executor.py
+# python3 -m strategy.run_trade
+python3 -m strategy/predictor.py
+python3 -m strategy/executor.py
