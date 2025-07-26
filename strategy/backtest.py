@@ -71,6 +71,7 @@ def detect_signal(row):
 
     # return 'HOLD'
 
+    # v2 mungkin untuk weekend
     if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
         return 'HOLD'
 
