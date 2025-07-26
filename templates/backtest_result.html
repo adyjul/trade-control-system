@@ -23,8 +23,9 @@
                 </tr>
             </thead>
             <tbody>
+                {% print(summary) %}
                 {% for row in summary %}
-                {% print(row) %}
+                
                 <tr>
                     <td><strong>{{ row['Pair'] }}</strong></td>
                     <td>{{ row['Total Sinyal'] }}</td>
