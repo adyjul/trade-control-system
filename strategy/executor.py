@@ -70,7 +70,7 @@ def run_executor():
     expected_time = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
 
     for bot in bots:
-        pairs = [p.strip() for p in bot['pair'].split(',')]
+        pairs = [p.strip() for p in bot['coin'].split(',')]
         tf = bot['timeframe']
         tf_suffix = f"_{tf}"
         tp_mult = bot.get('tp_percent', 1.2)
