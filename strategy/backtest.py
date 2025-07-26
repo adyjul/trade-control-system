@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import ta
 from binance.client import Client
+import glob
 
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
@@ -65,6 +66,14 @@ def detect_signal(row):
 
     return 'HOLD'
 
+def clear_folder(folder_path):
+    for file_path in glob.glob(os.path.join(folder_path, '*')):
+        try:
+            os.remove(file_path)
+            print(f"Deleted: {file_path}")
+        except Exception as e:
+            print(f"Failed to delete {file_path}: {e}")
+
 
 def run_full_backtest(
     pairs,
@@ -89,6 +98,10 @@ def run_full_backtest(
 
     client: Client = get_client()
     interval = BINANCE_INTERVAL_MAP[timeframe]
+
+    # clear folder
+    clear_folder(data_dir)
+    clear_folder(result_dir)
 
     for pair in pairs:
         # --- scrape data ---
