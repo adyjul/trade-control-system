@@ -77,6 +77,8 @@ def edit_bot(bot_id):
             'tp_percent': float(request.form['tp_percent']),
             'sl_percent': float(request.form['sl_percent']),
             'atr_multiplier': float(request.form.get('atr_multiplier', 1.0)),
+            'best_pair': float(request.form.get('best_pair', 1)),
+            'filter_atr': 1 if request.form.get('filter_atr') == 'on' else 0,
             'active': 1 if request.form.get('active') == 'on' else 0,
             'mode': request.form.get('mode', 'LIVE'),
             'note': request.form.get('note', '')
