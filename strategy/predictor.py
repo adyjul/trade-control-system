@@ -45,7 +45,7 @@ def run_predict():
     active_bots = get_active_bots()
     now = datetime.now(timezone.utc)
 
-    clear_folder(DATA_DIR)  # Kosongkan folder sinyal & data full sebelum scrape
+    # clear_folder(DATA_DIR)  # Kosongkan folder sinyal & data full sebelum scrape
 
     for bot in active_bots:
         tf = bot['timeframe']
@@ -60,6 +60,17 @@ def run_predict():
 
         for pair in pairs:
             try:
+
+                # Hapus file lama milik pair ini
+                full_path = os.path.join(DATA_DIR, f"{pair}_{timeframe}_full.xlsx")
+                pred_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                for path in [full_path, pred_path]:
+                    if os.path.exists(path):
+                        os.remove(path)
+
+                # lanjut scrape + prediksi...
+
+
                 klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
                 df = pd.DataFrame(klines, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume',
