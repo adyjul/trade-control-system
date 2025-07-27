@@ -52,7 +52,7 @@ def run_predict():
         if not is_time_to_run(tf, now):
             continue
 
-        pair_text = bot['pair']
+        pair_text = bot['coin']
         pairs = pair_text.split(',')
         timeframe = bot['timeframe']
         interval = BINANCE_INTERVAL_MAP[timeframe]
