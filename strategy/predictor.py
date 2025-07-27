@@ -49,8 +49,9 @@ def run_predict():
 
     for bot in active_bots:
         tf = bot['timeframe']
-        if not is_time_to_run(tf, now):
-            continue
+
+        # if not is_time_to_run(tf, now):
+        #     continue
 
         pair_text = bot['coin']
         pairs = pair_text.split(',')
