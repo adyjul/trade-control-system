@@ -81,19 +81,23 @@ def run_executor():
             fname = f"{pair}_{tf}.xlsx"
             fpath = os.path.join(PREDICT_DIR, fname)
             if not os.path.exists(fpath):
+                print(f"⚠️ Tidak ada file sinyal: {fpath}")
                 continue
 
             df = pd.read_excel(fpath)
             df = df[df['signal'].isin(['LONG', 'SHORT'])]
             if df.empty:
+                print(f"⚠️ tidak ada sinyal long/short")
                 continue
 
             row = df.iloc[-1]
             if pd.isna(row['atr']):
+                print("tidak kolom atr")
                 continue
 
             ts_utc = pd.to_datetime(row['timestamp']).tz_localize('UTC')
             if ts_utc != expected_time:
+                print(f"⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
                 continue
 
             signals.append((row['atr'], row, pair))

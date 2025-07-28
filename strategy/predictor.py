@@ -51,6 +51,7 @@ def run_predict():
         tf = bot['timeframe']
 
         # if not is_time_to_run(tf, now):
+        #     print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
         #     continue
 
         pair_text = bot['coin']
