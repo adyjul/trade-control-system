@@ -78,6 +78,7 @@ def run_executor():
         sl_mult = bot.get('sl_percent', 1.0)
 
         signals = []
+        print(pairs)
         for pair in pairs:
             # fname = f"{pair}_{tf}_full.xlsx"
             fname = f"prediksi_entry_logic_{pair}.xlsx"
