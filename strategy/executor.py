@@ -117,6 +117,7 @@ def run_executor():
             signal = row['signal']
             price = row['entry_price']
 
+            print(bot.get('filter_atr',0))
             if not should_entry(pair, atr,0,1,bot.get('filter_atr',0)):
                 print('atr terlalu rendah')
                 continue
