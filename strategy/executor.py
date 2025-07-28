@@ -12,7 +12,7 @@ from utils.timeframes import BINANCE_INTERVAL_MAP
 load_dotenv()
 client: Client = get_client()
 
-PREDICT_DIR = "predict_output"
+PREDICT_DIR = "data_predict"
 LOG_PATH = "log_entry_switching.xlsx"
 MODAL = 20.0
 ENTRY_PERCENT = 0.9
