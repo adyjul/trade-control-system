@@ -58,6 +58,14 @@ def cancel_open_orders(symbol):
     except Exception as e:
         print(f"⚠️ Gagal cancel order: {e}")
 
+def get_tick_size(symbol):
+    info = client.futures_exchange_info()
+    for s in info['symbols']:
+        if s['symbol'] == symbol:
+            for f in s['filters']:
+                if f['filterType'] == 'PRICE_FILTER':
+                    return float(f['tickSize'])
+    return 0.0001
 
 def run_executor():
     if os.path.exists(LOG_PATH):
@@ -152,6 +160,9 @@ def run_executor():
             tp = round(price + atr * tp_mult, price_precision) if signal == 'LONG' else round(price - atr * tp_mult, price_precision)
             sl = round(price - atr * sl_mult, price_precision) if signal == 'LONG' else round(price + atr * sl_mult, price_precision)
 
+            tick_size = get_tick_size(pair)
+            sl_safe = sl + tick_size * 5 if signal == 'LONG' else sl - tick_size * 5
+
             try:
                 order = client.futures_create_order(
                     symbol=pair,
@@ -163,7 +174,7 @@ def run_executor():
                 print(f"❌ Gagal entry: {e}")
                 continue
 
-            for t, p in [('TAKE_PROFIT_MARKET', tp), ('STOP_MARKET', sl)]:
+            for t, p in [('TAKE_PROFIT_MARKET', tp), ('STOP_MARKET', sl_safe)]:
                 try:
                     client.futures_create_order(
                         symbol=pair,
