@@ -35,7 +35,7 @@ def get_precision(symbol):
 
 
 def should_entry(symbol, atr, min_atr=0.1,filter_atr=1):
-    print(filter_atr)
+   
     positions = client.futures_position_information(symbol=symbol)
     pos = next((p for p in positions if float(p['positionAmt']) != 0), None)
     if pos:
@@ -46,7 +46,7 @@ def should_entry(symbol, atr, min_atr=0.1,filter_atr=1):
         if atr < min_atr:
             print(f"⚠️ ATR terlalu kecil ({atr:.4f})")
             return False
-        return True
+    return True
 
 
 def cancel_open_orders(symbol):
