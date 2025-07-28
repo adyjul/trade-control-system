@@ -69,7 +69,7 @@ def run_executor():
     bots = get_active_bots()
     now = datetime.now(timezone.utc)
     expected_time = now.replace(minute=0, second=0, microsecond=0)
-    
+
     for bot in bots:
         pairs = [p.strip() for p in bot['coin'].split(',')]
         tf = bot['timeframe']
@@ -123,7 +123,7 @@ def run_executor():
             price = row['entry_price']
 
             print(bot.get('filter_atr',0))
-            if not should_entry(pair, atr,0,1,bot.get('filter_atr',0)):
+            if not should_entry(pair, atr,0.1,bot.get('filter_atr',0)):
                 print('atr terlalu rendah')
                 continue
             
