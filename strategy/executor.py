@@ -35,7 +35,7 @@ def get_precision(symbol):
 
 
 def should_entry(symbol, atr, min_atr=0.1,filter_atr=1):
-    print(atr)
+    print(filter_atr)
     positions = client.futures_position_information(symbol=symbol)
     pos = next((p for p in positions if float(p['positionAmt']) != 0), None)
     if pos:
