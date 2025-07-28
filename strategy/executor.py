@@ -160,8 +160,8 @@ def run_executor():
             tp = round(price + atr * tp_mult, price_precision) if signal == 'LONG' else round(price - atr * tp_mult, price_precision)
             sl = round(price - atr * sl_mult, price_precision) if signal == 'LONG' else round(price + atr * sl_mult, price_precision)
 
-            tick_size = get_tick_size(pair)
-            sl_safe = sl + tick_size * 5 if signal == 'LONG' else sl - tick_size * 5
+            # tick_size = get_tick_size(pair)
+            # sl_safe = sl + tick_size * 5 if signal == 'LONG' else sl - tick_size * 5
 
             try:
                 order = client.futures_create_order(
@@ -174,7 +174,7 @@ def run_executor():
                 print(f"❌ Gagal entry: {e}")
                 continue
 
-            for t, p in [('TAKE_PROFIT_MARKET', tp), ('STOP_MARKET', sl_safe)]:
+            for t, p in [('TAKE_PROFIT_MARKET', tp), ('STOP_MARKET', sl)]:
                 try:
                     client.futures_create_order(
                         symbol=pair,
