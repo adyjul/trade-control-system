@@ -117,7 +117,6 @@ def run_executor():
         if top_n > 0:
             signals = sorted(signals, key=lambda x: x[0], reverse=True)[:top_n]
 
-        print(signals)
         for atr, row, pair in signals:
             signal = row['signal']
             price = row['entry_price']
