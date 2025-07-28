@@ -84,7 +84,7 @@ def run_executor():
             fname = f"prediksi_entry_logic_{pair}.xlsx"
             fpath = os.path.join(PREDICT_DIR, fname)
             if not os.path.exists(fpath):
-                print(f"⚠️ Tidak ada file sinyal: {fpath}")
+                print(f"{pair}⚠️ Tidak ada file sinyal: {fpath}")
                 continue
 
             df = pd.read_excel(fpath)
@@ -100,7 +100,7 @@ def run_executor():
 
             ts_utc = pd.to_datetime(row['timestamp_utc']).tz_convert('UTC')
             if ts_utc != expected_time:
-                print(f"⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
+                print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
                 continue
 
             signals.append((row['atr'], row, pair))
