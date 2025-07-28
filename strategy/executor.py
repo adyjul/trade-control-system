@@ -76,8 +76,6 @@ def run_executor():
         tp_mult = bot.get('tp_percent', 1.2)
         sl_mult = bot.get('sl_percent', 1.0)
 
-
-
         signals = []
         for pair in pairs:
             fname = f"{pair}_{tf}.xlsx"
@@ -114,6 +112,7 @@ def run_executor():
             price = row['entry_price']
 
             if not should_entry(pair, atr,0,1,bot.get('filter_atr',0)):
+                print('atr terlalu rendah')
                 continue
             
             if ts_utc.replace(tzinfo=None) in old_log['signal_time_utc'].values:
