@@ -127,6 +127,7 @@ def run_executor():
                 print('atr terlalu rendah')
                 continue
             
+            print(ts_utc.replace(tzinfo=None))
             if ts_utc.replace(tzinfo=None) in old_log['signal_time_utc'].values:
                 print(f"🚫 Sinyal {pair} pada {ts_utc} sudah dieksekusi. Skip.")
                 continue
