@@ -126,13 +126,13 @@ def run_executor():
                 print('atr terlalu rendah')
                 continue
 
-            executed = (
-                (old_log['signal_time_utc'] == ts_utc.replace(tzinfo=None)) &
-                (old_log['symbol'] == pair)
-            ).any()
-            
-            # print(ts_utc.replace(tzinfo=None))
-            if executed:
+            # Buat kolom identitas sinyal unik di log lama
+            old_log['signal_id'] = old_log['symbol'] + "_" + old_log['signal_time_utc'].astype(str)
+
+            # Buat ID sinyal saat ini
+            current_signal_id = f"{pair}_{str(ts_utc)}"
+
+            if current_signal_id in old_log['signal_id'].values:
                 print(f"🚫 Sinyal {pair} pada {ts_utc} sudah dieksekusi. Skip.")
                 continue
 
