@@ -126,9 +126,14 @@ def run_executor():
             if not should_entry(pair, atr,0.1,bot.get('filter_atr',0)):
                 print('atr terlalu rendah')
                 continue
+
+            executed = (
+                (old_log['signal_time_utc'] == ts_utc.replace(tzinfo=None)) &
+                (old_log['symbol'] == pair)
+            ).any()
             
-            print(ts_utc.replace(tzinfo=None))
-            if ts_utc.replace(tzinfo=None) in old_log['signal_time_utc'].values:
+            # print(ts_utc.replace(tzinfo=None))
+            if executed:
                 print(f"🚫 Sinyal {pair} pada {ts_utc} sudah dieksekusi. Skip.")
                 continue
 
