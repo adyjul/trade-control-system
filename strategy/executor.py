@@ -102,6 +102,7 @@ def run_executor():
 
             signals.append((row['atr'], row, pair))
 
+        print(signals)
         if not signals:
             print(f"⛔ Tidak ada sinyal valid untuk bot id={bot['id']}")
             continue
