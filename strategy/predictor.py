@@ -15,8 +15,8 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 # === Logika Sinyal ===
 def detect_signal(row):
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    #     return 'HOLD'
 
     # if row['atr'] < 0.005 * row['close']:
     #     return 'HOLD'
