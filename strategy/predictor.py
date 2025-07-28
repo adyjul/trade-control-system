@@ -15,11 +15,11 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 # === Logika Sinyal ===
 def detect_signal(row):
-    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-    #     return 'HOLD'
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+        return 'HOLD'
 
-    # if row['atr'] < 0.005 * row['close']:
-    #     return 'HOLD'
+    if row['atr'] < 0.005 * row['close']:
+        return 'HOLD'
 
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
         return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
@@ -50,9 +50,9 @@ def run_predict():
     for bot in active_bots:
         tf = bot['timeframe']
 
-        # if not is_time_to_run(tf, now):
-        #     print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
-        #     continue
+        if not is_time_to_run(tf, now):
+            print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
+            continue
 
         pair_text = bot['coin']
         pairs = pair_text.split(',')
@@ -64,13 +64,12 @@ def run_predict():
 
                 # Hapus file lama milik pair ini
                 full_path = os.path.join(DATA_DIR, f"{pair}_{timeframe}_full.xlsx")
-                pred_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                for path in [full_path, pred_path]:
+                # pred_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                for path in [full_path]:
                     if os.path.exists(path):
                         os.remove(path)
 
                 # lanjut scrape + prediksi...
-
 
                 klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
                 df = pd.DataFrame(klines, columns=[

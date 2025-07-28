@@ -78,7 +78,8 @@ def run_executor():
 
         signals = []
         for pair in pairs:
-            fname = f"{pair}_{tf}.xlsx"
+            # fname = f"{pair}_{tf}_full.xlsx"
+            fname = f"prediksi_entry_logic_{pair}.xlsx"
             fpath = os.path.join(PREDICT_DIR, fname)
             if not os.path.exists(fpath):
                 print(f"⚠️ Tidak ada file sinyal: {fpath}")
@@ -102,7 +103,6 @@ def run_executor():
 
             signals.append((row['atr'], row, pair))
 
-        print(signals)
         if not signals:
             print(f"⛔ Tidak ada sinyal valid untuk bot id={bot['id']}")
             continue
