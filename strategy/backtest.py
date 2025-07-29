@@ -211,6 +211,7 @@ def run_full_backtest(
         df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
         df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
         df['volume_sma20'] = df['volume'].rolling(window=20).mean()
+        df['prev_high'] = df['high'].shift(1)
         df['prev_close'] = df['close'].shift(1)
         df['prev_open'] = df['open'].shift(1)
 
