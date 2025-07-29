@@ -129,7 +129,7 @@ def run_full_backtest(
     timeframe: str,
     limit: int,
     look_ahead: int = 6,
-     tp_atr_mult: float = 1.3,
+    tp_atr_mult: float = 1.3,
    
     sl_atr_mult: float = 1.0,
     data_dir: str = DEFAULT_DATA_DIR,
