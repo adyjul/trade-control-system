@@ -79,6 +79,7 @@ def run_executor():
     now = datetime.now(timezone.utc)
     
     # expected_time = now.replace(minute=0, second=0, microsecond=0)
+    expected_time = get_expected_time(bots[0]['timeframe'], now)
 
     for bot in bots:
         pairs = [p.strip() for p in bot['coin'].split(',')]
@@ -87,7 +88,7 @@ def run_executor():
         tp_mult = bot.get('tp_percent', 1.2)
         sl_mult = bot.get('sl_percent', 1.0)
 
-        expected_time = get_expected_time(tf)
+        # expected_time = get_expected_time(tf)
         print(expected_time)
 
         signals = []
@@ -122,7 +123,10 @@ def run_executor():
             #     print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
             #     continue
 
-            valid_time = expected_time - timedelta(hours=1)  # karena sinyal dari candle sebelumnya
+            if tf == '1h':
+                valid_time = expected_time - timedelta(hours=1)
+            elif tf == '4h':
+                valid_time = expected_time - timedelta(hours=4)
 
             if ts_utc.replace(minute=0, second=0, microsecond=0) != valid_time:
                 print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc} (diharapkan {valid_time})")
