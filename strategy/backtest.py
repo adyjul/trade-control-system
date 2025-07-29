@@ -116,15 +116,28 @@ def detect_signal(row):
     # return 'HOLD'
 
     # v3
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) or pd.isna(row['prev_high']):
         return 'HOLD'
-    
+
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
-    breakout_up = row['high'] > (row['prev_high'] + row['atr'] * 0.3 if not pd.isna(row['prev_high']) else float('inf'))
-    volume_spike = row['volume'] > (row['volume_sma20'] * 1.5 if not pd.isna(row['volume_sma20']) else float('inf'))
+    breakout_up = row['high'] > row['prev_high'] + row['atr'] * 0.3
+    volume_spike = row['volume'] > row['volume_sma20'] * 1.5
     bullish_candle = row['close'] > row['open']
+
+    # Cegah SHORT saat breakout atas
+    if breakout_up and volume_spike and bullish_candle:
+        return 'HOLD'
+
+    # Cegah SHORT jika candle sebelumnya bearish ekstrem (false breakdown)
+    bearish_spike_prev = (
+        not pd.isna(row['prev_close']) and not pd.isna(row['prev_open']) and
+        row['prev_close'] < row['prev_open'] and
+        (row['prev_open'] - row['prev_close']) > row['atr'] * 1.5
+    )
+    if bearish_spike_prev and row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+        return 'HOLD'
 
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
         return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
@@ -132,8 +145,6 @@ def detect_signal(row):
     if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
         if row['rsi'] < 35:
             return 'HOLD'
-        if breakout_up and volume_spike and bullish_candle:
-            return 'HOLD'  # 💥 ini filter kuat anti SHORT saat breakout
         return 'SHORT'
 
     return 'HOLD'
@@ -200,7 +211,8 @@ def run_full_backtest(
         df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
         df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
         df['volume_sma20'] = df['volume'].rolling(window=20).mean()
-        df['prev_high'] = df['high'].shift(1)
+        df['prev_close'] = df['close'].shift(1)
+        df['prev_open'] = df['open'].shift(1)
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
