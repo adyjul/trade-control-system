@@ -207,7 +207,7 @@ def run_full_backtest(
 
         bad_trades = (df['entry_price'] + df['atr'] * tp_atr_mult) < (df['entry_price'] - df['atr'] * sl_atr_mult)
         if bad_trades.any():
-            return 'Hold'
+            continue
 
         # --- evaluasi ---
         df = evaluate_tp_sl(df, look_ahead=look_ahead)
