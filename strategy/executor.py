@@ -107,7 +107,8 @@ def run_executor():
                 print("tidak kolom atr")
                 continue
 
-            ts_utc = pd.to_datetime(row['timestamp_utc']).tz_convert('UTC')
+            # ts_utc = pd.to_datetime(row['timestamp_utc']).tz_convert('UTC')
+            ts_utc = pd.to_datetime(row['timestamp_utc']).tz_localize('UTC')
             # print(expected_time, ts_utc)
             # if ts_utc.replace(minute=0, second=0, microsecond=0) != expected_time:
             #     print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
