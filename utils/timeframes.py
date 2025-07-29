@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+
 
 def should_run_this_tf(tf: str, now: datetime) -> bool:
     tf = tf.lower()
@@ -32,3 +33,24 @@ BINANCE_INTERVAL_MAP = {
     '4h': '4h',
     '1d': '1d'
 }
+
+def get_expected_time(timeframe: str, now: datetime = None) -> datetime:
+    if now is None:
+        now = datetime.utcnow()
+
+    if timeframe.endswith('h'):
+        tf_hour = int(timeframe[:-1])
+        rounded_hour = now.hour - (now.hour % tf_hour)
+        expected_time = now.replace(hour=rounded_hour, minute=0, second=0, microsecond=0)
+        expected_time -= timedelta(hours=tf_hour)  # supaya benar-benar fix close candle
+        return expected_time
+
+    elif timeframe.endswith('m'):
+        tf_min = int(timeframe[:-1])
+        rounded_min = now.minute - (now.minute % tf_min)
+        expected_time = now.replace(minute=rounded_min, second=0, microsecond=0)
+        expected_time -= timedelta(minutes=tf_min)
+        return expected_time
+
+    else:
+        raise ValueError(f"Unsupported timeframe format: {timeframe}")

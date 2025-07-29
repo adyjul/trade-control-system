@@ -8,6 +8,7 @@ from binance.client import Client
 from utils.db import log_trade, get_active_bots
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
+from utils.timeframes import get_expected_time
 
 load_dotenv()
 client: Client = get_client()
@@ -76,8 +77,8 @@ def run_executor():
 
     bots = get_active_bots()
     now = datetime.now(timezone.utc)
+    
     # expected_time = now.replace(minute=0, second=0, microsecond=0)
-    expected_time = now.replace(minute=0, second=0, microsecond=0)
 
     for bot in bots:
         pairs = [p.strip() for p in bot['coin'].split(',')]
@@ -85,6 +86,8 @@ def run_executor():
         tf_suffix = f"_{tf}"
         tp_mult = bot.get('tp_percent', 1.2)
         sl_mult = bot.get('sl_percent', 1.0)
+
+        expected_time = get_expected_time(tf)
 
         signals = []
         # print(pairs)
