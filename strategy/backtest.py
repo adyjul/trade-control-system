@@ -205,7 +205,8 @@ def run_full_backtest(
         df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
         df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
 
-        if(df['entry_price'] + df['atr'] * tp_atr_mult < df['entry_price'] - df['atr'] * sl_atr_mult) :
+        bad_trades = (df['entry_price'] + df['atr'] * tp_atr_mult) < (df['entry_price'] - df['atr'] * sl_atr_mult)
+        if bad_trades.any():
             return 'Hold'
 
         # --- evaluasi ---
