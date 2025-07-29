@@ -66,9 +66,9 @@ def run_predict():
     for bot in active_bots:
         tf = bot['timeframe']
 
-        if not is_time_to_run(tf, now):
-            print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
-            continue
+        # if not is_time_to_run(tf, now):
+        #     print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
+        #     continue
 
         pair_text = bot['coin']
         pairs = pair_text.split(',')
@@ -120,7 +120,7 @@ def run_predict():
                 if df.empty:
                     print(f"⚠️ Tidak ada candle yang fix untuk {pair}")
                     continue
-                
+
                 last_row = df.iloc[-1]
 
                 # Simpan sinyal
