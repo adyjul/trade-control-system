@@ -131,8 +131,10 @@ def run_predict():
                         "signal": last_row['signal'],
                         "entry_price": last_row['close'],
                         "atr": last_row['atr'],
-                        "timestamp_utc": last_row.name.tz_localize("UTC").isoformat(),
-                        "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).isoformat()
+                        # "timestamp_utc": last_row.name.tz_localize("UTC").isoformat(),
+                        # "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).isoformat()
+                        "timestamp_utc": last_row.name.replace(tzinfo=None).isoformat(),
+                        "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat(),
                     }
 
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
