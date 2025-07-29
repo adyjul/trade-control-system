@@ -114,7 +114,17 @@ def run_predict():
                 df.to_excel(full_out_path)
 
                 # Ambil sinyal terbaru (bar terakhir)
+                now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+                df = df[df.index < now]
+
+                if df.empty:
+                    print(f"⚠️ Tidak ada candle yang fix untuk {pair}")
+                    continue
+                
                 last_row = df.iloc[-1]
+
+                # Simpan sinyal
+
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     signal_out = {
                         "pair": pair,

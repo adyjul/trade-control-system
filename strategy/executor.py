@@ -76,6 +76,7 @@ def run_executor():
 
     bots = get_active_bots()
     now = datetime.now(timezone.utc)
+    # expected_time = now.replace(minute=0, second=0, microsecond=0)
     expected_time = now.replace(minute=0, second=0, microsecond=0)
 
     for bot in bots:
@@ -107,9 +108,15 @@ def run_executor():
                 continue
 
             ts_utc = pd.to_datetime(row['timestamp_utc']).tz_convert('UTC')
-            print(expected_time, ts_utc)
-            if ts_utc.replace(minute=0, second=0, microsecond=0) != expected_time:
-                print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
+            # print(expected_time, ts_utc)
+            # if ts_utc.replace(minute=0, second=0, microsecond=0) != expected_time:
+            #     print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
+            #     continue
+
+            valid_time = expected_time - timedelta(hours=1)  # karena sinyal dari candle sebelumnya
+
+            if ts_utc.replace(minute=0, second=0, microsecond=0) != valid_time:
+                print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc} (diharapkan {valid_time})")
                 continue
 
             signals.append((row['atr'], row, pair))
