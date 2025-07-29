@@ -88,6 +88,7 @@ def run_executor():
         sl_mult = bot.get('sl_percent', 1.0)
 
         expected_time = get_expected_time(tf)
+        print(expected_time)
 
         signals = []
         # print(pairs)
