@@ -135,6 +135,7 @@ def run_full_backtest(
     result_dir: str = DEFAULT_RESULT_DIR,
     save_summary: bool = True
 ):
+    
     """
     1) Scrape OHLCV dari Binance Futures
     2) Hitung indikator & sinyal
