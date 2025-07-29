@@ -116,37 +116,24 @@ def detect_signal(row):
     # return 'HOLD'
 
     # v3
-     # Skip jika indikator belum siap
     if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
         return 'HOLD'
-
-    # Filter volatilitas rendah
+    
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
-    # --- Deteksi breakout ke atas untuk hindari SHORT ---
-    # (kamu harus pastikan kolom 'prev_high' dan 'volume_sma20' sudah dihitung sebelum apply)
-    try:
-        breakout_up = row['high'] > row['prev_high'] + row['atr'] * 0.5
-    except KeyError:
-        breakout_up = False
-
-    volume_spike = row['volume'] > row['volume_sma20'] * 1.5
+    breakout_up = row['high'] > (row['prev_high'] + row['atr'] * 0.3 if not pd.isna(row['prev_high']) else float('inf'))
+    volume_spike = row['volume'] > (row['volume_sma20'] * 1.5 if not pd.isna(row['volume_sma20']) else float('inf'))
     bullish_candle = row['close'] > row['open']
 
-    # ========== LOGIC SINYAL ==========
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-        if row['volume'] > row['volume_sma20']:
-            return 'LONG'
-        else:
-            return 'LONG_WEAK'
+        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
     if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
         if row['rsi'] < 35:
             return 'HOLD'
-        # HINDARI SHORT jika ada breakout naik
         if breakout_up and volume_spike and bullish_candle:
-            return 'HOLD'
+            return 'HOLD'  # 💥 ini filter kuat anti SHORT saat breakout
         return 'SHORT'
 
     return 'HOLD'
@@ -214,6 +201,7 @@ def run_full_backtest(
         df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
         df['volume_sma20'] = df['volume'].rolling(window=20).mean()
         df['prev_high'] = df['high'].shift(1)
+
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
