@@ -47,9 +47,30 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
                     break
     return df
 
+def detect_breakout(row):
+    if pd.isna(row['prev_high']) or pd.isna(row['prev_close']) or pd.isna(row['prev_open']):
+        return False  # tidak cukup data
+
+    # Deteksi breakout palsu untuk LONG
+    if row['signal'] == 'LONG':
+        breakout_up = row['high'] > row['prev_high'] + row['atr'] * 0.3
+        volume_spike = row['volume'] > row['volume_sma20'] * 1.5
+        bullish_candle = row['close'] > row['open']
+        
+        # Kalau terlihat breakout tapi volume nggak kuat → patut dicurigai
+        if breakout_up and not volume_spike:
+            return True
+    
+    # Deteksi false breakdown untuk SHORT
+    if row['signal'] == 'SHORT':
+        big_prev_bearish = row['prev_close'] < row['prev_open'] and (row['prev_open'] - row['prev_close']) > row['atr'] * 1.5
+        if big_prev_bearish:
+            return True
+
+    return False
+
 
 def detect_signal(row):
-
     # v1
     if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
         return 'HOLD'
@@ -57,37 +78,15 @@ def detect_signal(row):
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
-    # ========== LONG Condition ==========
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-        if row['rsi'] > 75:  # Overbought → hindari entry LONG
-            return 'HOLD'
-        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
-            return 'HOLD'
-        return 'LONG'
+        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
-    # ========== SHORT Condition ==========
     if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-        if row['rsi'] < 35:  # Oversold → hindari entry SHORT
-            return 'HOLD'
-        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
+        if row['rsi'] < 35:
             return 'HOLD'
         return 'SHORT'
 
-     # --- Validasi candlestick: hindari doji/spinning top ---
-    # candle_body = abs(row['close'] - row['open'])
-    # candle_range = row['high'] - row['low']
-    # if candle_range == 0 or candle_body < 0.3 * candle_range:
-    #     return 'HOLD'
-
-    # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-    #     return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
-
-    # if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-    #     if row['rsi'] < 35:
-    #         return 'HOLD'
-    #     return 'SHORT'
-
-    # return 'HOLD'
+    return 'HOLD'
 
     # v2 mungkin untuk weekend
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
@@ -217,6 +216,7 @@ def run_full_backtest(
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
+        df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
         if df.empty:
             # tidak ada sinyal sama sekali
