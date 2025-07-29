@@ -105,6 +105,9 @@ def run_predict():
                 df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
                 df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
                 df['volume_sma20'] = df['volume'].rolling(window=20).mean()
+                df.set_index('timestamp', inplace=True)
+                df.index = df.index.tz_localize('UTC') 
+
                 now = pd.Timestamp.now(tz='UTC').replace(minute=0, second=0, microsecond=0)
                 df = df[df.index < now]
                 # Deteksi sinyal
@@ -120,7 +123,7 @@ def run_predict():
                 if df.empty:
                     print(f"⚠️ Tidak ada candle yang fix untuk {pair}")
                     continue
-
+                    
                 last_row = df.iloc[-1]
 
                 # Simpan sinyal
