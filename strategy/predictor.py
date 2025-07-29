@@ -96,7 +96,7 @@ def run_predict():
 
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
                 df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
-                df.set_index('timestamp', inplace=True)
+                # df.set_index('timestamp', inplace=True)
 
                 # Indikator
                 macd = ta.trend.MACD(df['close'])
@@ -118,12 +118,8 @@ def run_predict():
                 df.to_excel(full_out_path)
 
                 # Ambil sinyal terbaru (bar terakhir)
-               
+            
 
-                if df.empty:
-                    print(f"⚠️ Tidak ada candle yang fix untuk {pair}")
-                    continue
-                    
                 last_row = df.iloc[-1]
 
                 # Simpan sinyal
