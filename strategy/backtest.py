@@ -217,6 +217,29 @@ def run_full_backtest(
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
+        df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
+
+        for i in range(len(df)):
+            if df.iloc[i]['is_breakout_zone']:
+                trigger_long = df.iloc[i]['high'] + df.iloc[i]['atr'] * 0.2
+                trigger_short = df.iloc[i]['low'] - df.iloc[i]['atr'] * 0.2
+
+                future = df.iloc[i+1:i+3]  # 2 candle ke depan
+
+                triggered = False
+                for _, fut in future.iterrows():
+                    if fut['high'] >= trigger_long:
+                        df.at[df.index[i], 'entry_type'] = 'LONG'
+                        triggered = True
+                        break
+                    elif fut['low'] <= trigger_short:
+                        df.at[df.index[i], 'entry_type'] = 'SHORT'
+                        triggered = True
+                        break
+
+                if not triggered:
+                    df.at[df.index[i], 'entry_type'] = 'CANCELLED'
+
         df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
         if df.empty:
             # tidak ada sinyal sama sekali
