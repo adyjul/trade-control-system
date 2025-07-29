@@ -217,6 +217,7 @@ def run_full_backtest(
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
+        df['is_breakout_zone'] = df['is_fake_breakout']
         df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
 
         for i in range(len(df)):
@@ -241,6 +242,7 @@ def run_full_backtest(
                     df.at[df.index[i], 'entry_type'] = 'CANCELLED'
 
         df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
+
         if df.empty:
             # tidak ada sinyal sama sekali
             out_path = os.path.join(result_dir, f"hasil_backtest_{pair.lower()}_{timeframe}.xlsx")
