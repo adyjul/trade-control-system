@@ -51,11 +51,11 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
 def detect_signal(row):
 
     # v1
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    #     return 'HOLD'
 
-    if row['atr'] < 0.005 * row['close']:
-        return 'HOLD'
+    # if row['atr'] < 0.005 * row['close']:
+    #     return 'HOLD'
 
     # ========== LONG Condition ==========
     # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
@@ -79,15 +79,15 @@ def detect_signal(row):
     # if candle_range == 0 or candle_body < 0.3 * candle_range:
     #     return 'HOLD'
 
-    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
+    # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+    #     return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
-    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-        if row['rsi'] < 35:
-            return 'HOLD'
-        return 'SHORT'
+    # if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+    #     if row['rsi'] < 35:
+    #         return 'HOLD'
+    #     return 'SHORT'
 
-    return 'HOLD'
+    # return 'HOLD'
 
     # v2 mungkin untuk weekend
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
@@ -114,6 +114,42 @@ def detect_signal(row):
     #     return 'SHORT'
 
     # return 'HOLD'
+
+    # v3
+     # Skip jika indikator belum siap
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+        return 'HOLD'
+
+    # Filter volatilitas rendah
+    if row['atr'] < 0.005 * row['close']:
+        return 'HOLD'
+
+    # --- Deteksi breakout ke atas untuk hindari SHORT ---
+    # (kamu harus pastikan kolom 'prev_high' dan 'volume_sma20' sudah dihitung sebelum apply)
+    try:
+        breakout_up = row['high'] > row['prev_high'] + row['atr'] * 0.5
+    except KeyError:
+        breakout_up = False
+
+    volume_spike = row['volume'] > row['volume_sma20'] * 1.5
+    bullish_candle = row['close'] > row['open']
+
+    # ========== LOGIC SINYAL ==========
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+        if row['volume'] > row['volume_sma20']:
+            return 'LONG'
+        else:
+            return 'LONG_WEAK'
+
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+        if row['rsi'] < 35:
+            return 'HOLD'
+        # HINDARI SHORT jika ada breakout naik
+        if breakout_up and volume_spike and bullish_candle:
+            return 'HOLD'
+        return 'SHORT'
+
+    return 'HOLD'
 
 def clear_folder(folder_path):
     for file_path in glob.glob(os.path.join(folder_path, '*')):
@@ -177,7 +213,7 @@ def run_full_backtest(
         df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
         df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
         df['volume_sma20'] = df['volume'].rolling(window=20).mean()
-
+        df['prev_high'] = df['high'].shift(1)
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
@@ -204,10 +240,6 @@ def run_full_backtest(
         df['sl_price'] = df['entry_price'] - df['atr'] * sl_atr_mult
         df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
         df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
-
-        bad_trades = (df['entry_price'] + df['atr'] * tp_atr_mult) < (df['entry_price'] - df['atr'] * sl_atr_mult)
-        if bad_trades.any():
-            continue
 
         # --- evaluasi ---
         df = evaluate_tp_sl(df, look_ahead=look_ahead)
