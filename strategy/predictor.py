@@ -115,6 +115,7 @@ def run_predict():
 
                 # Simpan data full OHLCV + indikator
                 full_out_path = os.path.join(DATA_DIR, f"{pair}_{timeframe}_full.xlsx")
+                df.index = df.index.tz_convert(None)
                 df.to_excel(full_out_path)
 
                 # Ambil sinyal terbaru (bar terakhir)
