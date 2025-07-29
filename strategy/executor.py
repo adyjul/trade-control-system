@@ -78,8 +78,8 @@ def run_executor():
     bots = get_active_bots()
     now = datetime.now(timezone.utc)
     
-    # expected_time = now.replace(minute=0, second=0, microsecond=0)
-    expected_time = get_expected_time(bots[0]['timeframe'], now)
+    expected_time = now.replace(minute=0, second=0, microsecond=0)
+    # expected_time = get_expected_time(bots[0]['timeframe'], now)
 
     for bot in bots:
         pairs = [p.strip() for p in bot['coin'].split(',')]
