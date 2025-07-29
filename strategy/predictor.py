@@ -20,6 +20,22 @@ def detect_signal(row):
 
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
+    
+    # ========== LONG Condition ==========
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+        if row['rsi'] > 70:  # Overbought → hindari entry LONG
+            return 'HOLD'
+        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
+            return 'HOLD'
+        return 'LONG'
+    
+     # ========== SHORT Condition ==========
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+        if row['rsi'] < 30:  # Oversold → hindari entry SHORT
+            return 'HOLD'
+        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
+            return 'HOLD'
+        return 'SHORT'
 
     if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
         return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
