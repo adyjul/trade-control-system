@@ -16,4 +16,4 @@ def calculate_support_resistance(df, window=3):
             support.append(lows.min())
             resistance.append(highs.max())
 
-    return pd.Series(support), pd.Series(resistance)
+    return pd.Series(support, index=df.index), pd.Series(resistance, index=df.index)
