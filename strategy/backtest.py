@@ -5,7 +5,7 @@ import pandas as pd
 import ta
 from binance.client import Client
 import glob
-
+from strategy.utils import calculate_support_resistance
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
 
@@ -208,7 +208,15 @@ def run_full_backtest(
         df['macd_signal'] = macd.macd_signal()
         df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
         df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
+        df['support'], df['resistance'] = calculate_support_resistance(df)
         df['volume_sma20'] = df['volume'].rolling(window=20).mean()
+
+        bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['upper_band'] = bb.bollinger_hband()
+        df['lower_band'] = bb.bollinger_lband()
+        df['boll_width'] = df['upper_band'] - df['lower_band']
+        df['bb_percentile'] = (df['close'] - df['lower_band']) / (df['upper_band'] - df['lower_band'])
+
         df['prev_high'] = df['high'].shift(1)
         df['prev_close'] = df['close'].shift(1)
         df['prev_open'] = df['open'].shift(1)
@@ -216,6 +224,10 @@ def run_full_backtest(
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
+        df['is_potential_breakout'] = (
+            (df['high'] > df['resistance']) |
+            (df['low'] < df['support'])
+        )
         df['is_breakout_zone'] = df['is_fake_breakout']
         df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
 
@@ -240,7 +252,8 @@ def run_full_backtest(
                 if not triggered:
                     df.at[df.index[i], 'entry_type'] = 'CANCELLED'
 
-        df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
+        
+        df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()   
 
         if df.empty:
             # tidak ada sinyal sama sekali
@@ -265,10 +278,10 @@ def run_full_backtest(
         df['sl_price'] = df['entry_price'] - df['atr'] * sl_atr_mult
         df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
         df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
-
+        
         # --- evaluasi ---
         df = evaluate_tp_sl(df, look_ahead=look_ahead)
-
+        df['label'] = df['exit_status'].map({'TP HIT': 1, 'SL HIT': 0, 'NO HIT': -1})
         # --- simpan hasil pair ---
         out_path = os.path.join(result_dir, f"hasil_backtest_{pair.lower()}_{timeframe}.xlsx")
         df.to_excel(out_path)
