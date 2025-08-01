@@ -155,8 +155,7 @@ def clear_folder(folder_path):
             print(f"Deleted: {file_path}")
         except Exception as e:
             print(f"Failed to delete {file_path}: {e}")
-
-
+        
 def run_full_backtest(
     pairs,
     timeframe: str,
