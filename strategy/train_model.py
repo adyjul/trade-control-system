@@ -42,6 +42,11 @@ feature_columns = [
     'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
 ]
 
+# === SHIFT FITUR 1 CANDLE KE BELAKANG (PREDIKSI REALTIME) ===
+for col in feature_columns:
+    df[col] = df[col].shift(1)
+df.dropna(subset=feature_columns + ['label'], inplace=True)
+
 X = df[feature_columns]
 y = df['label']
 
