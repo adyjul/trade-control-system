@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report
 
 # === STEP 1: Baca file Excel hasil backtest ===
-df = pd.read_excel('breakout_backtest_result.xlsx')
+df = pd.read_excel('hasil_backtest_enausdt_1h.xlsx')
 
 # === STEP 2: Buat kolom label (0/1) jika belum ada ===
 if 'label' not in df.columns:
@@ -23,7 +23,7 @@ df['macd_hist'] = df['macd'] - df['macd_signal']
 df['signal_numeric'] = df['signal'].map({'LONG': 1, 'SHORT': -1})
 
 # === STEP 4: (Opsional) Simpan ke CSV untuk cek manual / pelatihan lanjutan ===
-df.to_csv('ml_dataset.csv', index=False)
+df.to_csv('root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
 
 # === STEP 5: Tentukan fitur yang akan digunakan ===
 feature_columns = [
