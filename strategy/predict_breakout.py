@@ -3,6 +3,7 @@ import joblib
 import glob
 import os
 import sys
+import numpy as np
 
 # ------- CONFIG -------
 MODEL_PATH = "breakout_rf_model.pkl"
@@ -26,6 +27,11 @@ def ensure_features(df):
     df['signal_numeric'] = df['signal'].map({'LONG': 1, 'SHORT': -1})
     # Jika ada NaN di signal_numeric akibat label lain, isi 0 supaya model tidak error
     df['signal_numeric'] = df['signal_numeric'].fillna(0)
+    df['atr_multiple'] = np.where(
+        df['signal'] == 'LONG',
+        (df['close'] - df['resistance']) / df['atr'],
+        (df['support'] - df['close']) / df['atr']
+    )
     return df
 
 def main():
