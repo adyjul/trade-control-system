@@ -6,10 +6,10 @@ import sys
 import numpy as np
 
 # ------- CONFIG -------
-MODEL_PATH = "breakout_rf_model.pkl"
-BACKTEST_GLOB = "backtest_result/hasil_backtest_*_4h.xlsx"  # sesuaikan timeframe/pair jika perlu
-OUTPUT_PRED_PATH = "predicted_result_single_pair.xlsx"
-ENTRY_OUTPUT = "entry_layak.xlsx"
+MODEL_PATH = "/root/trade-control-system/backtest_result/breakout_rf_model.pkl"
+BACKTEST_GLOB = "/root/trade-control-system/backtest_result/backtest_result/hasil_backtest_*_4h.xlsx"  # sesuaikan timeframe/pair jika perlu
+OUTPUT_PRED_PATH = "/root/trade-control-system/backtest_result/predicted_result_single_pair.xlsx"
+ENTRY_OUTPUT = "/root/trade-control-system/backtest_result/entry_layak.xlsx"
 PROB_THRESHOLD = 0.6  # hanya ambil prediksi TP dengan confidence >= threshold
 # -----------------------
 
