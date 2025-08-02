@@ -76,4 +76,5 @@ print("All scores:", cv_scores)
 # === STEP 9: Simpan model (opsional, kalau mau dipakai buat prediksi nanti) ===
 import joblib
 joblib.dump(model, '/root/trade-control-system/backtest_result/breakout_rf_model.pkl')
-print("Model disimpan sebagai 'breakout_rf_model.pkl'")
+print("Model disimpan sebagai '/root/trade-control-system/backtest_result/breakout_rf_model.pkl'")
+
