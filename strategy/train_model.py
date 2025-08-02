@@ -4,6 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report
+import numpy as np
 
 # === STEP 1: Baca file Excel hasil backtest ===
 df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_enausdt_1h.xlsx')
@@ -11,6 +12,8 @@ df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_en
 # === STEP 2: Buat kolom label (0/1) jika belum ada ===
 if 'label' not in df.columns:
     df['label'] = df['exit_status'].map({'TP HIT': 1, 'SL HIT': 0, 'NO HIT': -1})
+
+df['entry_signal'] = ((df['is_potential_breakout'] == 1) & (df['signal'].notna())).astype(int)
 
 # === STEP 3: Drop data yang labelnya -1 (NO HIT, tidak jelas hasilnya) ===
 df = df[df['label'] != -1]
@@ -21,6 +24,11 @@ df['macd'] = df['macd'].astype(float)
 df['macd_signal'] = df['macd_signal'].astype(float)
 df['macd_hist'] = df['macd'] - df['macd_signal']
 df['signal_numeric'] = df['signal'].map({'LONG': 1, 'SHORT': -1})
+df['atr_multiple'] = np.where(
+    df['signal'] == 'LONG',
+    (df['close'] - df['resistance']) / df['atr'],
+    (df['support'] - df['close']) / df['atr']
+)
 
 # === STEP 4: (Opsional) Simpan ke CSV untuk cek manual / pelatihan lanjutan ===
 df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
