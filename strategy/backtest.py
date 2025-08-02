@@ -231,7 +231,8 @@ def run_full_backtest(
         )
         df['is_breakout_zone'] = df['is_fake_breakout']
         df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
-
+        df['entry_signal'] = df['is_potential_breakout'].astype(int)
+        
         for i in range(len(df)):
             if df.iloc[i]['is_breakout_zone']:
                 trigger_long = df.iloc[i]['high'] + df.iloc[i]['atr'] * 0.2
