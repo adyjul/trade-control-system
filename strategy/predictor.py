@@ -8,6 +8,7 @@ from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP, is_time_to_run
 import glob
 import sys
+from strategy.utils import calculate_support_resistance
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 DATA_DIR = "./data_predict"
@@ -87,7 +88,7 @@ def run_predict():
 
                 # lanjut scrape + prediksi...
 
-                klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
+                klines = client.futures_klines(symbol=pair, interval=interval, limit=1000)
                 df = pd.DataFrame(klines, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume',
                     'close_time', 'quote_asset_volume', 'number_of_trades',
@@ -104,7 +105,19 @@ def run_predict():
                 df['macd_signal'] = macd.macd_signal()
                 df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
                 df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
+                df['support'], df['resistance'] = calculate_support_resistance(df)
                 df['volume_sma20'] = df['volume'].rolling(window=20).mean()
+
+                bb = ta.volatility.BollingerBands(close=df['close'])
+                df['upper_band'] = bb.bollinger_hband()
+                df['lower_band'] = bb.bollinger_lband()
+                df['boll_width'] = bb.bollinger_wband()
+                df['bb_percentile'] = (df['close'] - df['lower_band']) / (df['upper_band'] - df['lower_band'])
+
+                df['prev_high'] = df['high'].shift(1)
+                df['prev_close'] = df['close'].shift(1)
+                df['prev_open'] = df['open'].shift(1)
+                
                 df.set_index('timestamp', inplace=True)
                 df.index = df.index.tz_localize('UTC') 
 

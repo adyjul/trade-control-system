@@ -10,7 +10,8 @@ from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
 from utils.timeframes import get_expected_time
 
-from strategy.ml_predict import is_signal_valid
+# from strategy.ml_predict import is_signal_valid
+from strategy.ml.train_model import train_model_for_pair
 
 load_dotenv()
 client: Client = get_client()
@@ -89,6 +90,15 @@ def run_executor():
         tf_suffix = f"_{tf}"
         tp_mult = bot.get('tp_percent', 1.2)
         sl_mult = bot.get('sl_percent', 1.0)
+
+        model_path = f"/root/trade-control-system/strategy/ml/model_store/model_{pair}_{tf}.pkl"
+
+        # Train model jika belum ada
+        if not os.path.exists(model_path):
+            print(f"Model untuk {pair}-{tf} belum ada, melatih model baru...")
+            train_model_for_pair(pair, tf)
+        else:
+            print(f"Model tersedia untuk {pair}-{tf}, memuat model...")
 
         # expected_time = get_expected_time(tf)
         print(expected_time)

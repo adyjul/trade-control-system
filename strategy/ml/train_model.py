@@ -5,8 +5,8 @@ from sklearn.model_selection import train_test_split
 
 def train_model_for_pair(pair: str, timeframe: str):
     import os
-    filename = f"hasil_backtest_{pair}_{timeframe}.xlsx"
-    path = f"/root/trade-control-system/backtest_result/{filename}"
+    filename = f"{pair}_{timeframe}.xlsx"
+    path = f"/root/trade-control-system/data_predict/{filename}"
     df = pd.read_excel(path)
 
     df['label'] = df['exit_status'].map({'TP HIT': 1, 'SL HIT': 0, 'NO HIT': -1})
@@ -41,6 +41,6 @@ def train_model_for_pair(pair: str, timeframe: str):
     model = RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state=42)
     model.fit(X_train, y_train)
 
-    save_path = f"/root/trade-control-system/models/model_{pair}_{timeframe}.pkl"
+    save_path = f"/root/trade-control-system/strategy/ml/models/model_{pair}_{timeframe}.pkl"
     joblib.dump(model, save_path)
     print(f"✅ Model untuk {pair} - {timeframe} disimpan di {save_path}")
