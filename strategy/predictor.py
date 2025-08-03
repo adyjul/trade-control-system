@@ -139,7 +139,8 @@ def run_predict():
                     (df['support'] - df['close']) / df['atr']
                 )
                 
-                df['entry_signal'] = df['is_potential_breakout'].astype(int)
+                # df['entry_signal'] = df['is_potential_breakout'].astype(int)
+                df['entry_signal'] = ((df['is_potential_breakout'] == 1) & (df['signal'].notna())).astype(int)
                 
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
                 df['signal_numeric'] = df['signal'].map(signal_map)
