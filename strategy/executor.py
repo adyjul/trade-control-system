@@ -104,8 +104,6 @@ def run_executor():
                 print(f"{pair}⚠️ Tidak ada file sinyal: {fpath}")
                 continue
 
-           
-
             df = pd.read_excel(fpath)
             df = df[df['signal'].isin(['LONG', 'SHORT'])]
             if df.empty:
@@ -123,22 +121,11 @@ def run_executor():
                 ts_utc = ts_utc.tz_localize('UTC')
             else:
                 ts_utc = ts_utc.tz_convert('UTC')
+
             # print(expected_time, ts_utc)
             # if ts_utc.replace(minute=0, second=0, microsecond=0) != expected_time:
             #     print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
             #     continue
-  
-            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair.lower()}_{tf}.pkl"
-           
-            if os.path.exists(model_path):
-                model = joblib.load(model_path)
-                print(f"[ML] Model ditemukan: {model_path}")
-                 # Apply ML filter
-                if not predict_ml_signal(model, row):
-                    print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                    return  # atau skip entry
-            else:
-                print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
 
             if tf == '1h':
                 valid_time = expected_time - timedelta(hours=1)
@@ -164,17 +151,25 @@ def run_executor():
             signal = row['signal']
             price = row['entry_price']
 
-            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair}_{tf}.pkl"
-            if os.path.exists(model_path):
-                model = joblib.load(model_path)
-                print(f"[ML] Model ditemukan: {model_path}")
-            else:
-                print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
+            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair.lower()}_{tf}.pkl"
+            
+            required_features = [
+                'support', 'resistance', 'atr_multiple', 'rsi',
+                'boll_width', 'volume', 'macd', 'upper_band', 'lower_band'
+            ]
 
-            # Apply ML filter
-            if not predict_ml_signal(model, row):
-                print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                return  # atau skip entry
+            if not row[required_features].isna().any():
+                if os.path.exists(model_path):
+                    model = joblib.load(model_path)
+                    print(f"[ML] Model ditemukan: {model_path}")
+                    # Apply ML filter
+                    if not predict_ml_signal(model, row):
+                            print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
+                            return  # atau skip entry
+                else:
+                    print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
+            else:
+                print("⚠️ Fitur ML tidak lengkap, skip filter ML.")
 
             print(bot.get('filter_atr',0))
             if not should_entry(pair, atr,0.1,bot.get('filter_atr',0)):
