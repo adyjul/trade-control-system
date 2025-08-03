@@ -136,15 +136,19 @@ def backtest_new():
         # return render_template("summary_backtest.html", result=res)
         return redirect(url_for('backtest_summary'))
 
-    return render_template("backtest_form.html")  # form input pair/tf
+    status = request.args.get("status")
+    err = request.args.get("err")
+    return render_template("backtest_form.html",status=status,err=err)  # form input pair/tf
 
 @app.route("/make_model", methods=["GET"])
 def make_model():
     try:
         train_all_models()  # ini akan otomatis membaca semua file .xlsx dan buat model per coin/timeframe
-        return "✅ Semua model berhasil dibuat.", 200
+        # return "✅ Semua model berhasil dibuat.", 200
+        return redirect(url_for("backtest", status="success"))
     except Exception as e:
-        return f"❌ Gagal membuat model: {str(e)}", 500
+        # return f"❌ Gagal membuat model: {str(e)}", 500
+        return redirect(url_for("backtest", status="success",err=e))
 
 @app.route('/backtest/summary')
 def backtest_summary():
