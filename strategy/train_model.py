@@ -5,6 +5,11 @@ from sklearn.metrics import classification_report, confusion_matrix, ConfusionMa
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report
 import numpy as np
+from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 
 # === STEP 1: Baca file Excel hasil backtest ===
 df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_enausdt_1h.xlsx')
@@ -39,61 +44,41 @@ df['prev_return'] = df['close'].pct_change().shift(1)
 # === STEP 4: (Opsional) Simpan ke CSV untuk cek manual / pelatihan lanjutan ===
 df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
 
-# === STEP 5: Tentukan fitur yang akan digunakan ===
-feature_columns = [
-    'rsi', 'atr', 'boll_width', 'volume', 'close',
-    'upper_band', 'lower_band', 'bb_percentile',
-    'support', 'resistance', 'atr_multiple',
-    'is_potential_breakout',
-    'macd', 'macd_signal', 'macd_hist', 'signal_numeric',
-    'entry_signal', 'vol_3_candle', 'rsi_diff',
-    'prev_close', 'prev_volume', 'prev_return'
-]
+df = df[df['label'] != -1]  # buang yang label -1 (NO HIT)
 
-# === SHIFT FITUR 1 CANDLE KE BELAKANG (PREDIKSI REALTIME) ===
-for col in feature_columns:
-    df[col] = df[col].shift(1)
-df.dropna(subset=feature_columns + ['label'], inplace=True)
+X = df.drop(columns=["label", "pair", "timeframe", "timestamp", "entry_price", "tp", "sl", "result"])
+y = df["label"]
 
-X = df[feature_columns]
-y = df['label']
+# === Balancing ===
+smote = SMOTE(random_state=42)
+X_bal, y_bal = smote.fit_resample(X, y)
 
-# === STEP 6: Bagi dataset menjadi train/test ===
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
-)
+# === Scaling ===
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_bal)
 
-# === STEP 7: Latih model Random Forest ===
-# model = RandomForestClassifier(n_estimators=100, random_state=42)
-# model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
-param_grid = {
-    'n_estimators': [100, 200],
-    'max_depth': [3, 5, 10],
-    'min_samples_split': [2, 5],
-}
+# === Split Data ===
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_bal, test_size=0.2, random_state=42, stratify=y_bal)
 
-grid = GridSearchCV(RandomForestClassifier(random_state=42), param_grid, cv=3, scoring='accuracy')
-grid.fit(X, y)
-model = grid.best_estimator_
-model.fit(X_train, y_train)
+# === Define Models ===
+xgb = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.1, use_label_encoder=False, eval_metric='logloss')
+rf = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+lr = LogisticRegression(max_iter=500)
 
-# === STEP 8: Evaluasi model ===
-y_pred = model.predict(X_test)
+# === Voting Classifier ===
+voting = VotingClassifier(estimators=[
+    ('xgb', xgb),
+    ('rf', rf),
+    ('lr', lr)
+], voting='soft')
+
+# === Training ===
+voting.fit(X_train, y_train)
+
+# === Evaluation ===
+y_pred = voting.predict(X_test)
 print("=== Classification Report ===")
 print(classification_report(y_test, y_pred))
-
-# Confusion matrix
-cm = confusion_matrix(y_test, y_pred)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot()
-plt.title("Confusion Matrix")
-plt.show()
-
-# Cross-validation
-cv_scores = cross_val_score(model, X, y, cv=5)
-print("=== Cross Validation Score (5-fold) ===")
-print("Mean Accuracy:", cv_scores.mean())
-print("All scores:", cv_scores)
 
 # === STEP 9: Simpan model (opsional, kalau mau dipakai buat prediksi nanti) ===
 import joblib
