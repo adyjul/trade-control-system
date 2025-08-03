@@ -26,8 +26,11 @@ def predict_ml_signal(model, row: pd.Series) -> bool:
         'rsi', 'atr', 'boll_width', 'volume', 'close',
         'upper_band', 'lower_band', 'bb_percentile',
         'support', 'resistance', 'atr_multiple',
-        'is_potential_breakout', 'entry_signal'
+        'is_potential_breakout', 'entry_signal',
+        'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
+        
     ]
+
     X = row[features].values.reshape(1, -1)
     pred = model.predict(X)
     return pred[0] == 1  # 1 artinya valid (bukan fake breakout)
