@@ -10,6 +10,8 @@ from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
 from utils.timeframes import get_expected_time
 
+from strategy.ml_predict import is_signal_valid
+
 load_dotenv()
 client: Client = get_client()
 
@@ -146,6 +148,10 @@ def run_executor():
         for atr, row, pair in signals:
             signal = row['signal']
             price = row['entry_price']
+
+            if not is_signal_valid(row, use_ml=bot.get('use_ml_filter', 1)):
+                print(f"❌ Sinyal {pair} difilter oleh model ML.")
+                continue
 
             print(bot.get('filter_atr',0))
             if not should_entry(pair, atr,0.1,bot.get('filter_atr',0)):
