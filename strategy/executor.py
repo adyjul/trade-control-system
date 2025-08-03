@@ -11,7 +11,6 @@ from utils.timeframes import BINANCE_INTERVAL_MAP
 from utils.timeframes import get_expected_time
 from strategy.ml.utils import predict_ml_signal
 # from strategy.ml_predict import is_signal_valid
-from strategy.ml.train_model import train_model_for_pair
 
 load_dotenv()
 client: Client = get_client()
@@ -118,18 +117,6 @@ def run_executor():
                 print("tidak kolom atr")
                 continue
             
-            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair}_{tf}.pkl"
-            if os.path.exists(model_path):
-                model = joblib.load(model_path)
-                print(f"[ML] Model ditemukan: {model_path}")
-            else:
-                print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
-
-            # Apply ML filter
-            if not predict_ml_signal(model, row):
-                print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                return  # atau skip entry
-
             # ts_utc = pd.to_datetime(row['timestamp_utc']).tz_convert('UTC')
             ts_utc = pd.to_datetime(row['timestamp_utc'])
             if ts_utc.tzinfo is None:
@@ -165,9 +152,17 @@ def run_executor():
             signal = row['signal']
             price = row['entry_price']
 
-            if not is_signal_valid(row, use_ml=bot.get('use_ml_filter', 1)):
-                print(f"❌ Sinyal {pair} difilter oleh model ML.")
-                continue
+            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair}_{tf}.pkl"
+            if os.path.exists(model_path):
+                model = joblib.load(model_path)
+                print(f"[ML] Model ditemukan: {model_path}")
+            else:
+                print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
+
+            # Apply ML filter
+            if not predict_ml_signal(model, row):
+                print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
+                return  # atau skip entry
 
             print(bot.get('filter_atr',0))
             if not should_entry(pair, atr,0.1,bot.get('filter_atr',0)):
