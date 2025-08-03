@@ -127,18 +127,17 @@ def run_executor():
             # if ts_utc.replace(minute=0, second=0, microsecond=0) != expected_time:
             #     print(f"{pair}⚠️ Waktu sinyal tidak sesuai: {ts_utc}")
             #     continue
-
-            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair}_{tf}.pkl"
+  
+            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair.lower()}_{tf}.pkl"
             if os.path.exists(model_path):
                 model = joblib.load(model_path)
                 print(f"[ML] Model ditemukan: {model_path}")
+                 # Apply ML filter
+                if not predict_ml_signal(model, row):
+                    print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
+                    return  # atau skip entry
             else:
                 print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
-
-            # Apply ML filter
-            if not predict_ml_signal(model, row):
-                print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                return  # atau skip entry
 
             if tf == '1h':
                 valid_time = expected_time - timedelta(hours=1)
