@@ -155,10 +155,11 @@ def run_executor():
             if os.path.exists(model_path):
                 model = joblib.load(model_path)
                 print(f"[ML] Model ditemukan: {model_path}")
-                # Apply ML filter
                 if not predict_ml_signal(model, row):
-                        print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                        return  # atau skip entry
+                    print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
+                    return  # atau skip entry
+                else:
+                    print(f"sinyal {pair} {tf} dikatakan valid oleh ML")
             else:
                 print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
             
