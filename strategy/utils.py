@@ -1,3 +1,5 @@
+import os
+import pickle
 import pandas as pd
 import numpy as np
 
@@ -17,3 +19,6 @@ def calculate_support_resistance(df, window=3):
             resistance.append(highs.max())
 
     return pd.Series(support, index=df.index), pd.Series(resistance, index=df.index)
+
+
+
