@@ -6,7 +6,7 @@ import sys
 import numpy as np
 
 # ------- CONFIG -------
-MODEL_PATH = "/root/trade-control-system/models/strategy/ml/models/breakout_rf_model_aaveusdt_1h.pkl"
+MODEL_PATH = "/root/trade-control-system/strategy/ml/models/breakout_rf_model_aaveusdt_1h.pkl"
 BACKTEST_GLOB = "/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx"  # sesuaikan timeframe/pair jika perlu
 OUTPUT_PRED_PATH = "/root/trade-control-system/backtest_result/predicted_result_single_pair.xlsx"
 ENTRY_OUTPUT = "/root/trade-control-system/backtest_result/entry_layak.xlsx"
