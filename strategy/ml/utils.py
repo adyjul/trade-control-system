@@ -30,6 +30,9 @@ def predict_ml_signal(model, row: pd.Series) -> bool:
         
     ]
 
+    if row[features].isnull().any():
+        return False
+
     # X = row[features].values.reshape(1, -1)
     X = pd.DataFrame([row[features]], columns=features)
     pred = model.predict(X)
