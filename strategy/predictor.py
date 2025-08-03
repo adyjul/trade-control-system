@@ -152,20 +152,39 @@ def run_predict():
                 df.index = df.index.tz_convert(None)
                 df.to_excel(full_path)
 
-                last_row = df.iloc[-1]
-                if last_row['signal'] in ['LONG', 'SHORT']:
-                    signal_out = {
-                        "pair": pair,
-                        "timeframe": timeframe,
-                        "signal": last_row['signal'],
-                        "entry_price": last_row['close'],
-                        "atr": last_row['atr'],
-                        "timestamp_utc": last_row.name.replace(tzinfo=None).isoformat(),
-                        "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat(),
-                    }
+                # last_row = df.iloc[-1]
+                # if last_row['signal'] in ['LONG', 'SHORT']:
+                #     last_row_df = pd.DataFrame([last_row])
+                #     signal_out = {
+                #         "pair": pair,
+                #         "timeframe": timeframe,
+                #         "signal": last_row['signal'],
+                #         "entry_price": last_row['close'],
+                #         "atr": last_row['atr'],
+                #         "timestamp_utc": last_row.name.replace(tzinfo=None).isoformat(),
+                #         "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat(),
+                #     }
 
+                #     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                #     pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
+                #     print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
+                # else:
+                #     print(f"⏭️ No signal for {pair} {timeframe}")
+
+                last_row = df.iloc[-1]
+
+                if last_row['signal'] in ['LONG', 'SHORT']:
+                    # Convert to DataFrame satu baris
+                    last_row_df = pd.DataFrame([last_row])
+
+                    # Tambahkan kolom timestamp
+                    last_row_df['timestamp_utc'] = last_row.name.replace(tzinfo=None).isoformat()
+                    last_row_df['timestamp_wib'] = (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat()
+
+                    # Simpan ke file
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                    pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
+                    last_row_df.to_excel(signal_path, index=False)
+
                     print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
                 else:
                     print(f"⏭️ No signal for {pair} {timeframe}")
