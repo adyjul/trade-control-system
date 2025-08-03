@@ -145,10 +145,10 @@ def make_model():
     try:
         train_all_models()  # ini akan otomatis membaca semua file .xlsx dan buat model per coin/timeframe
         # return "✅ Semua model berhasil dibuat.", 200
-        return redirect(url_for("backtest", status="success"))
+        return redirect(url_for("backtest_new", status="success"))
     except Exception as e:
         # return f"❌ Gagal membuat model: {str(e)}", 500
-        return redirect(url_for("backtest", status="success",err=e))
+        return redirect(url_for("backtest_new", status="success",err=e))
 
 @app.route('/backtest/summary')
 def backtest_summary():
