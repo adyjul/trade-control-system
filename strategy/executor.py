@@ -154,7 +154,7 @@ def run_executor():
             model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair.lower()}_{tf}.pkl"
             
             required_features = [
-                'support', 'resistance', 'atr_multiple', 'rsi',
+                'support', 'resistance', 'rsi',
                 'boll_width', 'volume', 'macd', 'upper_band', 'lower_band'
             ]
 
