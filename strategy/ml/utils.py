@@ -31,7 +31,8 @@ def predict_ml_signal(model, row: pd.Series) -> bool:
         
     ]
 
-    X = row[features].values.reshape(1, -1)
+    # X = row[features].values.reshape(1, -1)
+    X = pd.DataFrame([row[features]], columns=features)
     pred = model.predict(X)
     return pred[0] == 1  # 1 artinya valid (bukan fake breakout)
 
