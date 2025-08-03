@@ -44,6 +44,7 @@ df['prev_return'] = df['close'].pct_change().shift(1)
 df.dropna(inplace=True)
 
 # === Drop kolom yang tidak dipakai (jika ada) ===
+df = df.drop(columns=["timestamp", "pair", "timeframe"], errors="ignore")
 df.drop(columns=['pair', 'timeframe', 'tp', 'sl', 'result'], inplace=True, errors='ignore')
 
 # === Simpan untuk referensi ===
