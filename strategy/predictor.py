@@ -109,7 +109,8 @@ def run_predict():
                 macd = ta.trend.MACD(df['close'])
                 df['macd'] = macd.macd()
                 df['macd_signal'] = macd.macd_signal()
-                df['macd_hist'] = macd.macd_diff()
+                # df['macd_hist'] = macd.macd_diff()
+                df['macd_hist'] = df['macd'] - df['macd_signal']
 
                 df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
                 df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
