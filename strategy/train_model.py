@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
@@ -29,6 +29,12 @@ df['atr_multiple'] = np.where(
     (df['close'] - df['resistance']) / df['atr'],
     (df['support'] - df['close']) / df['atr']
 )
+df['entry_signal'] = df['entry_signal'].shift(1)
+df['vol_3_candle'] = df['volume'].rolling(window=3).sum()
+df['rsi_diff'] = df['rsi'] - df['rsi'].shift(1)
+df['prev_volume'] = df['volume'].shift(1)
+df['prev_close'] = df['close'].shift(1)
+df['prev_return'] = df['close'].pct_change().shift(1)
 
 # === STEP 4: (Opsional) Simpan ke CSV untuk cek manual / pelatihan lanjutan ===
 df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
@@ -38,8 +44,10 @@ feature_columns = [
     'rsi', 'atr', 'boll_width', 'volume', 'close',
     'upper_band', 'lower_band', 'bb_percentile',
     'support', 'resistance', 'atr_multiple',
-    'is_potential_breakout', 'entry_signal',
-    'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
+    'is_potential_breakout',
+    'macd', 'macd_signal', 'macd_hist', 'signal_numeric',
+    'entry_signal', 'vol_3_candle', 'rsi_diff',
+    'prev_close', 'prev_volume', 'prev_return'
 ]
 
 # === SHIFT FITUR 1 CANDLE KE BELAKANG (PREDIKSI REALTIME) ===
@@ -57,7 +65,16 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 # === STEP 7: Latih model Random Forest ===
 # model = RandomForestClassifier(n_estimators=100, random_state=42)
-model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
+# model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
+param_grid = {
+    'n_estimators': [100, 200],
+    'max_depth': [3, 5, 10],
+    'min_samples_split': [2, 5],
+}
+
+grid = GridSearchCV(RandomForestClassifier(random_state=42), param_grid, cv=3, scoring='accuracy')
+grid.fit(X, y)
+model = grid.best_estimator_
 model.fit(X_train, y_train)
 
 # === STEP 8: Evaluasi model ===
