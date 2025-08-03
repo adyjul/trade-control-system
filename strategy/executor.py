@@ -152,25 +152,16 @@ def run_executor():
             price = row['entry_price']
 
             model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair.lower()}_{tf}.pkl"
-            
-            required_features = [
-                'support', 'resistance', 'rsi',
-                'boll_width', 'volume', 'macd', 'upper_band', 'lower_band'
-            ]
-
-            if not row[required_features].isna().any():
-                if os.path.exists(model_path):
-                    model = joblib.load(model_path)
-                    print(f"[ML] Model ditemukan: {model_path}")
-                    # Apply ML filter
-                    if not predict_ml_signal(model, row):
-                            print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                            return  # atau skip entry
-                else:
-                    print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
+            if os.path.exists(model_path):
+                model = joblib.load(model_path)
+                print(f"[ML] Model ditemukan: {model_path}")
+                # Apply ML filter
+                if not predict_ml_signal(model, row):
+                        print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
+                        return  # atau skip entry
             else:
-                print("⚠️ Fitur ML tidak lengkap, skip filter ML.")
-
+                print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
+            
             print(bot.get('filter_atr',0))
             if not should_entry(pair, atr,0.1,bot.get('filter_atr',0)):
                 print('atr terlalu rendah')
