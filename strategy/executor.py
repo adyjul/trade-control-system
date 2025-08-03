@@ -91,7 +91,7 @@ def run_executor():
         tp_mult = bot.get('tp_percent', 1.2)
         sl_mult = bot.get('sl_percent', 1.0)
 
-        model_path = f"/root/trade-control-system/strategy/ml/model_store/model_{pair}_{tf}.pkl"
+        model_path = f"/root/trade-control-system/strategy/ml/models/model_{pair}_{tf}.pkl"
 
         # Train model jika belum ada
         if not os.path.exists(model_path):
