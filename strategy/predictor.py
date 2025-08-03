@@ -130,7 +130,8 @@ def run_predict():
                 )
 
                 df['signal'] = df.apply(detect_signal, axis=1)
-
+                df['entry_signal'] = df['is_potential_breakout'].astype(int)
+                
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
                 df['signal_numeric'] = df['signal'].map(signal_map)
 
