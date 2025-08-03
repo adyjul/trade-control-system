@@ -123,7 +123,12 @@ def run_predict():
                 df['support'], df['resistance'] = calculate_support_resistance(df)
                 # df['atr_multiple'] = df['atr'] / df['close']
 
-                df['is_potential_breakout'] = df.apply(is_potential_breakout, axis=1)
+                # df['is_potential_breakout'] = df.apply(is_potential_breakout, axis=1)
+                df['is_potential_breakout'] = (
+                    (df['high'] > df['resistance']) |
+                    (df['low'] < df['support'])
+                ).astype(int)
+                
                 df['signal'] = df.apply(detect_signal, axis=1)
 
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
