@@ -222,6 +222,11 @@ def run_full_backtest(
         df['prev_close'] = df['close'].shift(1)
         df['prev_open'] = df['open'].shift(1)
 
+        df['vol_3_candle'] = df['volume'].rolling(window=3).sum()
+        df['rsi_diff'] = df['rsi'] - df['rsi'].shift(1)
+        df['prev_volume'] = df['volume'].shift(1)
+        df['prev_return'] = df['close'].pct_change().shift(1)
+
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)

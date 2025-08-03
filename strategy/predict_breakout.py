@@ -71,7 +71,7 @@ def main():
         'is_potential_breakout',
         'macd', 'macd_signal', 'macd_hist', 'signal_numeric',
         'entry_signal', 'vol_3_candle', 'rsi_diff',
-        'prev_close', 'prev_volume', 'prev_return'
+        'prev_close', 'prev_volume', 'prev_return',
     ]
     missing = [f for f in feature_columns if f not in df.columns]
     if missing:
