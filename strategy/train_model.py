@@ -20,6 +20,7 @@ if 'label' not in df.columns:
 # Sinyal entry
 df['entry_signal'] = ((df['is_potential_breakout'] == 1) & (df['signal'].notna())).astype(int)
 
+
 # === STEP 3: Drop data yang labelnya -1 (NO HIT, tidak jelas hasilnya) ===
 df = df[df['label'] != -1]
 
@@ -34,6 +35,10 @@ df['atr_multiple'] = np.where(
     (df['support'] - df['close']) / df['atr']
 )
 df['entry_signal'] = df['entry_signal'].shift(1)
+
+if 'entry_signal' in df.columns:
+    df['entry_signal'] = df['entry_signal'].map({'LONG': 1, 'SHORT': 0})
+    
 df['vol_3_candle'] = df['volume'].rolling(window=3).sum()
 df['rsi_diff'] = df['rsi'] - df['rsi'].shift(1)
 df['prev_volume'] = df['volume'].shift(1)
