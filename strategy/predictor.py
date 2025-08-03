@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from utils.db import get_active_bots
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP, is_time_to_run
-from strategy.utils import calculate_support_resistance, is_potential_breakout
+from strategy.utils import calculate_support_resistance
 import glob
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -128,7 +128,7 @@ def run_predict():
                     (df['high'] > df['resistance']) |
                     (df['low'] < df['support'])
                 ).astype(int)
-                
+
                 df['signal'] = df.apply(detect_signal, axis=1)
 
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
