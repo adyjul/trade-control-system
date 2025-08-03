@@ -15,21 +15,21 @@ def load_ml_model(pair: str, timeframe: str):
     return joblib.load(path)
 
 def predict_ml_signal(model, row: pd.Series) -> bool:
-    print(model)
-    if row['signal'] == 'LONG':
-        row['atr_multiple'] = (row['close'] - row['resistance']) / row['atr']
-    else:
-        row['atr_multiple'] = (row['support'] - row['close']) / row['atr']
-    # Ambil fitur-fitur yang dipakai di model
-    features = [
-        'rsi', 'atr', 'boll_width', 'volume', 'close',
-        'upper_band', 'lower_band', 'bb_percentile',
-        'support', 'resistance', 'atr_multiple',
-        'is_potential_breakout', 'entry_signal'
-    ]
-    X = row[features].values.reshape(1, -1)
-    pred = model.predict(X)
-    return pred[0] == 1  # 1 artinya valid (bukan fake breakout)
+    print(row)
+    # if row['signal'] == 'LONG':
+    #     row['atr_multiple'] = (row['close'] - row['resistance']) / row['atr']
+    # else:
+    #     row['atr_multiple'] = (row['support'] - row['close']) / row['atr']
+    # # Ambil fitur-fitur yang dipakai di model
+    # features = [
+    #     'rsi', 'atr', 'boll_width', 'volume', 'close',
+    #     'upper_band', 'lower_band', 'bb_percentile',
+    #     'support', 'resistance', 'atr_multiple',
+    #     'is_potential_breakout', 'entry_signal'
+    # ]
+    # X = row[features].values.reshape(1, -1)
+    # pred = model.predict(X)
+    # return pred[0] == 1  # 1 artinya valid (bukan fake breakout)
 
 def predict_signal_success(model, latest_features: pd.DataFrame):
     if model is None or latest_features is None:
