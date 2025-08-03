@@ -44,9 +44,9 @@ def main():
 
     # 2. Temukan backtest file (ambil pertama yang match)
     matches = glob.glob(BACKTEST_GLOB)
-    if not matches:
-        print(f"Tidak ada file backtest yang cocok dengan pattern: {BACKTEST_GLOB}")
-        sys.exit(1)
+    # if not matches:
+    #     print(f"Tidak ada file backtest yang cocok dengan pattern: {BACKTEST_GLOB}")
+    #     sys.exit(1)
     backtest_path = matches[0]
     print(f"[+] Menggunakan backtest file: {backtest_path}")
 
