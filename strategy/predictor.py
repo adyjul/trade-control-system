@@ -131,6 +131,7 @@ def run_predict():
                 )
 
                 df['signal'] = df.apply(detect_signal, axis=1)
+                
                 df['atr_multiple'] = np.where(
                     df['signal'] == 'LONG',
                     (df['close'] - df['resistance']) / df['atr'],
