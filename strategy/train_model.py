@@ -1,15 +1,14 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
-import matplotlib.pyplot as plt
-from sklearn.metrics import classification_report
 import numpy as np
-from imblearn.over_sampling import SMOTE
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
+from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import joblib
 
 # === STEP 1: Baca file Excel hasil backtest ===
 df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_enausdt_1h.xlsx')
@@ -18,11 +17,11 @@ df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_en
 if 'label' not in df.columns:
     df['label'] = df['exit_status'].map({'TP HIT': 1, 'SL HIT': 0, 'NO HIT': -1})
 
+# Sinyal entry
 df['entry_signal'] = ((df['is_potential_breakout'] == 1) & (df['signal'].notna())).astype(int)
 
 # === STEP 3: Drop data yang labelnya -1 (NO HIT, tidak jelas hasilnya) ===
 df = df[df['label'] != -1]
-
 
 # === Tambahan Fitur ===
 df['macd'] = df['macd'].astype(float)
@@ -41,16 +40,23 @@ df['prev_volume'] = df['volume'].shift(1)
 df['prev_close'] = df['close'].shift(1)
 df['prev_return'] = df['close'].pct_change().shift(1)
 
-# === STEP 4: (Opsional) Simpan ke CSV untuk cek manual / pelatihan lanjutan ===
-df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
+# Drop NaN
+df.dropna(inplace=True)
 
-df = df[df['label'] != -1]  # buang yang label -1 (NO HIT)
+# === Drop kolom yang tidak dipakai (jika ada) ===
+df.drop(columns=['pair', 'timeframe', 'tp', 'sl', 'result'], inplace=True, errors='ignore')
 
-X = df.drop(['pair', 'timeframe', 'tp', 'sl', 'result'], axis=1, inplace=True, errors='ignore')
-df.drop(['pair', 'timeframe', 'tp', 'sl', 'result'], axis=1, inplace=True, errors='ignore')
-y = df["label"]
+# === Simpan untuk referensi ===
+df.to_csv('/root/trade-control-system/backtest_result/ml_dataset_cleaned.csv', index=False)
+
+# === Siapkan fitur dan label ===
+y = df['label']
+X = df.drop(columns=['label'])
 
 # === Balancing ===
+if X.empty or y.empty:
+    raise ValueError("X atau y kosong setelah preprocessing!")
+
 smote = SMOTE(random_state=42)
 X_bal, y_bal = smote.fit_resample(X, y)
 
@@ -58,31 +64,38 @@ X_bal, y_bal = smote.fit_resample(X, y)
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X_bal)
 
-# === Split Data ===
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_bal, test_size=0.2, random_state=42, stratify=y_bal)
+# === Train-test split ===
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y_bal, test_size=0.2, random_state=42, stratify=y_bal
+)
 
-# === Define Models ===
-xgb = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.1, use_label_encoder=False, eval_metric='logloss')
+# === Models ===
+xgb = XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.1,
+                    use_label_encoder=False, eval_metric='logloss')
 rf = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
 lr = LogisticRegression(max_iter=500)
 
-# === Voting Classifier ===
-voting = VotingClassifier(estimators=[
-    ('xgb', xgb),
-    ('rf', rf),
-    ('lr', lr)
-], voting='soft')
+voting_model = VotingClassifier(
+    estimators=[('xgb', xgb), ('rf', rf), ('lr', lr)],
+    voting='soft'
+)
 
 # === Training ===
-voting.fit(X_train, y_train)
+voting_model.fit(X_train, y_train)
 
 # === Evaluation ===
-y_pred = voting.predict(X_test)
+y_pred = voting_model.predict(X_test)
 print("=== Classification Report ===")
 print(classification_report(y_test, y_pred))
 
-# === STEP 9: Simpan model (opsional, kalau mau dipakai buat prediksi nanti) ===
-import joblib
-joblib.dump(model, '/root/trade-control-system/backtest_result/breakout_rf_model.pkl')
-print("Model disimpan sebagai '/root/trade-control-system/backtest_result/breakout_rf_model.pkl'")
+# === Confusion Matrix ===
+cm = confusion_matrix(y_test, y_pred)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot()
+plt.title("Confusion Matrix")
+plt.show()
 
+# === Save model ===
+model_path = '/root/trade-control-system/backtest_result/breakout_model.pkl'
+joblib.dump(voting_model, model_path)
+print(f"Model disimpan sebagai '{model_path}'")
