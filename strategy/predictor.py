@@ -95,7 +95,6 @@ def run_predict():
                     os.remove(full_path)
 
                 klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
-                # klines = client.futures_klines(symbol=pair, interval=interval, limit=limit)
                 df = pd.DataFrame(klines, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume',
                     'close_time', 'quote_asset_volume', 'number_of_trades',
@@ -132,11 +131,6 @@ def run_predict():
 
                 df['signal'] = df.apply(detect_signal, axis=1)
                 df['entry_signal'] = df['is_potential_breakout'].astype(int)
-
-                if df['signal'] == 'LONG':
-                    df['atr_multiple'] = (df['close'] - df['resistance']) / df['atr']
-                else:
-                    df['atr_multiple'] = (df['support'] - df['close']) / df['atr']
                 
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
                 df['signal_numeric'] = df['signal'].map(signal_map)
