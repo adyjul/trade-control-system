@@ -129,10 +129,7 @@ def run_executor():
             #     continue
   
             model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair.lower()}_{tf}.pkl"
-            if pd.notna(row['support']) and pd.notna(row['resistance']):
-                is_valid = predict_ml_signal(model, row)
-            else:
-                print("Support/resistance belum tersedia untuk row terakhir, lewati prediksi.")
+           
             if os.path.exists(model_path):
                 model = joblib.load(model_path)
                 print(f"[ML] Model ditemukan: {model_path}")

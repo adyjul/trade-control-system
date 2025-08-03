@@ -15,6 +15,7 @@ def load_ml_model(pair: str, timeframe: str):
     return joblib.load(path)
 
 def predict_ml_signal(model, row: pd.Series) -> bool:
+    print(model)
     if row['signal'] == 'LONG':
         row['atr_multiple'] = (row['close'] - row['resistance']) / row['atr']
     else:
