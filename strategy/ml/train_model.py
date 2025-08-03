@@ -15,6 +15,7 @@ def train_all_models():
     for filename in os.listdir(folder_path):
         if filename.endswith('.xlsx'):
             filepath = os.path.join(folder_path, filename)
+            print(filepath)
             df = pd.read_excel(filepath)
 
             # Proses label
