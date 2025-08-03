@@ -46,7 +46,7 @@ df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=Fal
 
 df = df[df['label'] != -1]  # buang yang label -1 (NO HIT)
 
-# X = df.drop(columns=["label", "pair", "timeframe", "timestamp", "entry_price", "tp", "sl", "result"])
+X = df.drop(['pair', 'timeframe', 'tp', 'sl', 'result'], axis=1, inplace=True, errors='ignore')
 df.drop(['pair', 'timeframe', 'tp', 'sl', 'result'], axis=1, inplace=True, errors='ignore')
 y = df["label"]
 
