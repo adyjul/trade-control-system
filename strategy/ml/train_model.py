@@ -6,7 +6,7 @@ import numpy as np
 
 def train_model_for_pair(pair: str, timeframe: str):
     import os
-    filename = f"{pair}_{timeframe}.xlsx"
+    filename = f"{pair}_{timeframe}_full.xlsx"
     path = f"/root/trade-control-system/data_predict/{filename}"
     df = pd.read_excel(path)
 
