@@ -178,6 +178,7 @@ def run_predict():
                     last_row_df = pd.DataFrame([last_row])
 
                     # Tambahkan kolom timestamp
+                    last_row_df['entry_price'] = last_row['close']
                     last_row_df['timestamp_utc'] = last_row.name.replace(tzinfo=None).isoformat()
                     last_row_df['timestamp_wib'] = (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat()
 
