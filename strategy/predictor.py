@@ -131,12 +131,13 @@ def run_predict():
                 )
 
                 df['signal'] = df.apply(detect_signal, axis=1)
-                
+
                 df['atr_multiple'] = np.where(
                     df['signal'] == 'LONG',
                     (df['close'] - df['resistance']) / df['atr'],
                     (df['support'] - df['close']) / df['atr']
                 )
+                
                 df['entry_signal'] = df['is_potential_breakout'].astype(int)
                 
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
