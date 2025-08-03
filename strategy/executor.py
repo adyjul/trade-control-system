@@ -4,12 +4,12 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from binance.client import Client
-
+import joblib
 from utils.db import log_trade, get_active_bots
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
 from utils.timeframes import get_expected_time
-
+from strategy.ml.utils import predict_ml_signal
 # from strategy.ml_predict import is_signal_valid
 from strategy.ml.train_model import train_model_for_pair
 
@@ -105,13 +105,7 @@ def run_executor():
                 print(f"{pair}⚠️ Tidak ada file sinyal: {fpath}")
                 continue
 
-            model_path = f"/root/trade-control-system/strategy/ml/models/model_{pair}_{tf}.pkl"
-            # Train model jika belum ada
-            if not os.path.exists(model_path):
-                print(f"Model untuk {pair}-{tf} belum ada, melatih model baru...")
-                train_model_for_pair(pair, tf)
-            else:
-                print(f"Model tersedia untuk {pair}-{tf}, memuat model...")
+           
 
             df = pd.read_excel(fpath)
             df = df[df['signal'].isin(['LONG', 'SHORT'])]
@@ -123,6 +117,18 @@ def run_executor():
             if pd.isna(row['atr']):
                 print("tidak kolom atr")
                 continue
+            
+            model_path = f"/root/trade-control-system/strategy/ml/models/breakout_rf_model_{pair}_{tf}.pkl"
+            if os.path.exists(model_path):
+                model = joblib.load(model_path)
+                print(f"[ML] Model ditemukan: {model_path}")
+            else:
+                print(f"[ML] Tidak ada model untuk {pair} {tf}, lanjut tanpa filter.")
+
+            # Apply ML filter
+            if not predict_ml_signal(model, row):
+                print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
+                return  # atau skip entry
 
             # ts_utc = pd.to_datetime(row['timestamp_utc']).tz_convert('UTC')
             ts_utc = pd.to_datetime(row['timestamp_utc'])

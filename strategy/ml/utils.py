@@ -25,3 +25,15 @@ def predict_ml_signal(model, row: pd.Series) -> bool:
     X = row[features].values.reshape(1, -1)
     pred = model.predict(X)
     return pred[0] == 1  # 1 artinya valid (bukan fake breakout)
+
+def predict_signal_success(model, latest_features: pd.DataFrame):
+    if model is None or latest_features is None:
+        return True  # Tetap lanjut jika model tidak ada
+
+    try:
+        # Asumsi latest_features sudah dalam bentuk DataFrame baris tunggal
+        pred = model.predict(latest_features)
+        return pred[0] == 1  # 1 berarti sinyal layak (potensi TP HIT)
+    except Exception as e:
+        print(f"[ML FILTER ERROR] Gagal prediksi model: {e}")
+        return True
