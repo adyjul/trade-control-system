@@ -1,3 +1,4 @@
+#train_model.py
 import pandas as pd
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
@@ -31,7 +32,7 @@ df['atr_multiple'] = np.where(
 )
 
 # === STEP 4: (Opsional) Simpan ke CSV untuk cek manual / pelatihan lanjutan ===
-df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
+# df.to_csv('/root/trade-control-system/backtest_result/ml_dataset.csv', index=False)
 
 # === STEP 5: Tentukan fitur yang akan digunakan ===
 feature_columns = [

@@ -5,6 +5,7 @@ from db import init_db  # to ensure import side effect? we used separate file, s
 import os
 import pandas as pd
 from strategy.backtest import run_full_backtest
+from strategy.ml.train_model import train_all_models
 import shutil
 
 USERNAME = os.getenv("WEB_USERNAME", "admin")
@@ -137,6 +138,13 @@ def backtest_new():
 
     return render_template("backtest_form.html")  # form input pair/tf
 
+@app.route("/make_model", methods=["GET"])
+def make_model():
+    try:
+        train_all_models()  # ini akan otomatis membaca semua file .xlsx dan buat model per coin/timeframe
+        return "✅ Semua model berhasil dibuat.", 200
+    except Exception as e:
+        return f"❌ Gagal membuat model: {str(e)}", 500
 
 @app.route('/backtest/summary')
 def backtest_summary():

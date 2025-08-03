@@ -127,7 +127,7 @@ def run_predict():
                 df['is_potential_breakout'] = (
                     (df['high'] > df['resistance']) |
                     (df['low'] < df['support'])
-                ).astype(int)
+                )
 
                 df['signal'] = df.apply(detect_signal, axis=1)
 
