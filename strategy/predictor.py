@@ -9,6 +9,7 @@ from utils.timeframes import BINANCE_INTERVAL_MAP, is_time_to_run
 from strategy.utils import calculate_support_resistance
 import glob
 import sys
+import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 DATA_DIR = "./data_predict"
