@@ -15,7 +15,10 @@ def load_ml_model(pair: str, timeframe: str):
     return joblib.load(path)
 
 def predict_ml_signal(model, row: pd.Series) -> bool:
-    
+    if row['signal'] == 'LONG':
+        row['atr_multiple'] = (row['close'] - row['resistance']) / row['atr']
+    else:
+        row['atr_multiple'] = (row['support'] - row['close']) / row['atr']
     # Ambil fitur-fitur yang dipakai di model
     features = [
         'rsi', 'atr', 'boll_width', 'volume', 'close',
