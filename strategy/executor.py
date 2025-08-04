@@ -223,17 +223,17 @@ def run_executor():
 
             try:
                 activation = round(price + atr * 0.5, price_precision) if signal == 'LONG' else round(price - atr * 0.5, price_precision)
-                callback = max(0.2, min((atr * 100 / price), 1.0))
+                # callback = max(0.2, min((atr * 100 / price), 1.0))
                 client.futures_create_order(
                     symbol=pair,
                     side='SELL' if signal == 'LONG' else 'BUY',
                     type='TRAILING_STOP_MARKET',
                     activationPrice=activation,
-                    callbackRate=callback,
+                    callbackRate=1.0,
                     quantity=qty,
                     reduceOnly=True
                 )
-                
+
             except Exception as e:
                 print(f"⚠️ Gagal pasang trailing stop: {e}")
 
