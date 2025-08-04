@@ -157,7 +157,7 @@ def run_executor():
                 print(f"[ML] Model ditemukan: {model_path}")
                 if not predict_ml_signal(model, row):
                     print(f"[ML FILTER] Sinyal {pair} {tf} dibatalkan oleh model ML.")
-                    return  # atau skip entry
+                    continue  # atau skip entry
                 else:
                     print(f"sinyal {pair} {tf} dikatakan valid oleh ML")
             else:

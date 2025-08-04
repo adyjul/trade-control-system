@@ -20,6 +20,7 @@ def predict_ml_signal(model, row: pd.Series) -> bool:
         row['atr_multiple'] = (row['close'] - row['resistance']) / row['atr']
     else:
         row['atr_multiple'] = (row['support'] - row['close']) / row['atr']
+        
     # Ambil fitur-fitur yang dipakai di model
     features = [
         'rsi', 'atr', 'boll_width', 'volume', 'close',
