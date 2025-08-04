@@ -233,6 +233,7 @@ def run_executor():
                     quantity=qty,
                     reduceOnly=True
                 )
+                
             except Exception as e:
                 print(f"⚠️ Gagal pasang trailing stop: {e}")
 
