@@ -165,56 +165,55 @@ def run_predict():
                 # Simpan ke Excel
                 df_signal.to_excel(full_path)
 
-                # last_row = df.iloc[-1]
-                # if last_row['signal'] in ['LONG', 'SHORT']:
-                #     last_row_df = pd.DataFrame([last_row])
-                #     signal_out = {
-                #         "pair": pair,
-                #         "timeframe": timeframe,
-                #         "signal": last_row['signal'],
-                #         "entry_price": last_row['close'],
-                #         "atr": last_row['atr'],
-                #         "timestamp_utc": last_row.name.replace(tzinfo=None).isoformat(),
-                #         "timestamp_wib": (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat(),
-                #     }
-
-                #     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                #     pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
-                #     print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
-                # else:
-                #     print(f"⏭️ No signal for {pair} {timeframe}")
-
-                df.set_index('timestamp', inplace=True)
-
                 last_row = df.iloc[-1]
-            
                 if last_row['signal'] in ['LONG', 'SHORT']:
-
                     last_row_df = pd.DataFrame([last_row])
-                    ts_utc = last_row.name
-
-                    if ts_utc.tzinfo is not None:
-                        ts_utc = ts_utc.tz_convert(None)
-                    ts_wib = ts_utc + pd.Timedelta(hours=7)
-
                     signal_out = {
                         "pair": pair,
                         "timeframe": timeframe,
                         "signal": last_row['signal'],
                         "entry_price": last_row['close'],
                         "atr": last_row['atr'],
-                        "timestamp_utc": ts_utc.strftime('%Y-%m-%d %H:%M:%S'),
-                        "timestamp_wib": ts_wib.strftime('%Y-%m-%d %H:%M:%S'),
+                        "timestamp_utc": last_row_df.name.replace(tzinfo=None).isoformat(),
+                        "timestamp_wib": (last_row_df.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat(),
                     }
 
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
                     pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
-                    # signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                    # last_row_df.to_excel(signal_path, index=False)
-
                     print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
                 else:
                     print(f"⏭️ No signal for {pair} {timeframe}")
+
+                # df.set_index('timestamp', inplace=True)
+
+                # last_row = df.iloc[-1]
+                # if last_row['signal'] in ['LONG', 'SHORT']:
+
+                #     last_row_df = pd.DataFrame([last_row])
+                #     ts_utc = last_row.name
+
+                #     if ts_utc.tzinfo is not None:
+                #         ts_utc = ts_utc.tz_convert(None)
+                #     ts_wib = ts_utc + pd.Timedelta(hours=7)
+
+                #     signal_out = {
+                #         "pair": pair,
+                #         "timeframe": timeframe,
+                #         "signal": last_row['signal'],
+                #         "entry_price": last_row['close'],
+                #         "atr": last_row['atr'],
+                #         "timestamp_utc": ts_utc.strftime('%Y-%m-%d %H:%M:%S'),
+                #         "timestamp_wib": ts_wib.strftime('%Y-%m-%d %H:%M:%S'),
+                #     }
+
+                #     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                #     pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
+                #     # signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                #     # last_row_df.to_excel(signal_path, index=False)
+
+                #     print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
+                # else:
+                #     print(f"⏭️ No signal for {pair} {timeframe}")
 
             except Exception as e:
                 print(f"❌ Error for {pair}: {e}")
