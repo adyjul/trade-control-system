@@ -187,15 +187,17 @@ def run_predict():
                 last_row = df.iloc[-1]
 
                 if last_row['signal'] in ['LONG', 'SHORT']:
-                    # Convert to DataFrame satu baris
                     last_row_df = pd.DataFrame([last_row])
 
-                    # Tambahkan kolom timestamp
-                    last_row_df['entry_price'] = last_row['close']
-                    last_row_df['timestamp_utc'] = last_row.name.replace(tzinfo=None).isoformat()
-                    last_row_df['timestamp_wib'] = (last_row.name + pd.Timedelta(hours=7)).replace(tzinfo=None).isoformat()
+                    ts_utc = last_row.name
+                    if hasattr(ts_utc, 'tzinfo') and ts_utc.tzinfo is not None:
+                        ts_utc = ts_utc.tz_localize(None)
+                    ts_wib = ts_utc + pd.Timedelta(hours=7)
 
-                    # Simpan ke file
+                    last_row_df['entry_price'] = last_row['close']
+                    last_row_df['timestamp_utc'] = ts_utc.isoformat()
+                    last_row_df['timestamp_wib'] = ts_wib.isoformat()
+
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
                     last_row_df.to_excel(signal_path, index=False)
 
