@@ -190,22 +190,16 @@ def run_predict():
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     last_row_df = pd.DataFrame([last_row])
 
-                    # Ambil timestamp asli dari kolom timestamp
+                    # Ambil timestamp asli dari kolom timestamp, tanpa modifikasi
                     ts = last_row['timestamp']
-
-                    # Kalau ts belum datetime, convert saja sekali
                     if not isinstance(ts, pd.Timestamp):
                         ts = pd.to_datetime(ts)
 
-                    # Masukkan ke kolom baru tanpa modifikasi waktu (UTC atau WIB, terserah kamu)
                     last_row_df['entry_price'] = last_row['close']
-                    last_row_df['timestamp'] = ts  # langsung ambil timestamp asli
-                    last_row_df['timestamp_utc'] = ts  # langsung ambil timestamp asli
-
-                    # Kalau mau tambahkan WIB, kamu bisa
+                    last_row_df['timestamp_utc'] = ts
                     last_row_df['timestamp_wib'] = ts + pd.Timedelta(hours=7)
 
-                    # Simpan ke Excel
+                    # Simpan tanpa mengubah data open, close, high, low, volume, dll
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
                     last_row_df.to_excel(signal_path, index=False)
 
