@@ -197,12 +197,20 @@ def run_predict():
                         ts_utc = ts_utc.tz_convert(None)
                     ts_wib = ts_utc + pd.Timedelta(hours=7)
 
-                    last_row_df['entry_price'] = last_row['close']
-                    last_row_df['timestamp_utc'] = ts_utc.strftime('%Y-%m-%d %H:%M:%S')
-                    last_row_df['timestamp_wib'] = ts_wib.strftime('%Y-%m-%d %H:%M:%S')
+                    signal_out = {
+                        "pair": pair,
+                        "timeframe": timeframe,
+                        "signal": last_row['signal'],
+                        "entry_price": last_row['close'],
+                        "atr": last_row['atr'],
+                        "timestamp_utc": ts_utc.strftime('%Y-%m-%d %H:%M:%S'),
+                        "timestamp_wib": ts_wib.strftime('%Y-%m-%d %H:%M:%S'),
+                    }
 
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                    last_row_df.to_excel(signal_path, index=False)
+                    pd.DataFrame([signal_out]).to_excel(signal_path, index=False)
+                    # signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                    # last_row_df.to_excel(signal_path, index=False)
 
                     print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
                 else:
