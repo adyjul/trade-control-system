@@ -187,6 +187,12 @@ def run_predict():
                 last_row = df.iloc[-1]
 
                 if last_row['signal'] in ['LONG', 'SHORT']:
+
+                    print(f"Index type: {type(df.index)}")
+                    print(f"Index example: {df.index[:3]}")
+                    print(f"Last row index type: {type(df.index[-1])}")
+                    print(f"Last row index value: {df.index[-1]}")
+
                     last_row_df = pd.DataFrame([last_row])
 
                     ts_utc = last_row.name
