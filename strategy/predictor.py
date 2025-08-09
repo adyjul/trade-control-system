@@ -158,7 +158,7 @@ def run_predict():
                 # Set index & timezone untuk df_signal
                 df_signal.set_index('timestamp', inplace=True)
                 df_signal.index = df_signal.index.tz_localize('UTC')
-                
+
                 now = pd.Timestamp.now(tz='UTC').replace(minute=0, second=0, microsecond=0)
                 df_signal = df_signal[df_signal.index < now]
                 df_signal.index = df_signal.index.tz_convert(None)
@@ -190,9 +190,15 @@ def run_predict():
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     # Convert to DataFrame satu baris
                     last_row_df = pd.DataFrame([last_row])
+
                     ts_utc = last_row.name
-                    if ts_utc.tzinfo is not None:
+                    # Jika ts_utc bertipe int, convert ke pd.Timestamp
+                    if isinstance(ts_utc, int):
+                        ts_utc = pd.to_datetime(ts_utc, unit='ms')
+                    # Jika ts_utc bertipe pd.Timestamp dan ada timezone, hapus timezone
+                    if isinstance(ts_utc, pd.Timestamp) and ts_utc.tzinfo is not None:
                         ts_utc = ts_utc.tz_convert(None)
+
                     ts_wib = ts_utc + pd.Timedelta(hours=7)
 
                     # Tambahkan kolom timestamp
