@@ -81,9 +81,9 @@ def run_predict():
     for bot in active_bots:
         tf = bot['timeframe']
 
-        # if not is_time_to_run(tf, now):
-        #     print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
-        #     continue
+        if not is_time_to_run(tf, now):
+            print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
+            continue
         
         pair_text = bot['coin']
         pairs = pair_text.split(',')
@@ -201,7 +201,7 @@ def run_predict():
                    signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
                    last_row_df.to_excel(signal_path, index=False)
                    print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
-                   
+
                 else:
                     print(f"⏭️ No signal for {pair} {timeframe}")
 
