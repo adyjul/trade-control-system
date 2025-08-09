@@ -188,18 +188,22 @@ def run_predict():
                 last_row = df.iloc[-1]
 
                 if last_row['signal'] in ['LONG', 'SHORT']:
+                    # Buat DataFrame satu baris persis copy dari df (hasil scrape)
                     last_row_df = pd.DataFrame([last_row])
 
-                    # Ambil timestamp asli dari kolom timestamp, tanpa modifikasi
+                    # Ambil timestamp asli dari kolom 'timestamp' (hasil scrape)
                     ts = last_row['timestamp']
                     if not isinstance(ts, pd.Timestamp):
                         ts = pd.to_datetime(ts)
 
+                    # Tambahkan kolom entry_price dari close (bisa juga kamu hapus kalau gak perlu)
                     last_row_df['entry_price'] = last_row['close']
+
+                    # Tambahkan kolom timestamp utc & wib (optional)
                     last_row_df['timestamp_utc'] = ts
                     last_row_df['timestamp_wib'] = ts + pd.Timedelta(hours=7)
 
-                    # Simpan tanpa mengubah data open, close, high, low, volume, dll
+                    # Simpan ke Excel
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
                     last_row_df.to_excel(signal_path, index=False)
 
