@@ -187,10 +187,10 @@ def run_predict():
 
                 last_row = df.iloc[-1]
 
+                print(f"DEBUG last_row.name type: {type(last_row.name)} value: {last_row.name}")
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     last_row_df = pd.DataFrame([last_row])
 
-                    # Cek dan convert timestamp
                     ts_utc = last_row.name
                     if isinstance(ts_utc, (int, float)):
                         ts_utc = pd.to_datetime(ts_utc, unit='ms')
@@ -199,7 +199,6 @@ def run_predict():
 
                     ts_wib = ts_utc + pd.Timedelta(hours=7)
 
-                    # Pastikan kolom timestamp string bukan datetime langsung
                     last_row_df['entry_price'] = last_row['close']
                     last_row_df['timestamp_utc'] = ts_utc.strftime('%Y-%m-%d %H:%M:%S')
                     last_row_df['timestamp_wib'] = ts_wib.strftime('%Y-%m-%d %H:%M:%S')
