@@ -190,13 +190,13 @@ def run_predict():
                     last_row_df = pd.DataFrame([last_row])
 
                     ts_utc = last_row.name
-                    if hasattr(ts_utc, 'tzinfo') and ts_utc.tzinfo is not None:
-                        ts_utc = ts_utc.tz_localize(None)
+                    if isinstance(ts_utc, pd.Timestamp) and ts_utc.tzinfo is not None:
+                        ts_utc = ts_utc.tz_convert(None)
                     ts_wib = ts_utc + pd.Timedelta(hours=7)
 
                     last_row_df['entry_price'] = last_row['close']
-                    last_row_df['timestamp_utc'] = ts_utc.isoformat()
-                    last_row_df['timestamp_wib'] = ts_wib.isoformat()
+                    last_row_df['timestamp_utc'] = ts_utc.strftime('%Y-%m-%d %H:%M:%S')
+                    last_row_df['timestamp_wib'] = ts_wib.strftime('%Y-%m-%d %H:%M:%S')
 
                     signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
                     last_row_df.to_excel(signal_path, index=False)
