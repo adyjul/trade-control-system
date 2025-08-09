@@ -186,28 +186,22 @@ def run_predict():
                 #     print(f"⏭️ No signal for {pair} {timeframe}")
 
                 last_row = df_signal.iloc[-1]
-              
+
+                ts = last_row.name
+
+                last_row = last_row.copy()
+                last_row['timestamp'] = ts
                 if last_row['signal'] in ['LONG', 'SHORT']:
-                    # Buat DataFrame satu baris persis copy dari df (hasil scrape)
-                    last_row_df = pd.DataFrame([last_row])
+                   last_row_df = pd.DataFrame([last_row])
 
-                    # Ambil timestamp asli dari kolom 'timestamp' (hasil scrape)
-                    ts = last_row['timestamp']
-                    if not isinstance(ts, pd.Timestamp):
-                        ts = pd.to_datetime(ts)
+                   last_row_df['entry_price'] = last_row['close']
+                   last_row_df['timestamp_utc'] = ts
+                   last_row_df['timestamp_wib'] = ts + pd.Timedelta(hours=7)
 
-                    # Tambahkan kolom entry_price dari close (bisa juga kamu hapus kalau gak perlu)
-                    last_row_df['entry_price'] = last_row['close']
-
-                    # Tambahkan kolom timestamp utc & wib (optional)
-                    last_row_df['timestamp_utc'] = ts
-                    last_row_df['timestamp_wib'] = ts + pd.Timedelta(hours=7)
-
-                    # Simpan ke Excel
-                    signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                    last_row_df.to_excel(signal_path, index=False)
-
-                    print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
+                   signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                   last_row_df.to_excel(signal_path, index=False)
+                   print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
+                   
                 else:
                     print(f"⏭️ No signal for {pair} {timeframe}")
 
