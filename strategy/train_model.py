@@ -8,7 +8,7 @@ from sklearn.metrics import classification_report
 import numpy as np
 
 # === STEP 1: Baca file Excel hasil backtest ===
-df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx')
+df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_enausdt_1h.xlsx')
 
 # === STEP 2: Buat kolom label (0/1) jika belum ada ===
 if 'label' not in df.columns:
