@@ -188,7 +188,6 @@ def run_predict():
                 last_row = df_signal.iloc[-1]
               
                 if last_row['signal'] in ['LONG', 'SHORT']:
-                    print(last_row)
                     # Buat DataFrame satu baris persis copy dari df (hasil scrape)
                     last_row_df = pd.DataFrame([last_row])
 
