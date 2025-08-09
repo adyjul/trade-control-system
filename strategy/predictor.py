@@ -135,26 +135,35 @@ def run_predict():
 
                 df['signal'] = df.apply(detect_signal, axis=1)
 
-                df['atr_multiple'] = np.where(
-                    df['signal'] == 'LONG',
-                    (df['close'] - df['resistance']) / df['atr'],
-                    (df['support'] - df['close']) / df['atr']
+                df_signal = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
+
+               # Hitung breakout setelah ada signal, support, resistance
+                df_signal['is_potential_breakout'] = (
+                    (df_signal['high'] > df_signal['resistance']) |
+                    (df_signal['low'] < df_signal['support'])
                 )
-                
-                # df['entry_signal'] = df['is_potential_breakout'].astype(int)
-                df['entry_signal'] = ((df['is_potential_breakout'] == 1) & (df['signal'].notna())).astype(int)
-                
+
+                # Hitung atr_multiple untuk df_signal saja
+                df_signal['atr_multiple'] = np.where(
+                    df_signal['signal'] == 'LONG',
+                    (df_signal['close'] - df_signal['resistance']) / df_signal['atr'],
+                    (df_signal['support'] - df_signal['close']) / df_signal['atr']
+                )
+
+                df_signal['entry_signal'] = ((df_signal['is_potential_breakout'] == 1) & (df_signal['signal'].notna())).astype(int)
+
                 signal_map = {'HOLD': 0, 'LONG': 1, 'SHORT': -1, 'LONG_WEAK': 0}
-                df['signal_numeric'] = df['signal'].map(signal_map)
+                df_signal['signal_numeric'] = df_signal['signal'].map(signal_map)
 
-                df.set_index('timestamp', inplace=True)
-                df.index = df.index.tz_localize('UTC')
-
+                # Set index & timezone untuk df_signal
+                df_signal.set_index('timestamp', inplace=True)
+                df_signal.index = df_signal.index.tz_localize('UTC')
                 now = pd.Timestamp.now(tz='UTC').replace(minute=0, second=0, microsecond=0)
-                df = df[df.index < now]
+                df_signal = df_signal[df_signal.index < now]
+                df_signal.index = df_signal.index.tz_convert(None)
 
-                df.index = df.index.tz_convert(None)
-                df.to_excel(full_path)
+                # Simpan ke Excel
+                df_signal.to_excel(full_path)
 
                 # last_row = df.iloc[-1]
                 # if last_row['signal'] in ['LONG', 'SHORT']:
