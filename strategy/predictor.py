@@ -200,6 +200,7 @@ def run_predict():
                     # Masukkan ke kolom baru tanpa modifikasi waktu (UTC atau WIB, terserah kamu)
                     last_row_df['entry_price'] = last_row['close']
                     last_row_df['timestamp'] = ts  # langsung ambil timestamp asli
+                    last_row_df['timestamp_utc'] = ts  # langsung ambil timestamp asli
 
                     # Kalau mau tambahkan WIB, kamu bisa
                     last_row_df['timestamp_wib'] = ts + pd.Timedelta(hours=7)
