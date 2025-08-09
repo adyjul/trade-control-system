@@ -186,7 +186,7 @@ def run_predict():
                 #     print(f"⏭️ No signal for {pair} {timeframe}")
 
                 last_row = df_signal.iloc[-1]
-                print(last_row)
+              
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     # Buat DataFrame satu baris persis copy dari df (hasil scrape)
                     last_row_df = pd.DataFrame([last_row])
