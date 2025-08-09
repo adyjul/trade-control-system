@@ -184,19 +184,16 @@ def run_predict():
                 # else:
                 #     print(f"⏭️ No signal for {pair} {timeframe}")
 
+                df.set_index('timestamp', inplace=True)
+
                 last_row = df.iloc[-1]
 
                 if last_row['signal'] in ['LONG', 'SHORT']:
 
-                    print(f"Index type: {type(df.index)}")
-                    print(f"Index example: {df.index[:3]}")
-                    print(f"Last row index type: {type(df.index[-1])}")
-                    print(f"Last row index value: {df.index[-1]}")
-
                     last_row_df = pd.DataFrame([last_row])
-
                     ts_utc = last_row.name
-                    if isinstance(ts_utc, pd.Timestamp) and ts_utc.tzinfo is not None:
+
+                    if ts_utc.tzinfo is not None:
                         ts_utc = ts_utc.tz_convert(None)
                     ts_wib = ts_utc + pd.Timedelta(hours=7)
 
