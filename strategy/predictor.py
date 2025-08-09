@@ -190,31 +190,31 @@ def run_predict():
                 if last_row['signal'] in ['LONG', 'SHORT']:
                     last_row_df = pd.DataFrame([last_row])
 
-                # Cek last_row.name, kalau bukan datetime pakai kolom 'timestamp'
-                ts_utc = last_row.name
-                if not isinstance(ts_utc, pd.Timestamp):
-                    # fallback pakai kolom 'timestamp' yang ada di last_row
-                    if 'timestamp' in last_row.index:
-                        ts_utc = last_row['timestamp']
-                        if isinstance(ts_utc, (int, float)):
-                            ts_utc = pd.to_datetime(ts_utc, unit='ms')
-                    else:
-                        # kalau gak ada timestamp, pakai waktu sekarang saja (sebagai fallback)
-                        ts_utc = pd.Timestamp.utcnow()
+                    # Cek last_row.name, kalau bukan datetime pakai kolom 'timestamp'
+                    ts_utc = last_row.name
+                    if not isinstance(ts_utc, pd.Timestamp):
+                        # fallback pakai kolom 'timestamp' yang ada di last_row
+                        if 'timestamp' in last_row.index:
+                            ts_utc = last_row['timestamp']
+                            if isinstance(ts_utc, (int, float)):
+                                ts_utc = pd.to_datetime(ts_utc, unit='ms')
+                        else:
+                            # kalau gak ada timestamp, pakai waktu sekarang saja (sebagai fallback)
+                            ts_utc = pd.Timestamp.utcnow()
 
-                    if isinstance(ts_utc, pd.Timestamp) and ts_utc.tzinfo is not None:
-                        ts_utc = ts_utc.tz_convert(None)
+                        if isinstance(ts_utc, pd.Timestamp) and ts_utc.tzinfo is not None:
+                            ts_utc = ts_utc.tz_convert(None)
 
-                    ts_wib = ts_utc + pd.Timedelta(hours=7)
+                        ts_wib = ts_utc + pd.Timedelta(hours=7)
 
-                    last_row_df['entry_price'] = last_row['close']
-                    last_row_df['timestamp_utc'] = ts_utc.strftime('%Y-%m-%d %H:%M:%S')
-                    last_row_df['timestamp_wib'] = ts_wib.strftime('%Y-%m-%d %H:%M:%S')
+                        last_row_df['entry_price'] = last_row['close']
+                        last_row_df['timestamp_utc'] = ts_utc.strftime('%Y-%m-%d %H:%M:%S')
+                        last_row_df['timestamp_wib'] = ts_wib.strftime('%Y-%m-%d %H:%M:%S')
 
-                    signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
-                    last_row_df.to_excel(signal_path, index=False)
+                        signal_path = os.path.join(DATA_DIR, f"prediksi_entry_logic_{pair}.xlsx")
+                        last_row_df.to_excel(signal_path, index=False)
 
-                    print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
+                        print(f"✅ Signal saved: {pair} {timeframe} → {last_row['signal']}")
                 else:
                     print(f"⏭️ No signal for {pair} {timeframe}")
 
