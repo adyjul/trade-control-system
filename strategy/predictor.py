@@ -1,3 +1,4 @@
+# strategy/predictor.py
 import os
 import pandas as pd
 import ta
@@ -116,10 +117,11 @@ def run_predict():
                 df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
                 df['volume_sma20'] = df['volume'].rolling(window=20).mean()
 
-                bb = ta.volatility.BollingerBands(close=df['close'])
+                bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
                 df['upper_band'] = bb.bollinger_hband()
                 df['lower_band'] = bb.bollinger_lband()
-                df['boll_width'] = bb.bollinger_wband()
+                # df['boll_width'] = bb.bollinger_wband()
+                df['boll_width'] = df['upper_band'] - df['lower_band']
                 df['bb_percentile'] = (df['close'] - df['lower_band']) / (df['upper_band'] - df['lower_band'])
 
                 df['support'], df['resistance'] = calculate_support_resistance(df)
