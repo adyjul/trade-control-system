@@ -81,9 +81,9 @@ def run_predict():
     for bot in active_bots:
         tf = bot['timeframe']
 
-        # if not is_time_to_run(tf, now):
-        #     print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
-        #     continue
+        if not is_time_to_run(tf, now):
+            print(f"⏱️ Skipping {bot['coin']} ({bot['timeframe']})")
+            continue
         
         pair_text = bot['coin']
         pairs = pair_text.split(',')
@@ -187,7 +187,7 @@ def run_predict():
                 df.set_index('timestamp', inplace=True)
 
                 last_row = df.iloc[-1]
-
+            
                 if last_row['signal'] in ['LONG', 'SHORT']:
 
                     last_row_df = pd.DataFrame([last_row])
