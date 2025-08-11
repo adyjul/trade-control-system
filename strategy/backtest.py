@@ -254,8 +254,7 @@ def run_full_backtest(
                 if not triggered:
                     df.at[df.index[i], 'entry_type'] = 'CANCELLED'
 
-        if 'timestamp' not in df.columns:
-            df.insert(0, 'timestamp', pd.to_datetime(df['timestamp'], unit='ms')) 
+        print(df)
 
         full_all_path = os.path.join(result_dir, f"{pair}_{timeframe}_all_signals.xlsx")
         df.to_excel(full_all_path, index=False)
