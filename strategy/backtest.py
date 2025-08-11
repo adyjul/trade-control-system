@@ -254,7 +254,11 @@ def run_full_backtest(
                 if not triggered:
                     df.at[df.index[i], 'entry_type'] = 'CANCELLED'
 
-        
+
+        full_all_path = os.path.join(result_dir, f"{pair}_{timeframe}_all_signals.xlsx")
+        df.to_excel(full_all_path, index=False)
+        print(f"📄 Full signals saved: {pair} {timeframe}")
+
         df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()   
 
         if df.empty:
