@@ -8,6 +8,7 @@ import glob
 from strategy.utils import calculate_support_resistance
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
+import numpy as np
 
 # ---- Optional: set default folder kalau belum ada di config/env ----
 DEFAULT_DATA_DIR = "./data_backtest"
@@ -68,6 +69,26 @@ def detect_breakout(row):
             return True
 
     return False
+
+def detect_potential_breakout(df, atr_mult=0.2, vol_mult=1.2):
+
+    # Kondisi LONG breakout
+    long_cond = (
+        (df['close'] >= df['resistance'] - df['atr'] * atr_mult) &  # harga dekat/tembus resistance
+        (df['close'] > df['resistance']) &  # sudah melewati resistance
+        (df['volume'] >= df['volume'].rolling(20).mean() * vol_mult)  # volume di atas rata-rata
+    )
+
+    # Kondisi SHORT breakout
+    short_cond = (
+        (df['close'] <= df['support'] + df['atr'] * atr_mult) &  # harga dekat/tembus support
+        (df['close'] < df['support']) &  # sudah melewati support
+        (df['volume'] >= df['volume'].rolling(20).mean() * vol_mult)  # volume di atas rata-rata
+    )
+
+    df['is_potential_breakout'] = np.where(long_cond | short_cond, 1, 0)
+
+    return df
 
 
 def detect_signal(row):
@@ -222,13 +243,17 @@ def run_full_backtest(
         df['prev_close'] = df['close'].shift(1)
         df['prev_open'] = df['open'].shift(1)
 
+        df = detect_potential_breakout(df)
+
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
-        df['is_potential_breakout'] = (
-            (df['high'] > df['resistance']) |
-            (df['low'] < df['support'])
-        )
+        
+        # df['is_potential_breakout'] = (
+        #     (df['high'] > df['resistance']) |
+        #     (df['low'] < df['support'])
+        # )
+
         df['is_breakout_zone'] = df['is_fake_breakout']
         df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
         df['entry_signal'] = df['is_potential_breakout'].astype(int)
