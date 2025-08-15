@@ -242,13 +242,13 @@ def run_full_backtest(
         df['prev_high'] = df['high'].shift(1)
         df['prev_close'] = df['close'].shift(1)
         df['prev_open'] = df['open'].shift(1)
-
-        df = detect_potential_breakout(df)
+        
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
-        
+        df = detect_potential_breakout(df)
+
         # df['is_potential_breakout'] = (
         #     (df['high'] > df['resistance']) |
         #     (df['low'] < df['support'])
