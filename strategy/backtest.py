@@ -251,6 +251,11 @@ def detect_sideways(df, atr_threshold=0.02, bb_threshold=0.02, rsi_low=45, rsi_h
     
     return df
 
+def assign_signal(row):
+    if row['sideways_signal']:   # cek per baris
+        return "HOLD_SIDEWAY"
+    else:
+        return detect_signal(row)
         
 def run_full_backtest(
     pairs,
@@ -323,12 +328,8 @@ def run_full_backtest(
         df = detect_sideways(df)
         # --- sinyal ---
         df['signal'] = None
-        if df.iloc[-1]["sideways_signal"]:
-            df['signal'] = "HOLD_SIDEWAY"
-        else:
-            df['signal'] = df.apply(detect_signal, axis=1)
-            df = apply_filters(df)
-            
+        df['signal'] = df.apply(assign_signal, axis=1)
+        df = apply_filters(df) 
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
 
