@@ -53,7 +53,7 @@ def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
     Deteksi apakah sinyal reversal rawan false.
     Return True jika dianggap false reversal (harus di-filter)
     """
-    idx = row.name
+    idx = df.index.get_loc(row.name)
     close = row['close']
     
     # Ambil data historis sebelum current bar
