@@ -48,6 +48,57 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
                     break
     return df
 
+def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
+    """
+    Deteksi apakah sinyal reversal rawan false.
+    Return True jika dianggap false reversal (harus di-filter)
+    """
+    idx = row.name
+    close = row['close']
+    
+    # Ambil data historis sebelum current bar
+    if idx < max(atr_window, ma_slow):
+        return False  # data belum cukup
+    
+    # Moving Average filter
+    ma50 = df['close'].rolling(ma_fast).mean().iloc[idx]
+    ma100 = df['close'].rolling(ma_slow).mean().iloc[idx]
+
+    # ATR filter
+    high = df['high'].iloc[idx - atr_window:idx]
+    low = df['low'].iloc[idx - atr_window:idx]
+    close_prev = df['close'].iloc[idx - atr_window:idx]
+    tr1 = high - low
+    tr2 = abs(high - close_prev.shift(1))
+    tr3 = abs(low - close_prev.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(atr_window).mean().iloc[-1]
+
+    # Konfirmasi multi-candle (2 candle searah)
+    last2 = df['close'].iloc[idx-2:idx].reset_index(drop=True)
+    bullish_confirm = all(last2[i] > df['open'].iloc[idx-2+i] for i in range(2))
+    bearish_confirm = all(last2[i] < df['open'].iloc[idx-2+i] for i in range(2))
+
+    # Deteksi false reversal untuk LONG
+    if row['entry_signal'] == 'LONG':
+        if close < ma50 or close < ma100:  # masih di bawah tren
+            return True
+        if not bullish_confirm:  # belum ada 2 candle confirm
+            return True
+        if (df['open'].iloc[idx-1] - df['close'].iloc[idx-1]) > atr:  # candle merah terakhir besar
+            return True
+
+    # Deteksi false reversal untuk SHORT
+    if row['entry_signal'] == 'SHORT':
+        if close > ma50 or close > ma100:  # masih di atas tren
+            return True
+        if not bearish_confirm:  # belum ada 2 candle confirm
+            return True
+        if (df['close'].iloc[idx-1] - df['open'].iloc[idx-1]) > atr:  # candle hijau terakhir besar
+            return True
+
+    return False
+
 def detect_breakout(row):
     if pd.isna(row['prev_high']) or pd.isna(row['prev_close']) or pd.isna(row['prev_open']):
         return False  # tidak cukup data
@@ -69,6 +120,12 @@ def detect_breakout(row):
             return True
 
     return False
+
+def apply_filters(df):
+    df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
+    # Filter sinyal → hapus kalau false_reversal = True
+    df.loc[df['false_reversal'], 'entry_signal'] = None
+    return df
 
 def detect_potential_breakout(df, atr_mult=0.2, vol_mult=1.2):
 
@@ -246,6 +303,7 @@ def run_full_backtest(
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
+        df = apply_filters(df)
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
 
