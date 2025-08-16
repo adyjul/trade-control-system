@@ -73,6 +73,83 @@ def clear_folder(folder_path):
         except Exception as e:
             print(f"⚠️ Failed to delete {file_path}: {e}")
 
+def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
+    """
+    Deteksi apakah sinyal reversal rawan false.
+    Return True jika dianggap false reversal (harus di-filter)
+    """
+    idx = df.index.get_loc(row.name)
+    close = row['close']
+    
+    # Ambil data historis sebelum current bar
+    if idx < max(atr_window, ma_slow):
+        return False  # data belum cukup
+    
+    # Moving Average filter
+    ma50 = df['close'].rolling(ma_fast).mean().iloc[idx]
+    ma100 = df['close'].rolling(ma_slow).mean().iloc[idx]
+
+    # ATR filter
+    high = df['high'].iloc[idx - atr_window:idx]
+    low = df['low'].iloc[idx - atr_window:idx]
+    close_prev = df['close'].iloc[idx - atr_window:idx]
+    tr1 = high - low
+    tr2 = abs(high - close_prev.shift(1))
+    tr3 = abs(low - close_prev.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(atr_window).mean().iloc[-1]
+
+    # Konfirmasi multi-candle (2 candle searah)
+    last2 = df['close'].iloc[idx-2:idx].reset_index(drop=True)
+    bullish_confirm = all(last2[i] > df['open'].iloc[idx-2+i] for i in range(2))
+    bearish_confirm = all(last2[i] < df['open'].iloc[idx-2+i] for i in range(2))
+
+    # Deteksi false reversal untuk LONG
+    if row['signal'] == 'LONG':
+        if close < ma50 or close < ma100:  # masih di bawah tren
+            return True
+        if not bullish_confirm:  # belum ada 2 candle confirm
+            return True
+        if (df['open'].iloc[idx-1] - df['close'].iloc[idx-1]) > atr:  # candle merah terakhir besar
+            return True
+
+    # Deteksi false reversal untuk SHORT
+    if row['signal'] == 'SHORT':
+        if close > ma50 or close > ma100:  # masih di atas tren
+            return True
+        if not bearish_confirm:  # belum ada 2 candle confirm
+            return True
+        if (df['close'].iloc[idx-1] - df['open'].iloc[idx-1]) > atr:  # candle hijau terakhir besar
+            return True
+
+    return False
+
+def apply_filters(df):
+    df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
+    # Filter sinyal → hapus kalau false_reversal = True
+    df.loc[df['false_reversal'], 'signal'] = None
+    return df
+
+def detect_potential_breakout(df, atr_mult=0.2, vol_mult=1.2):
+
+    # Kondisi LONG breakout
+    long_cond = (
+        (df['close'] >= df['resistance'] - df['atr'] * atr_mult) &  # harga dekat/tembus resistance
+        (df['close'] > df['resistance']) &  # sudah melewati resistance
+        (df['volume'] >= df['volume'].rolling(20).mean() * vol_mult)  # volume di atas rata-rata
+    )
+
+    # Kondisi SHORT breakout
+    short_cond = (
+        (df['close'] <= df['support'] + df['atr'] * atr_mult) &  # harga dekat/tembus support
+        (df['close'] < df['support']) &  # sudah melewati support
+        (df['volume'] >= df['volume'].rolling(20).mean() * vol_mult)  # volume di atas rata-rata
+    )
+
+    df['is_potential_breakout'] = np.where(long_cond | short_cond, 1, 0)
+
+    return df
+
 def run_predict():
     client: Client = get_client()
     active_bots = get_active_bots()
@@ -128,20 +205,22 @@ def run_predict():
                 # df['atr_multiple'] = df['atr'] / df['close']
 
                 # df['is_potential_breakout'] = df.apply(is_potential_breakout, axis=1)
-                df['is_potential_breakout'] = (
-                    (df['high'] > df['resistance']) |
-                    (df['low'] < df['support'])
-                )
+                # df['is_potential_breakout'] = (
+                #     (df['high'] > df['resistance']) |
+                #     (df['low'] < df['support'])
+                # )
 
                 df['signal'] = df.apply(detect_signal, axis=1)
+                df = apply_filters(df)
+                df = detect_potential_breakout(df)
 
                 df_signal = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
 
                # Hitung breakout setelah ada signal, support, resistance
-                df_signal['is_potential_breakout'] = (
-                    (df_signal['high'] > df_signal['resistance']) |
-                    (df_signal['low'] < df_signal['support'])
-                )
+               # df_signal['is_potential_breakout'] = (
+               #     (df_signal['high'] > df_signal['resistance']) |
+               #     (df_signal['low'] < df_signal['support'])
+               # )
 
                 # Hitung atr_multiple untuk df_signal saja
                 df_signal['atr_multiple'] = np.where(
