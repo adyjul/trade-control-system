@@ -269,8 +269,8 @@ def detect_sideways(
     bb_indicator = ta.volatility.BollingerBands(
         close=df["close"], window=lookback, window_dev=2
     )
-    bb_width = (bb_indicator.bollinger_hband() - bb_indicator.bollinger_lband()) / df["close"]
-    df["bb_width"] = bb_width
+    # bb_width = (bb_indicator.bollinger_hband() - bb_indicator.bollinger_lband()) / df["close"]
+    # df["bb_width"] = bb_width
 
     # Range relatif kecil dibanding ATR
     rolling_high = df["high"].rolling(window=lookback).max()
