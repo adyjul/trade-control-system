@@ -352,6 +352,7 @@ def run_full_backtest(
         
         df = detect_sideways(df)
         # --- sinyal ---
+        df['signal'] = None  
         if df.iloc[-1]["sideways_signal"]:
             df['signal'] = "HOLD_SIDEWAY"
         else:
