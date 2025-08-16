@@ -80,7 +80,7 @@ def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
     bearish_confirm = all(last2[i] < df['open'].iloc[idx-2+i] for i in range(2))
 
     # Deteksi false reversal untuk LONG
-    if row['entry_signal'] == 'LONG':
+    if row['signal'] == 'LONG':
         if close < ma50 or close < ma100:  # masih di bawah tren
             return True
         if not bullish_confirm:  # belum ada 2 candle confirm
@@ -89,7 +89,7 @@ def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
             return True
 
     # Deteksi false reversal untuk SHORT
-    if row['entry_signal'] == 'SHORT':
+    if row['signal'] == 'SHORT':
         if close > ma50 or close > ma100:  # masih di atas tren
             return True
         if not bearish_confirm:  # belum ada 2 candle confirm
