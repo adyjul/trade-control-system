@@ -8,6 +8,7 @@ import glob
 from strategy.utils import calculate_support_resistance
 from utils.binance_client import get_client
 from utils.timeframes import BINANCE_INTERVAL_MAP
+from strategy.detect_sideways import detect_sideways
 import numpy as np
 
 # ---- Optional: set default folder kalau belum ada di config/env ----
@@ -300,12 +301,17 @@ def run_full_backtest(
         df['prev_close'] = df['close'].shift(1)
         df['prev_open'] = df['open'].shift(1)
         
-
+        df = detect_sideways(df)
         # --- sinyal ---
-        df['signal'] = df.apply(detect_signal, axis=1)
-        df = apply_filters(df)
-        df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
-        df = detect_potential_breakout(df)
+        if df.iloc[-1]["sideways_signal"]:
+            df['signal'] = "SIDEWAYS"
+        else:
+            df['signal'] = df.apply(detect_signal, axis=1)
+            df = apply_filters(df)
+            df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
+            df = detect_potential_breakout(df)
+           
+       
 
         # df['is_potential_breakout'] = (
         #     (df['high'] > df['resistance']) |
