@@ -234,56 +234,23 @@ def clear_folder(folder_path):
         except Exception as e:
             print(f"Failed to delete {file_path}: {e}")
 
-def detect_sideways(
-    df: pd.DataFrame,
-    lookback: int = 20,
-    atr_multiplier: float = 1.5,
-    bb_width_threshold: float = 0.02
-) -> pd.DataFrame:
-    """
-    Deteksi kondisi sideways pada OHLCV data.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Data dengan kolom ['open','high','low','close','volume'].
-    lookback : int
-        Periode untuk Bollinger Bands & ATR.
-    atr_multiplier : float
-        Range high-low relatif kecil dibanding ATR.
-    bb_width_threshold : float
-        Ambang batas lebar Bollinger Band (dalam persentase harga).
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame dengan kolom tambahan 'sideways_signal' (bool).
-    """
-
-    # ATR untuk volatilitas
-    df["atr"] = ta.volatility.AverageTrueRange(
-        high=df["high"], low=df["low"], close=df["close"], window=lookback
-    ).average_true_range()
-
-    # Bollinger Band width
-    bb_indicator = ta.volatility.BollingerBands(
-        close=df["close"], window=lookback, window_dev=2
-    )
-    bb_width = (bb_indicator.bollinger_hband() - bb_indicator.bollinger_lband()) / df["close"]
-    df["bb_width"] = bb_width
-
-    # Range relatif kecil dibanding ATR
-    rolling_high = df["high"].rolling(window=lookback).max()
-    rolling_low = df["low"].rolling(window=lookback).min()
-    range_size = (rolling_high - rolling_low)
-
-    condition_atr = range_size < atr_multiplier * df["atr"]
-    condition_bb = df["bb_width"] < bb_width_threshold
-
-    df["sideways_signal"] = condition_atr & condition_bb
-
-    return df
+def detect_sideways(df, atr_threshold=0.02, bb_threshold=0.02, rsi_low=45, rsi_high=55):
+    df["sideways_signal"] = False
     
+    # ATR relatif terhadap harga
+    df["atr_pct"] = df["atr"] / df["close"]
+    # Bandwidth relatif terhadap harga
+    df["bb_width"] = (df["bb_high"] - df["bb_low"]) / df["close"]
+
+    cond_atr = df["atr_pct"] < atr_threshold
+    cond_bb = df["bb_width"] < bb_threshold
+    cond_rsi = (df["rsi"] > rsi_low) & (df["rsi"] < rsi_high)
+
+    # sideways kalau minimal 2 dari 3 kondisi terpenuhi
+    df.loc[(cond_atr & cond_rsi) | (cond_bb & cond_rsi), "sideways_signal"] = True
+    
+    return df
+
         
 def run_full_backtest(
     pairs,
