@@ -173,7 +173,7 @@ def run_predict():
                 if os.path.exists(full_path):
                     os.remove(full_path)
 
-                klines = client.futures_klines(symbol=pair, interval=interval, limit=100)
+                klines = client.futures_klines(symbol=pair, interval=interval, limit=150)
                 df = pd.DataFrame(klines, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume',
                     'close_time', 'quote_asset_volume', 'number_of_trades',
