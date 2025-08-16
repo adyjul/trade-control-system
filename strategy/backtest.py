@@ -304,7 +304,7 @@ def run_full_backtest(
         df = detect_sideways(df)
         # --- sinyal ---
         if df.iloc[-1]["sideways_signal"]:
-            df['signal'] = "SIDEWAYS"
+            df['signal'] = "HOLD_SIDEWAY"
         else:
             df['signal'] = df.apply(detect_signal, axis=1)
             df = apply_filters(df)
