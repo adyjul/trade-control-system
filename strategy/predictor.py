@@ -127,7 +127,7 @@ def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
 def apply_filters(df):
     df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
-    df.loc[df['false_reversal'], 'signal'] = None
+    df.loc[df['false_reversal'], 'signal'] = 'HOLD'
     return df
 
 def detect_potential_breakout(df, atr_mult=0.2, vol_mult=1.2):
