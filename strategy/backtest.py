@@ -322,17 +322,15 @@ def run_full_backtest(
         
         df = detect_sideways(df)
         # --- sinyal ---
-        df['signal'] = None  
+        df['signal'] = None
         if df.iloc[-1]["sideways_signal"]:
-            df['signal'] = "HOLD"
+            df['signal'] = "HOLD_SIDEWAY"
         else:
             df['signal'] = df.apply(detect_signal, axis=1)
-
-        df = apply_filters(df)
+            df = apply_filters(df)
+            
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
-           
-       
 
         # df['is_potential_breakout'] = (
         #     (df['high'] > df['resistance']) |
