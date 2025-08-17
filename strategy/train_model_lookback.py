@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
 # --- Folder paths ---
-RAW_DATA_DIR = '/root/trade-control-system/backtest_result/AVAXUSDT_1h_all_signals.xlsx'
+RAW_DATA_DIR = '/root/trade-control-system/backtest_result/'
 BACKTEST_DIR = '/root/trade-control-system/backtest_result/'
 MODEL_DIR = '/root/trade-control-system/models'
 os.makedirs(MODEL_DIR, exist_ok=True)
