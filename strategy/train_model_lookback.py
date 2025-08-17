@@ -6,7 +6,7 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
-RAW_DIR = "/root/trade-control-system/data_backtest"
+RAW_DIR = "/root/trade-control-system/backtest_result"
 BACKTEST_DIR = "/root/trade-control-system/backtest_result"
 MODEL_DIR = "/root/trade-control-system/strategy/ml/models"
 
