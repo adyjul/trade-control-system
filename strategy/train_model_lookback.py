@@ -28,6 +28,8 @@ def prepare_dataset(raw_file, backtest_file):
     df['signal'] = df['signal'].fillna('HOLD')
     df['false_reversal'] = df['false_reversal'].fillna(False)
     df = df[df['label'] != -1]  # drop NO HIT
+    df['label'] = df['label'].astype(float)  # kalau perlu
+    df = df.dropna(subset=['label'])
 
     # Fitur teknikal untuk ML
     df['macd_hist'] = df['macd'] - df['macd_signal']
