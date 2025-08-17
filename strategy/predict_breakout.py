@@ -66,12 +66,18 @@ def main():
     df = ensure_features(df)
 
     # 6. Siapkan fitur yang dipakai model — harus sinkron dengan training
+    # feature_columns = [
+    #     'rsi', 'atr', 'boll_width', 'volume', 'close',
+    #     'upper_band', 'lower_band', 'bb_percentile',
+    #     'support', 'resistance',
+    #     'false_reversal',
+    #     'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
+    # ]
     feature_columns = [
         'rsi', 'atr', 'boll_width', 'volume', 'close',
         'upper_band', 'lower_band', 'bb_percentile',
-        'support', 'resistance',
-        'false_reversal',
-        'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
+        'support', 'resistance', 'macd', 'macd_signal', 'macd_hist',
+        'signal_numeric', 'false_reversal'
     ]
     missing = [f for f in feature_columns if f not in df.columns]
     if missing:
