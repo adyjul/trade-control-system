@@ -2,6 +2,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
+import joblib
 
 # 1. Load dataset hasil backtest
 df = pd.read_excel("/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx")
@@ -36,3 +37,6 @@ print(classification_report(y_test, y_pred))
 # 8. Feature importance
 importances = pd.Series(model.feature_importances_, index=features)
 print(importances.sort_values(ascending=False))
+
+joblib.dump(model, "/root/trade-control-system/models/false_reversal_rf.pkl")
+print("Model saved to models/false_reversal_rf.pkl")
