@@ -302,7 +302,8 @@ def run_full_backtest(
     # end_ts = int(datetime.utcnow().timestamp() * 1000)
     start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000) if start_date else period_to_start_timestamp(period)
     end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp() * 1000) if end_date else int(datetime.utcnow().timestamp() * 1000)
-
+    print(start_date)
+    print(end_date)
     for pair in pairs:
         # --- scrape data ---
         klines = []
