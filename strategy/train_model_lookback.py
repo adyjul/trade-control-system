@@ -7,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 # --- Folder paths ---
 RAW_DATA_DIR = '/root/trade-control-system/backtest_result/AVAXUSDT_1h_all_signals.xlsx'
-BACKTEST_DIR = '/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx'
+BACKTEST_DIR = '/root/trade-control-system/backtest_result/'
 MODEL_DIR = '/root/trade-control-system/models'
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -64,7 +64,7 @@ def train_model(pair, raw_file, backtest_file):
 for file in os.listdir(BACKTEST_DIR):
     if file.endswith('.xlsx') and file.startswith('hasil_backtest_'):
         pair = file.replace('hasil_backtest_', '').replace('.xlsx', '')
-        raw_file = os.path.join(RAW_DATA_DIR, f'{pair}_raw.xlsx')
+        raw_file = os.path.join(RAW_DATA_DIR, f'{pair}_1h_all_signals.xlsx')
         backtest_file = os.path.join(BACKTEST_DIR, file)
         if os.path.exists(raw_file):
             train_model(pair, raw_file, backtest_file)
