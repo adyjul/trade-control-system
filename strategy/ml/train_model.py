@@ -45,6 +45,7 @@ def train_all_models():
                     'upper_band', 'lower_band', 'bb_percentile',
                     'support', 'resistance', 'atr_multiple',
                     'is_potential_breakout', 'entry_signal',
+                    'false_reversal'
                     'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
                 ]
 
