@@ -269,9 +269,9 @@ def run_full_backtest(
     pairs,
     timeframe: str,
     # limit: int,
-    period= str,
-    start_date: str = None,
-    end_date: str = None,
+    period: str,
+    start_date: str,
+    end_date: str,
     look_ahead: int = 6,
     tp_atr_mult: float = 1.2,
    
