@@ -23,7 +23,8 @@ def prepare_dataset(raw_file, backtest_file):
         raise ValueError(f"'signal' column not found in {backtest_file}")
 
     # gabung raw + hasil backtest untuk fitur tambahan
-    df = raw_df.join(bt_df[['signal','false_reversal','label']], how='left')
+    # df = raw_df.join(bt_df[['signal','false_reversal','label']], how='left')
+    df = raw_df.join(bt_df[['signal','false_reversal','label']], how='left', rsuffix='_bt')
     df['signal'] = df['signal'].fillna('HOLD')
     df['false_reversal'] = df['false_reversal'].fillna(False)
     df = df[df['label'] != -1]  # drop NO HIT
