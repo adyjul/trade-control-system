@@ -12,6 +12,12 @@ MODEL_DIR = "/root/trade-control-system/strategy/ml/models"
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+def add_lookback_features(df, feature_cols, lookback=5):
+    for col in feature_cols:
+        for i in range(1, lookback+1):
+            df[f"{col}_lag{i}"] = df[col].shift(i)
+    return df
+
 def prepare_dataset(raw_file, backtest_file):
     # load raw data
     raw_df = pd.read_excel(raw_file, index_col=0, parse_dates=True)
@@ -29,7 +35,8 @@ def prepare_dataset(raw_file, backtest_file):
     df['false_reversal'] = df['false_reversal'].fillna(False)
     df = df[df['label'] != -1]  # drop NO HIT
     df['label'] = df['label'].astype(float)  # kalau perlu
-    df = df.dropna(subset=['label'])
+    
+    
 
     # Fitur teknikal untuk ML
     df['macd_hist'] = df['macd'] - df['macd_signal']
@@ -41,6 +48,9 @@ def prepare_dataset(raw_file, backtest_file):
         'support', 'resistance', 'macd', 'macd_signal', 'macd_hist',
         'signal_numeric', 'false_reversal'
     ]
+    df = add_lookback_features(df, feature_cols, lookback=5)
+    df = df.dropna()
+    df = df.dropna(subset=['label'])
     X = df[feature_cols]
     y = df['label']
 
