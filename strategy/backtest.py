@@ -268,7 +268,7 @@ def detect_sideways(df, atr_threshold=0.02, bb_threshold=0.02, rsi_low=45, rsi_h
 def run_full_backtest(
     pairs,
     timeframe: str,
-    limit: int,
+    # limit: int,
     period="1y",
     look_ahead: int = 6,
     tp_atr_mult: float = 1.2,
