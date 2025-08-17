@@ -63,10 +63,10 @@ def train_model(pair, raw_file, backtest_file):
 # --- Train semua pair ---
 for file in os.listdir(BACKTEST_DIR):
     if file.endswith('.xlsx') and file.startswith('hasil_backtest_'):
-        pair = file.replace('hasil_backtest_', '').replace('.xlsx', '')
-        raw_file = os.path.join(RAW_DATA_DIR, f'{pair}_1h_all_signals.xlsx')
+        # pair = file.replace('hasil_backtest_', '').replace('.xlsx', '')
+        raw_file = os.path.join(RAW_DATA_DIR, f'AVAXUSDT_1h_all_signals.xlsx')
         backtest_file = os.path.join(BACKTEST_DIR, file)
         if os.path.exists(raw_file):
-            train_model(pair, raw_file, backtest_file)
+            train_model('AVAXUSDT', raw_file, backtest_file)
         else:
-            print(f"⚠️ Raw data not found for {pair}, skipping.")
+            print(f"⚠️ Raw data not found for , skipping.")
