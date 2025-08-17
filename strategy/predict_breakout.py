@@ -7,7 +7,9 @@ import sys
 import numpy as np
 
 # ------- CONFIG -------
-MODEL_PATH = "/root/trade-control-system/strategy/ml/models/breakout_rf_model_avaxusdt.pkl"
+# MODEL_PATH = "/root/trade-control-system/strategy/ml/models/breakout_rf_model_avaxusdt.pkl"
+MODEL_BREAKOUT = "/root/trade-control-system/strategy/ml/models/breakout_rf_model_avaxusdt.pkl"
+MODEL_REVERSAL = "/root/trade-control-system/models/false_reversal_rf.pkl"
 BACKTEST_GLOB = "/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx"  # sesuaikan timeframe/pair jika perlu
 # BACKTEST_GLOB = "/root/trade-control-system/data_predict/AVAXUSDT_1h_full.xlsx"
 OUTPUT_PRED_PATH = "/root/trade-control-system/backtest_result/predicted_result_single_pair.xlsx"
@@ -38,11 +40,14 @@ def ensure_features(df):
 
 def main():
     # 1. Load model
-    if not os.path.isfile(MODEL_PATH):
-        print(f"Model tidak ditemukan di {MODEL_PATH}")
-        sys.exit(1)
-    model = joblib.load(MODEL_PATH)
-    print(f"[+] Model dimuat dari {MODEL_PATH}")
+    # if not os.path.isfile(MODEL_PATH):
+    #     print(f"Model tidak ditemukan di {MODEL_PATH}")
+    #     sys.exit(1)
+    # model = joblib.load(MODEL_PATH)
+    breakout_model = joblib.load(MODEL_BREAKOUT)
+    reversal_model = joblib.load(MODEL_REVERSAL)
+    print(f"[+] Model dimuat dari {MODEL_BREAKOUT}")
+    print(f"[+] Model dimuat dari {MODEL_REVERSAL}")
 
     # 2. Temukan backtest file (ambil pertama yang match)
     matches = glob.glob(BACKTEST_GLOB)
@@ -73,39 +78,74 @@ def main():
     #     'false_reversal',
     #     'macd', 'macd_signal', 'macd_hist', 'signal_numeric'
     # ]
-    feature_columns = [
+
+    # feature_columns = [
+    #     'rsi', 'atr', 'boll_width', 'volume', 'close',
+    #     'upper_band', 'lower_band', 'bb_percentile',
+    #     'support', 'resistance', 'macd', 'macd_signal', 'macd_hist',
+    #     'signal_numeric', 'false_reversal'
+    # ]
+
+    breakout_features = [
         'rsi', 'atr', 'boll_width', 'volume', 'close',
         'upper_band', 'lower_band', 'bb_percentile',
         'support', 'resistance', 'macd', 'macd_signal', 'macd_hist',
-        'signal_numeric', 'false_reversal'
+        'signal_numeric'
     ]
-    missing = [f for f in feature_columns if f not in df.columns]
-    if missing:
-        raise ValueError(f"Kolom fitur hilang dari backtest: {missing}")
 
-    X = df[feature_columns]
+    reversal_features = [
+        "rsi", "atr", "macd", "macd_signal", "macd_hist",
+        "upper_band", "lower_band", "volume", "support", "resistance"
+    ]
+    
 
-    # 7. Prediksi label + probabilitas
-    df['predicted_label'] = model.predict(X)
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X)
-        # RandomForestClassifier classes_ should align; ambil probabilitas untuk kelas 1 (TP)
+    breakout_missing = [f for f in breakout_features if f not in df.columns]
+    if breakout_missing:
+        raise ValueError(f"Kolom fitur hilang untuk breakout model: {breakout_missing}")
+    X_breakout = df[breakout_features]
+
+    df['predicted_breakout'] = breakout_model.predict(X_breakout)
+
+    if hasattr(breakout_model, "predict_proba"):
+        probs = breakout_model.predict_proba(X_breakout)
         try:
-            idx_tp = list(model.classes_).index(1)
-            df['prob_tp'] = probs[:, idx_tp]
+            idx_tp = list(breakout_model.classes_).index(1)
+            df['prob_breakout'] = probs[:, idx_tp]
         except ValueError:
-            # kalau kelas 1 tidak ada (skew extreme), fallback: ambil max-prob
-            df['prob_tp'] = probs.max(axis=1)
+            df['prob_breakout'] = probs.max(axis=1)
     else:
-        df['prob_tp'] = None
+        df['prob_breakout'] = None
 
-    df['predicted_result'] = df['predicted_label'].map({1: 'POTENSIAL_TP', 0: 'BERPOTENSI_GAGAL'})
+    # --- 7. Kandidat hanya yg lolos breakout ---
+    df_candidate = df[(df['predicted_breakout'] == 1) & (df['prob_breakout'] >= PROB_THRESHOLD)].copy()
+
+    # --- 8. Prediksi tahap 2: Reversal model ---
+    if not df_candidate.empty:
+        reversal_missing = [f for f in reversal_features if f not in df_candidate.columns]
+        if reversal_missing:
+            raise ValueError(f"Kolom fitur hilang untuk reversal model: {reversal_missing}")
+        X_rev = df_candidate[reversal_features]
+        df_candidate['predicted_reversal'] = reversal_model.predict(X_rev)
+    else:
+        df_candidate['predicted_reversal'] = []
+
+    # --- 9. Gabung hasil ---
+    df = df.merge(df_candidate[['predicted_reversal']], left_index=True, right_index=True, how='left')
+    df['predicted_reversal'] = df['predicted_reversal'].fillna(0).astype(int)
+
+    df['final_label'] = df.apply(
+        lambda row: 1 if (row['predicted_breakout']==1 and row['predicted_reversal']==1) else 0,
+        axis=1
+    )
+
+    df['predicted_result'] = df['final_label'].map({1: 'ENTRY_VALID', 0: 'DITOLAK'})
 
     # 8. Filter entry layak berdasarkan threshold
-    if df['prob_tp'].notna().all():
-        df_layak = df[(df['predicted_label'] == 1) & (df['prob_tp'] >= PROB_THRESHOLD)].copy()
-    else:
-        df_layak = df[df['predicted_label'] == 1].copy()
+    # if df['prob_tp'].notna().all():
+    #     df_layak = df[(df['predicted_label'] == 1) & (df['prob_tp'] >= PROB_THRESHOLD)].copy()
+    # else:
+    #     df_layak = df[df['predicted_label'] == 1].copy()
+    df_layak = df[(df['final_label'] == 1) & (df['prob_breakout'] >= PROB_THRESHOLD)].copy()
 
     # 9. Simpan hasil
     df.to_excel(OUTPUT_PRED_PATH, index=False)
