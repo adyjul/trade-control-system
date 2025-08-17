@@ -89,8 +89,8 @@ def main():
     breakout_features = [
         'rsi', 'atr', 'boll_width', 'volume', 'close',
         'upper_band', 'lower_band', 'bb_percentile',
-        'support', 'resistance', 'macd', 'macd_signal', 'macd_hist',
-        'signal_numeric'
+        'support', 'resistance', 'atr_multiple',
+        'is_potential_breakout', 'entry_signal','macd', 'macd_signal', 'macd_hist', 'signal_numeric'
     ]
 
     reversal_features = [
