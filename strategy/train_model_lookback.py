@@ -62,6 +62,8 @@ if __name__ == "__main__":
     for pair in pairs:
         raw_file = os.path.join(RAW_DIR, f"{pair}_1h_all_signals.xlsx")  # sesuaikan timeframe
         backtest_file = os.path.join(BACKTEST_DIR, f"hasil_backtest_avaxusdt_1h.xlsx")
+        print(raw_file)
+        print(backtest_file)
         if os.path.exists(raw_file) and os.path.exists(backtest_file):
             train_model(pair, raw_file, backtest_file)
         else:
