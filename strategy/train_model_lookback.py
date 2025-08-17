@@ -16,7 +16,7 @@ df["label"] = (df["exit_status"] == "TP HIT").astype(int)
 # 4. Pilih fitur teknikal (contoh: RSI, ATR, MACD, volume, dsb)
 # Pastikan kolom2 ini memang ada di datasetmu
 features = [
-    "RSI", "ATR", "macd", "macd_signal", "macd_hist",
+    "rsi", "atr", "macd", "macd_signal", "macd_hist",
     "upper_band", "lower_band", "volume", "support", "resistance"
 ]
 X = df[features]
