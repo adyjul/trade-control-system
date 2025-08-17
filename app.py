@@ -130,7 +130,8 @@ def backtest_new():
         # pair = request.form["pair"].upper()
         tf = request.form["timeframe"]
         limit = request.form["limit"]
-        res = run_full_backtest(pairs, tf, limit)
+        period = request.form.get("period", "1y") 
+        res = run_full_backtest(pairs, tf, limit, period=period)
         # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
         # bisa diarahkan ke halaman summary / tampilkan hasil single pair
         # return render_template("summary_backtest.html", result=res)

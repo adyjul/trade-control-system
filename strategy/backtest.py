@@ -1,6 +1,6 @@
 # strategy/backtest.py
 import os
-from datetime import datetime, timezone
+from datetime import datetime,timedelta, timezone
 import pandas as pd
 import ta
 from binance.client import Client
@@ -126,6 +126,19 @@ def apply_filters(df):
     # Filter sinyal → hapus kalau false_reversal = True
     df.loc[df['false_reversal'], 'signal'] = 'HOLD'
     return df
+
+def period_to_start_timestamp(period: str) -> int:
+    """Konversi period string ke timestamp Unix (ms) untuk Binance API"""
+    now = datetime.utcnow()
+    if period == "6m":
+        start = now - timedelta(days=30*6)
+    elif period == "1y":
+        start = now - timedelta(days=365)
+    elif period == "2y":
+        start = now - timedelta(days=365*2)
+    else:
+        raise ValueError("Period harus 6m, 1y, atau 2y")
+    return int(start.timestamp() * 1000)  # Binance pakai ms
 
 def detect_potential_breakout(df, atr_mult=0.2, vol_mult=1.2):
 
@@ -256,13 +269,14 @@ def run_full_backtest(
     pairs,
     timeframe: str,
     limit: int,
+    period="1y",
     look_ahead: int = 6,
     tp_atr_mult: float = 1.2,
    
     sl_atr_mult: float = 0.9,
     data_dir: str = DEFAULT_DATA_DIR,
     result_dir: str = DEFAULT_RESULT_DIR,
-    save_summary: bool = True
+    save_summary: bool = True,
 ):
     
     """
@@ -282,9 +296,30 @@ def run_full_backtest(
     clear_folder(data_dir)
     clear_folder(result_dir)
 
+    start_ts = period_to_start_timestamp(period)
+    end_ts = int(datetime.utcnow().timestamp() * 1000)
+
     for pair in pairs:
         # --- scrape data ---
-        klines = client.futures_klines(symbol=pair, interval=interval, limit=limit)
+        klines = []
+        limit = 1500  # max per request Binance
+        start = start_ts
+
+        while start < end_ts:
+            batch = client.futures_klines(
+                symbol=pair,
+                interval=interval,
+                limit=limit,
+                startTime=start,
+                endTime=end_ts
+            )
+            if not batch:
+                break
+            klines.extend(batch)
+            last_time = batch[-1][0]
+            start = last_time + 1 
+
+        # klines = client.futures_klines(symbol=pair, interval=interval, limit=limit)
         df = pd.DataFrame(klines, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_asset_volume', 'number_of_trades',
