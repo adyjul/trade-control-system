@@ -270,6 +270,8 @@ def run_full_backtest(
     timeframe: str,
     # limit: int,
     period= str,
+    start_date: str = None,
+    end_date: str = None,
     look_ahead: int = 6,
     tp_atr_mult: float = 1.2,
    
@@ -296,8 +298,10 @@ def run_full_backtest(
     clear_folder(data_dir)
     clear_folder(result_dir)
 
-    start_ts = period_to_start_timestamp(period)
-    end_ts = int(datetime.utcnow().timestamp() * 1000)
+    # start_ts = period_to_start_timestamp(period)
+    # end_ts = int(datetime.utcnow().timestamp() * 1000)
+    start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000) if start_date else period_to_start_timestamp(period)
+    end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp() * 1000) if end_date else int(datetime.utcnow().timestamp() * 1000)
 
     for pair in pairs:
         # --- scrape data ---
