@@ -342,6 +342,7 @@ def run_full_backtest(
         macd = ta.trend.MACD(df['close'], window_slow=26, window_fast=12, window_sign=9)
         df['macd'] = macd.macd()
         df['macd_signal'] = macd.macd_signal()
+        df["macd_hist"] = df["macd"] - df["macd_signal"]
         df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
         df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range()
         df['support'], df['resistance'] = calculate_support_resistance(df)

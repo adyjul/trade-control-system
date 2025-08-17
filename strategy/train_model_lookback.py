@@ -1,83 +1,38 @@
-# strategy/train_model_lookback.py
-import os
 import pandas as pd
-import numpy as np
-import joblib
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 
-RAW_DIR = "/root/trade-control-system/backtest_result"
-BACKTEST_DIR = "/root/trade-control-system/backtest_result"
-MODEL_DIR = "/root/trade-control-system/strategy/ml/models"
+# 1. Load dataset hasil backtest
+df = pd.read_excel("/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx")
 
-os.makedirs(MODEL_DIR, exist_ok=True)
+# 2. Filter hanya baris dengan false_reversal = True
+df = df[df["false_reversal"] == True]
 
-def add_lookback_features(df, feature_cols, lookback=5):
-    for col in feature_cols:
-        for i in range(1, lookback+1):
-            df[f"{col}_lag{i}"] = df[col].shift(i)
-    return df
+# 3. Buat label: 1 untuk TP HIT, 0 untuk SL HIT
+df = df[df["exit_status"].isin(["TP HIT", "SL HIT"])]
+df["label"] = (df["exit_status"] == "TP HIT").astype(int)
 
-def prepare_dataset(raw_file, backtest_file):
-    # load raw data
-    raw_df = pd.read_excel(raw_file, index_col=0, parse_dates=True)
-    # load hasil backtest
-    bt_df = pd.read_excel(backtest_file, index_col=0, parse_dates=True)
+# 4. Pilih fitur teknikal (contoh: RSI, ATR, MACD, volume, dsb)
+# Pastikan kolom2 ini memang ada di datasetmu
+features = [
+    "RSI", "ATR", "macd", "macd_signal", "macd_hist",
+    "upper_band", "lower_band", "volume", "support", "resistance"
+]
+X = df[features]
+y = df["label"]
 
-    # pastikan kolom signal ada
-    if 'signal' not in bt_df.columns:
-        raise ValueError(f"'signal' column not found in {backtest_file}")
+# 5. Split train/test
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # gabung raw + hasil backtest untuk fitur tambahan
-    # df = raw_df.join(bt_df[['signal','false_reversal','label']], how='left')
-    df = raw_df.join(bt_df[['signal','false_reversal','label']], how='left', rsuffix='_bt')
-    df['signal'] = df['signal'].fillna('HOLD')
-    df['false_reversal'] = df['false_reversal'].fillna(False)
-    df = df[df['label'] != -1]  # drop NO HIT
-    df['label'] = df['label'].astype(float)  # kalau perlu
-    
-    
+# 6. Train RandomForest
+model = RandomForestClassifier(n_estimators=200, random_state=42)
+model.fit(X_train, y_train)
 
-    # Fitur teknikal untuk ML
-    df['macd_hist'] = df['macd'] - df['macd_signal']
-    df['signal_numeric'] = df['signal'].map({'LONG': 1, 'SHORT': -1, 'HOLD': 0})
+# 7. Evaluasi
+y_pred = model.predict(X_test)
+print(classification_report(y_test, y_pred))
 
-    feature_cols = [
-        'rsi', 'atr', 'boll_width', 'volume', 'close',
-        'upper_band', 'lower_band', 'bb_percentile',
-        'support', 'resistance', 'macd', 'macd_signal', 'macd_hist',
-        'signal_numeric', 'false_reversal'
-    ]
-    df = add_lookback_features(df, feature_cols, lookback=5)
-    df = df.dropna()
-    df = df.dropna(subset=['label'])
-    X = df[feature_cols]
-    y = df['label']
-
-    return X, y
-
-def train_model(pair, raw_file, backtest_file):
-    X, y = prepare_dataset(raw_file, backtest_file)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
-    model.fit(X_train, y_train)
-
-    model_path = os.path.join(MODEL_DIR, f'breakout_rf_model_{pair}.pkl')
-    joblib.dump(model, model_path)
-    print(f"✅ Model trained and saved: {model_path}")
-
-if __name__ == "__main__":
-    # contoh run untuk satu pair
-    pairs = ['AVAXUSDT']  # bisa ditambah
-    for pair in pairs:
-        raw_file = os.path.join(RAW_DIR, f"{pair}_1h_all_signals.xlsx")  # sesuaikan timeframe
-        backtest_file = os.path.join(BACKTEST_DIR, f"hasil_backtest_avaxusdt_1h.xlsx")
-        print(raw_file)
-        print(backtest_file)
-        if os.path.exists(raw_file) and os.path.exists(backtest_file):
-            train_model(pair, raw_file, backtest_file)
-        else:
-            print(f"⚠️ File missing for {pair}: raw or backtest not found")
+# 8. Feature importance
+importances = pd.Series(model.feature_importances_, index=features)
+print(importances.sort_values(ascending=False))
