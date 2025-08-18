@@ -189,7 +189,7 @@ def run_full_backtest(
     # --- Summary ---
     if summaries:
         summary_df = pd.DataFrame(summaries).sort_values(by="TP Rate (%)", ascending=False)
-        summary_df.to_excel(os.path.join(result_dir, "summary_backtest_trend_rider.xlsx"), index=False)
+        summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
         print("📊 Summary saved!")
 
     return summaries
