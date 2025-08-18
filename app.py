@@ -133,7 +133,8 @@ def backtest_new():
         start_date = request.form.get("start_date")  # format yyyy-mm-dd
         end_date = request.form.get("end_date")
         period = request.form.get("period") 
-        res = run_full_backtest(pairs, tf, period,start_date,end_date)
+        # res = run_full_backtest(pairs, tf, period,start_date,end_date)
+        res = run_full_backtest(pairs, period,start_date,end_date)
         # shutil.copy(result_path, f"static/backtest_result/{pair.lower()}_{timeframse}.xlsx")
         # bisa diarahkan ke halaman summary / tampilkan hasil single pair
         # return render_template("summary_backtest.html", result=res)
