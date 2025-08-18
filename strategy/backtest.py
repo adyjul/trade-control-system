@@ -124,7 +124,7 @@ def detect_breakout(row):
 def apply_filters(df):
     df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
-    df.loc[df['false_reversal'], 'signal'] = 'HOLD'
+    # df.loc[df['false_reversal'], 'signal'] = 'HOLD'
     return df
 
 def period_to_start_timestamp(period: str) -> int:
