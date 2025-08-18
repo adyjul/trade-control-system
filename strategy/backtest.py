@@ -109,7 +109,7 @@ def clear_folder(folder_path):
         try: os.remove(file_path)
         except: pass
 
-def run_full_backtest_trend_rider(
+def run_full_backtest(
     pairs, timeframe, period=None, start_date=None, end_date=None,
     look_ahead=6, tp_atr_mult=1.2, sl_atr_mult=0.9,
     data_dir=DEFAULT_DATA_DIR, result_dir=DEFAULT_RESULT_DIR
