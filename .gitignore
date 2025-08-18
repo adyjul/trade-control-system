@@ -25,4 +25,5 @@ logs/
 .idea/
 
 run_trade.sh
+dev_trade.sh
 
