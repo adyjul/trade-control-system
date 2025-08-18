@@ -112,7 +112,8 @@ def clear_folder(folder_path):
 def run_full_backtest(
     pairs, timeframe, period=None, start_date=None, end_date=None,
     look_ahead=6, tp_atr_mult=1.2, sl_atr_mult=0.9,
-    data_dir=DEFAULT_DATA_DIR, result_dir=DEFAULT_RESULT_DIR
+    data_dir=DEFAULT_DATA_DIR, result_dir=DEFAULT_RESULT_DIR,
+    save_summary: bool = True
 ):
     os.makedirs(data_dir, exist_ok=True)
     os.makedirs(result_dir, exist_ok=True)
@@ -187,9 +188,51 @@ def run_full_backtest(
         })
 
     # --- Summary ---
-    if summaries:
-        summary_df = pd.DataFrame(summaries).sort_values(by="TP Rate (%)", ascending=False)
-        summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
-        print("📊 Summary saved!")
+    # if summaries:
+    #     summary_df = pd.DataFrame(summaries).sort_values(by="TP Rate (%)", ascending=False)
+    #     summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
+    #     print("📊 Summary saved!")
+        if save_summary:
+            summaries = []
+            for f in os.listdir(result_dir):
+                if f.startswith("hasil_backtest_") and f.endswith(".xlsx"):
+                    _pair_tf = f.replace("hasil_backtest_", "").replace(".xlsx", "")
+                    parts = _pair_tf.split("_")
+                    if len(parts) >= 2:
+                        _pair = "_".join(parts[:-1]).upper()
+                        _tf = parts[-1]
+                    else:
+                        _pair = _pair_tf.upper()
+                        _tf = timeframe
 
-    return summaries
+                    _df = pd.read_excel(os.path.join(result_dir, f))
+                    _total = len(_df)
+                    _tp = (_df['exit_status'] == 'TP HIT').sum() if _total else 0
+                    _sl = (_df['exit_status'] == 'SL HIT').sum() if _total else 0
+                    _no = (_df['exit_status'] == 'NO HIT').sum() if _total else 0
+                    _rate = round(_tp / _total * 100, 2) if _total else 0.0
+
+                    summaries.append({
+                        "Pair": _pair,
+                        "Timeframe": _tf,
+                        "Total Sinyal": _total,
+                        "TP": _tp,
+                        "SL": _sl,
+                        "NO HIT": _no,
+                        "TP Rate (%)": _rate
+                    })
+
+            
+            if summaries:
+                summary_df = pd.DataFrame(summaries)
+
+                # Hitung persentase per kategori
+                summary_df["TP (%)"] = (summary_df["TP"] / summary_df["Total Sinyal"] * 100).round(2)
+                summary_df["SL (%)"] = (summary_df["SL"] / summary_df["Total Sinyal"] * 100).round(2)
+                summary_df["NO HIT (%)"] = (summary_df["NO HIT"] / summary_df["Total Sinyal"] * 100).round(2)
+
+                summary_df = summary_df.sort_values(by="TP Rate (%)", ascending=False)
+
+                summary_df.to_excel(os.path.join(result_dir, "summary_backtest.xlsx"), index=False)
+
+        return summaries
