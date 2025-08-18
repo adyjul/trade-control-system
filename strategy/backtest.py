@@ -82,7 +82,7 @@ def evaluate_tp_sl(df, look_ahead=6, tp_mult=1.0, sl_mult=0.8):
                     break
     return df
 
-def run_trend_rider_backtest(pairs, start_date, end_date, look_ahead=6, tp_mult=1.0, sl_mult=0.8):
+def run_full_backtest(pairs, start_date, end_date, look_ahead=6, tp_mult=1.0, sl_mult=0.8):
     os.makedirs(DEFAULT_DATA_DIR, exist_ok=True)
     os.makedirs(DEFAULT_RESULT_DIR, exist_ok=True)
     clear_folder(DEFAULT_DATA_DIR)
