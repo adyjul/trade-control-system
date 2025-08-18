@@ -403,7 +403,7 @@ def run_full_backtest(
 
         df['signal'] = df.apply(detect_signal, axis=1)
         df = apply_filters(df)
-        df = apply_trend_rider(df)  # ← trend rider
+        # df = apply_trend_rider(df)  # ← trend rider
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
 
