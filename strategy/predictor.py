@@ -211,7 +211,7 @@ def run_predict():
                 # )
 
                 df['signal'] = df.apply(detect_signal, axis=1)
-                # df = apply_filters(df)
+                df = apply_filters(df)
                 df = detect_potential_breakout(df)
 
                 df_signal = df[df['signal'].isin(['LONG', 'SHORT'])].copy()
