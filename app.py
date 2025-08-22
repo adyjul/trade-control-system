@@ -178,7 +178,7 @@ def backtest_summary():
 
 @app.route('/backtest/summary_data')
 def backtest_summary_data():
-    df = pd.read_excel("/root/trade-control-system/backtest_by_data/summary_backtest.xlsx")
+    df = pd.read_excel("/root/trade-control-system/backtest_result_data/summary_backtest.xlsx")
     summary = df.to_dict(orient='records')
     return render_template("summary_backtest.html", summary=summary)
 
