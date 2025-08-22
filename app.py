@@ -5,6 +5,7 @@ from db import init_db  # to ensure import side effect? we used separate file, s
 import os
 import pandas as pd
 from strategy.backtest import run_full_backtest
+from strategy.backtest_data import run_full_backtest_data
 from strategy.ml.train_model import train_all_models
 import shutil
 
@@ -63,7 +64,7 @@ def new_bot():
         }
         insert_bot(data)
         return redirect(url_for('index'))
-
+    
 @app.route('/bots/<int:bot_id>/delete', methods=['POST'])
 @requires_auth
 def delete_bot(bot_id):
@@ -143,6 +144,21 @@ def backtest_new():
     status = request.args.get("status")
     err = request.args.get("err")
     return render_template("backtest_form.html",status=status,err=err)  # form input pair/tf
+
+@app.route('/backtest/new_data', methods=['GET', 'POST'])
+@requires_auth
+def new_bot_data():
+    if request.method == "POST":
+        raw_data = request.form['pair']
+        pairs = raw_data.split(',')
+        tf = request.form["timeframe"]
+        limit = request.form["limit"]
+        res = run_full_backtest_data(pairs, tf, limit)
+        return redirect(url_for('backtest_summary'))
+
+    status = request.args.get("status")
+    err = request.args.get("err")
+    return render_template("backtest_form.html",status=status,err=err)
 
 @app.route("/make_model", methods=["GET"])
 def make_model():

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{% if status == "success" %}
+  <div style="padding: 10px; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; margin-bottom: 15px;">
+    ✅ Model berhasil dibuat.
+  </div>
+{% elif status == "error" %}
+  <div style="padding: 10px; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; margin-bottom: 15px;">
+    ❌ Gagal membuat model: {{ err }}
+  </div>
+{% endif %}
+
+<form method="POST">
+  <label>Pair:</label><br>
+  <input type="text" name="pair" placeholder="contoh: INJUSDT" required><br>
+  <label>Limit:</label><br>
+  <input type="text" name="limit" placeholder="contoh: 100" required><br>
+  <label>Timeframe:</label><br>
+  <select name="timeframe">
+    <option value="1h">1h</option>
+    <option value="4h">4h</option>
+    <option value="15m">15m</option>
+    <option value="1d">1d</option>
+  </select><br><br>
+  <button type="submit">🔁 Jalankan Backtest</button>
+</form>
+{% endblock %}
