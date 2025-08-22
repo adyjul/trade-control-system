@@ -158,7 +158,7 @@ def new_bot_data():
 
     status = request.args.get("status")
     err = request.args.get("err")
-    return render_template("backtest_form.html",status=status,err=err)
+    return render_template("backtest_form_data.html",status=status,err=err)
 
 @app.route("/make_model", methods=["GET"])
 def make_model():
