@@ -228,6 +228,37 @@ def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
 
     return False
 
+import ta
+
+def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05):
+    """
+    Tambahkan filter sideways ke dataframe
+    - ADX < adx_threshold -> sideways
+    - BBWidth < bbw_threshold -> sideways
+    """
+
+    # Hitung ADX
+    adx = ta.trend.ADXIndicator(
+        high=df['high'], 
+        low=df['low'], 
+        close=df['close'], 
+        window=14
+    ).adx()
+
+    # Hitung Bollinger Band Width
+    bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+    bb_width = (bb.bollinger_hband() - bb.bollinger_lband()) / df['close']
+
+    # Simpan ke dataframe
+    df['ADX'] = adx
+    df['BBWidth'] = bb_width
+
+    # Buat kolom filter sideways
+    df['sideways'] = (df['ADX'] < adx_threshold) & (df['BBWidth'] < bbw_threshold)
+
+    return df
+
+
 def apply_filters(df):
     df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
@@ -304,6 +335,10 @@ def run_full_backtest_data(
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
         df = apply_filters(df)
+        df = add_sideways_filter(df)
+        for i in range(len(df)):
+            if df.iloc[i]['sideways']:
+                df.loc[i, 'signal'] = 'HOLD'
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
 
