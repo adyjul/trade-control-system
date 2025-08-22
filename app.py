@@ -154,12 +154,12 @@ def new_bot_data():
         tf = request.form["timeframe"]
         limit = request.form["limit"]
         res = run_full_backtest_data(pairs, tf, limit)
-        return redirect(url_for('backtest_summary'))
+        return redirect(url_for('backtest_summary_data'))
 
     status = request.args.get("status")
     err = request.args.get("err")
     return render_template("backtest_form_data.html",status=status,err=err)
-    
+
 @app.route("/make_model", methods=["GET"])
 def make_model():
     try:
@@ -173,6 +173,12 @@ def make_model():
 @app.route('/backtest/summary')
 def backtest_summary():
     df = pd.read_excel("/root/trade-control-system/backtest_result/summary_backtest.xlsx")
+    summary = df.to_dict(orient='records')
+    return render_template("summary_backtest.html", summary=summary)
+
+@app.route('/backtest/summary_data')
+def backtest_summary_data():
+    df = pd.read_excel("/root/trade-control-system/backtest_by_data/summary_backtest.xlsx")
     summary = df.to_dict(orient='records')
     return render_template("summary_backtest.html", summary=summary)
 
