@@ -337,6 +337,10 @@ def apply_filters(df):
 
     df = add_indicators(df)
 
+    if 'raw_signal' not in df.columns:
+        df['raw_signal'] = df['signal']
+
+
     df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
     # df['false_reversal'] = df.apply(lambda row: is_false_reversal_v2(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
@@ -345,20 +349,8 @@ def apply_filters(df):
 
     df = add_sideways_filter(df)  # pakai refined version
     for i in range(len(df)):
-        if df.iloc[i]['sideways']:
-            # default HOLD kalau sideways
-            df.loc[df.index[i], 'signal'] = 'HOLD'
-
-            # cek breakout + volume tinggi → override
-            close = df['close'].iloc[i]
-            upper = df['bb_upper'].iloc[i]
-            lower = df['bb_lower'].iloc[i]
-            volume = df['volume'].iloc[i]
-            avg_vol = df['volume'].iloc[max(0, i-20):i].mean()
-
-            if (close > upper or close < lower) and volume > avg_vol * 1.2:
-                # override → tetap entry
-                df.loc[df.index[i], 'signal'] = df['raw_signal'].iloc[i] if 'raw_signal' in df.columns else df['signal'].iloc[i]
+        if df.iloc[i]['sideways'] and df['raw_signal'].iloc[i] in ['LONG', 'SHORT']:
+            df.loc[df.index[i], 'signal'] = f"SCALP_{df['raw_signal'].iloc[i]}"
 
     return df
     
@@ -474,7 +466,7 @@ def run_full_backtest_data(
         df_export.to_excel(full_all_path, index=False)
         print(f"📄 Full signals saved: {pair} {timeframe}")
 
-        df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()   
+        df = df[df['signal'].isin(['LONG', 'SHORT','SCALP_LONG','SCALP_SHORT'])].copy()   
 
         if df.empty:
             # tidak ada sinyal sama sekali
