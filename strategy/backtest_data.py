@@ -110,8 +110,8 @@ def detect_signal(row):
     # return 'HOLD'
 
     # v2 mungkin untuk weekend
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    #     return 'HOLD'
 
     # Filter ATR kecil → tidak volatile
     # if row['atr'] < 0.005 * row['close']:
@@ -334,7 +334,7 @@ def run_full_backtest_data(
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
-        # df = apply_filters(df)
+        df = apply_filters(df)
         # df = add_sideways_filter(df)
         # for i in range(len(df)):
         #     if df.iloc[i]['sideways']:
