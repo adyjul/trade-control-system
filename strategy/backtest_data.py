@@ -118,22 +118,22 @@ def detect_signal(row):
     #     return 'HOLD'
 
     # ========== LONG Condition ==========
-    # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-    #     if row['rsi'] > 75:  # Overbought → hindari entry LONG
-    #         return 'HOLD'
-    #     if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
-    #         return 'HOLD'
-    #     return 'LONG'
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+        if row['rsi'] > 75:  # Overbought → hindari entry LONG
+            return 'HOLD'
+        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
+            return 'HOLD'
+        return 'LONG'
 
     # ========== SHORT Condition ==========
-    # if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-    #     if row['rsi'] < 35:  # Oversold → hindari entry SHORT
-    #         return 'HOLD'
-    #     if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
-    #         return 'HOLD'
-    #     return 'SHORT'
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+        if row['rsi'] < 35:  # Oversold → hindari entry SHORT
+            return 'HOLD'
+        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
+            return 'HOLD'
+        return 'SHORT'
 
-    # return 'HOLD'
+    return 'HOLD'
 
     # v3
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) or pd.isna(row['prev_high']):
@@ -167,7 +167,7 @@ def detect_signal(row):
     #         return 'HOLD'
     #     return 'SHORT'
 
-    return 'HOLD'
+    # return 'HOLD'
 
 def clear_folder(folder_path):
     for file_path in glob.glob(os.path.join(folder_path, '*')):
