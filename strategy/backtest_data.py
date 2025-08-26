@@ -228,6 +228,56 @@ def is_false_reversal(row, df, atr_window=14, ma_fast=50, ma_slow=100):
 
     return False
 
+def is_false_reversal_v2(row, df, atr_window=14, ma_fast=50, ma_slow=100):
+    """
+    Versi eksperimen:
+    - Pakai 1 candle confirm saja (lebih longgar)
+    - Risiko: lebih banyak false sinyal lolos
+    """
+    idx = df.index.get_loc(row.name)
+    close = row['close']
+    
+    if idx < max(atr_window, ma_slow):
+        return False  # data belum cukup
+
+    # Moving Average filter
+    ma50 = df['close'].rolling(ma_fast).mean().iloc[idx]
+    ma100 = df['close'].rolling(ma_slow).mean().iloc[idx]
+
+    # ATR filter
+    high = df['high'].iloc[idx - atr_window:idx]
+    low = df['low'].iloc[idx - atr_window:idx]
+    close_prev = df['close'].iloc[idx - atr_window:idx]
+    tr1 = high - low
+    tr2 = abs(high - close_prev.shift(1))
+    tr3 = abs(low - close_prev.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(atr_window).mean().iloc[-1]
+
+    # Hanya 1 candle confirm
+    bullish_confirm = row['close'] > row['open']
+    bearish_confirm = row['close'] < row['open']
+
+    # Long filter
+    if row['signal'] == 'LONG':
+        if close < ma50 or close < ma100:
+            return True
+        if not bullish_confirm:
+            return True
+        if (df['open'].iloc[idx-1] - df['close'].iloc[idx-1]) > atr:
+            return True
+
+    # Short filter
+    if row['signal'] == 'SHORT':
+        if close > ma50 or close > ma100:
+            return True
+        if not bearish_confirm:
+            return True
+        if (df['close'].iloc[idx-1] - df['open'].iloc[idx-1]) > atr:
+            return True
+
+    return False
+
 import ta
 
 def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05):
@@ -260,7 +310,8 @@ def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05):
 
 
 def apply_filters(df):
-    df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
+    # df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
+    df['false_reversal'] = df.apply(lambda row: is_false_reversal_v2(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
     df.loc[df['false_reversal'], 'signal'] = 'HOLD'
     return df
