@@ -343,22 +343,22 @@ def apply_filters(df):
     df.loc[df['false_reversal'], 'signal'] = 'HOLD'
 
 
-    # df = add_sideways_filter(df)  # pakai refined version
-    # for i in range(len(df)):
-    #     if df.iloc[i]['sideways']:
-    #         # default HOLD kalau sideways
-    #         df.loc[df.index[i], 'signal'] = 'HOLD'
+    df = add_sideways_filter(df)  # pakai refined version
+    for i in range(len(df)):
+        if df.iloc[i]['sideways']:
+            # default HOLD kalau sideways
+            df.loc[df.index[i], 'signal'] = 'HOLD'
 
-    #         # cek breakout + volume tinggi → override
-    #         close = df['close'].iloc[i]
-    #         upper = df['bb_upper'].iloc[i]
-    #         lower = df['bb_lower'].iloc[i]
-    #         volume = df['volume'].iloc[i]
-    #         avg_vol = df['volume'].iloc[max(0, i-20):i].mean()
+            # cek breakout + volume tinggi → override
+            close = df['close'].iloc[i]
+            upper = df['bb_upper'].iloc[i]
+            lower = df['bb_lower'].iloc[i]
+            volume = df['volume'].iloc[i]
+            avg_vol = df['volume'].iloc[max(0, i-20):i].mean()
 
-    #         if (close > upper or close < lower) and volume > avg_vol * 1.2:
-    #             # override → tetap entry
-    #             df.loc[df.index[i], 'signal'] = df['raw_signal'].iloc[i] if 'raw_signal' in df.columns else df['signal'].iloc[i]
+            if (close > upper or close < lower) and volume > avg_vol * 1.2:
+                # override → tetap entry
+                df.loc[df.index[i], 'signal'] = df['raw_signal'].iloc[i] if 'raw_signal' in df.columns else df['signal'].iloc[i]
 
     return df
     
