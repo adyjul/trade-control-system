@@ -491,6 +491,13 @@ def run_full_backtest_data(
         df['sl_price'] = df['entry_price'] - df['atr'] * sl_atr_mult
         df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
         df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
+
+        # --- Tambahan untuk SCALPING mode ---
+        df.loc[df['signal'] == 'SCALP_LONG', 'tp_price'] = df['entry_price'] + df['atr'] * 0.5
+        df.loc[df['signal'] == 'SCALP_LONG', 'sl_price'] = df['entry_price'] - df['atr'] * 0.5
+
+        df.loc[df['signal'] == 'SCALP_SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * 0.5
+        df.loc[df['signal'] == 'SCALP_SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * 0.5
         
         # --- evaluasi ---
         df = evaluate_tp_sl(df, look_ahead=look_ahead)
