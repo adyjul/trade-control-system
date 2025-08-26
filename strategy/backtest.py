@@ -139,7 +139,7 @@ def detect_breakout(row):
 
     return False
 
-def add_sideways_filter(df, adx_threshold=15, bbw_threshold=0.03, vol_multiplier=1.2):
+def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05, vol_multiplier=1.2):
     """
     Sideways filter refined:
     - Default HOLD kalau sideways (ADX rendah + BB sempit)
