@@ -31,16 +31,41 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
         # future_slice = df.loc[idxs[i+1:i+1+look_ahead]]
         # future_slice = df.iloc[idx_start+1:idx_start+7]
         future_slice = df.iloc[idx_start+1:idx_start+1+look_ahead]
+
+        # for _, f in future_slice.iterrows():
+        #     if signal == 'LONG':
+        #         if f['high'] >= tp:
+        #             df.at[ts, 'exit_status'] = 'TP HIT'
+        #             break
+        #         elif f['low'] <= sl:
+        #             df.at[ts, 'exit_status'] = 'SL HIT'
+        #             break
+        #     elif signal == 'SHORT':
+        #         if f['low'] <= tp:
+        #             df.at[ts, 'exit_status'] = 'TP HIT'
+        #             break
+        #         elif f['high'] >= sl:
+        #             df.at[ts, 'exit_status'] = 'SL HIT'
+        #             break
+
         for _, f in future_slice.iterrows():
-            if signal == 'LONG':
-                if f['high'] >= tp:
+            if signal in ['LONG', 'SCALP_LONG']:
+                # kalau 1 candle kena TP & SL → SL diprioritaskan (konservatif)
+                if f['low'] <= sl and f['high'] >= tp:
+                    df.at[ts, 'exit_status'] = 'SL HIT'
+                    break
+                elif f['high'] >= tp:
                     df.at[ts, 'exit_status'] = 'TP HIT'
                     break
                 elif f['low'] <= sl:
                     df.at[ts, 'exit_status'] = 'SL HIT'
                     break
-            elif signal == 'SHORT':
-                if f['low'] <= tp:
+
+            elif signal in ['SHORT', 'SCALP_SHORT']:
+                if f['high'] >= sl and f['low'] <= tp:
+                    df.at[ts, 'exit_status'] = 'SL HIT'
+                    break
+                elif f['low'] <= tp:
                     df.at[ts, 'exit_status'] = 'TP HIT'
                     break
                 elif f['high'] >= sl:
