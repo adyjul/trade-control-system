@@ -334,11 +334,11 @@ def run_full_backtest_data(
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
-        df = apply_filters(df)
-        df = add_sideways_filter(df)
-        for i in range(len(df)):
-            if df.iloc[i]['sideways']:
-                df.loc[i, 'signal'] = 'HOLD'
+        # df = apply_filters(df)
+        # df = add_sideways_filter(df)
+        # for i in range(len(df)):
+        #     if df.iloc[i]['sideways']:
+        #         df.loc[i, 'signal'] = 'HOLD'
         df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
 
