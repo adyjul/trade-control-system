@@ -114,8 +114,8 @@ def detect_signal(row):
     #     return 'HOLD'
 
     # Filter ATR kecil → tidak volatile
-    # if row['atr'] < 0.005 * row['close']:
-    #     return 'HOLD'
+    if row['atr'] < 0.005 * row['close']:
+        return 'HOLD'
 
     # ========== LONG Condition ==========
     # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
