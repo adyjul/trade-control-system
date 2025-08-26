@@ -136,8 +136,8 @@ def detect_signal(row):
     # return 'HOLD'
 
     # v3
-    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) or pd.isna(row['prev_high']):
-    #     return 'HOLD'
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) or pd.isna(row['prev_high']):
+        return 'HOLD'
 
     # if row['atr'] < 0.005 * row['close']:
     #     return 'HOLD'
