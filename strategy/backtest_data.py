@@ -280,11 +280,11 @@ def is_false_reversal_v2(row, df, atr_window=14, ma_fast=50, ma_slow=100):
 
 import ta
 
-def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05, vol_multiplier=1.2):
+def add_sideways_filter(df, adx_threshold=15, bbw_threshold=0.03, vol_multiplier=1.2):
     """
     Sideways filter refined:
-    - Default: HOLD di sideways
-    - Tapi kalau ada breakout (close keluar dari BB) + volume tinggi → sinyal tetap boleh
+    - Default HOLD kalau sideways (ADX rendah + BB sempit)
+    - Tapi breakout dengan volume tinggi → tetap entry
     """
     df['sideways'] = False
 
