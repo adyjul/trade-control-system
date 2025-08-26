@@ -280,31 +280,29 @@ def is_false_reversal_v2(row, df, atr_window=14, ma_fast=50, ma_slow=100):
 
 import ta
 
-def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05):
+def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05, vol_multiplier=1.2):
     """
-    Tambahkan filter sideways ke dataframe
-    - ADX < adx_threshold -> sideways
-    - BBWidth < bbw_threshold -> sideways
+    Sideways filter refined:
+    - Default: HOLD di sideways
+    - Tapi kalau ada breakout (close keluar dari BB) + volume tinggi → sinyal tetap boleh
     """
+    df['sideways'] = False
 
-    # Hitung ADX
-    adx = ta.trend.ADXIndicator(
-        high=df['high'], 
-        low=df['low'], 
-        close=df['close'], 
-        window=14
-    ).adx()
+    for i in range(len(df)):
+        if df['adx'].iloc[i] < adx_threshold and df['bb_width'].iloc[i] < bbw_threshold:
+            # default sideways
+            df.loc[df.index[i], 'sideways'] = True
 
-    # Hitung Bollinger Band Width
-    bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-    bb_width = (bb.bollinger_hband() - bb.bollinger_lband()) / df['close']
+            # breakout check
+            close = df['close'].iloc[i]
+            upper = df['bb_upper'].iloc[i]
+            lower = df['bb_lower'].iloc[i]
+            volume = df['volume'].iloc[i]
+            avg_vol = df['volume'].iloc[max(0, i-20):i].mean()
 
-    # Simpan ke dataframe
-    df['ADX'] = adx
-    df['BBWidth'] = bb_width
-
-    # Buat kolom filter sideways
-    df['sideways'] = (df['ADX'] < adx_threshold) & (df['BBWidth'] < bbw_threshold)
+            if (close > upper or close < lower) and volume > avg_vol * vol_multiplier:
+                # override → tetap boleh entry
+                df.loc[df.index[i], 'sideways'] = False
 
     return df
 
@@ -314,7 +312,28 @@ def apply_filters(df):
     # df['false_reversal'] = df.apply(lambda row: is_false_reversal_v2(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
     df.loc[df['false_reversal'], 'signal'] = 'HOLD'
+
+
+    df = add_sideways_filter(df)  # pakai refined version
+    for i in range(len(df)):
+        if df.iloc[i]['sideways']:
+            # default HOLD kalau sideways
+            df.loc[df.index[i], 'signal'] = 'HOLD'
+
+            # cek breakout + volume tinggi → override
+            close = df['close'].iloc[i]
+            upper = df['bb_upper'].iloc[i]
+            lower = df['bb_lower'].iloc[i]
+            volume = df['volume'].iloc[i]
+            avg_vol = df['volume'].iloc[max(0, i-20):i].mean()
+
+            if (close > upper or close < lower) and volume > avg_vol * 1.2:
+                # override → tetap entry
+                df.loc[df.index[i], 'signal'] = df['raw_signal'].iloc[i] if 'raw_signal' in df.columns else df['signal'].iloc[i]
+
     return df
+
+    # return df
     
         
 def run_full_backtest_data(
