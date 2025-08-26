@@ -306,8 +306,37 @@ def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05, vol_multiplier
 
     return df
 
+def add_indicators(df, adx_period=14, bb_period=20):
+    # ATR components
+    df['H-L'] = df['high'] - df['low']
+    df['H-PC'] = abs(df['high'] - df['close'].shift(1))
+    df['L-PC'] = abs(df['low'] - df['close'].shift(1))
+    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+    df['ATR'] = df['TR'].rolling(adx_period).mean()
+
+    # ADX
+    df['upMove'] = df['high'] - df['high'].shift(1)
+    df['downMove'] = df['low'].shift(1) - df['low']
+    df['plusDM'] = np.where((df['upMove'] > df['downMove']) & (df['upMove'] > 0), df['upMove'], 0.0)
+    df['minusDM'] = np.where((df['downMove'] > df['upMove']) & (df['downMove'] > 0), df['downMove'], 0.0)
+    df['plusDI'] = 100 * (df['plusDM'].rolling(adx_period).mean() / df['ATR'])
+    df['minusDI'] = 100 * (df['minusDM'].rolling(adx_period).mean() / df['ATR'])
+    df['dx'] = (abs(df['plusDI'] - df['minusDI']) / (df['plusDI'] + df['minusDI'])) * 100
+    df['adx'] = df['dx'].rolling(adx_period).mean()
+
+    # Bollinger Bands
+    df['bb_middle'] = df['close'].rolling(bb_period).mean()
+    df['bb_std'] = df['close'].rolling(bb_period).std()
+    df['bb_upper'] = df['bb_middle'] + 2 * df['bb_std']
+    df['bb_lower'] = df['bb_middle'] - 2 * df['bb_std']
+    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+
+    return df
 
 def apply_filters(df):
+
+    df = add_indicators(df)
+
     df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
     # df['false_reversal'] = df.apply(lambda row: is_false_reversal_v2(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
