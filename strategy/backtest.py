@@ -20,6 +20,7 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
     """
     df['exit_status'] = 'NO HIT'
     idxs = list(df.index)
+    
     for i, ts in enumerate(idxs):
         row = df.loc[ts]
         signal = row['signal']
@@ -31,15 +32,32 @@ def evaluate_tp_sl(df: pd.DataFrame, look_ahead=7) -> pd.DataFrame:
         # future_slice = df.loc[idxs[i+1:i+1+look_ahead]]
         # future_slice = df.iloc[idx_start+1:idx_start+7]
         future_slice = df.iloc[idx_start+1:idx_start+1+look_ahead]
+
+        # for _, f in future_slice.iterrows():
+        #     if signal == 'LONG':
+        #         if f['high'] >= tp:
+        #             df.at[ts, 'exit_status'] = 'TP HIT'
+        #             break
+        #         elif f['low'] <= sl:
+        #             df.at[ts, 'exit_status'] = 'SL HIT'
+        #             break
+        #     elif signal == 'SHORT':
+        #         if f['low'] <= tp:
+        #             df.at[ts, 'exit_status'] = 'TP HIT'
+        #             break
+        #         elif f['high'] >= sl:
+        #             df.at[ts, 'exit_status'] = 'SL HIT'
+        #             break
         for _, f in future_slice.iterrows():
-            if signal == 'LONG':
+            if signal in ['LONG', 'SCALP_LONG']:
                 if f['high'] >= tp:
                     df.at[ts, 'exit_status'] = 'TP HIT'
                     break
                 elif f['low'] <= sl:
                     df.at[ts, 'exit_status'] = 'SL HIT'
                     break
-            elif signal == 'SHORT':
+
+            elif signal in ['SHORT', 'SCALP_SHORT']:
                 if f['low'] <= tp:
                     df.at[ts, 'exit_status'] = 'TP HIT'
                     break
@@ -121,10 +139,74 @@ def detect_breakout(row):
 
     return False
 
+def add_sideways_filter(df, adx_threshold=15, bbw_threshold=0.03, vol_multiplier=1.2):
+    """
+    Sideways filter refined:
+    - Default HOLD kalau sideways (ADX rendah + BB sempit)
+    - Tapi breakout dengan volume tinggi → tetap entry
+    """
+    df['sideways'] = False
+
+    for i in range(len(df)):
+        if df['adx'].iloc[i] < adx_threshold and df['bb_width'].iloc[i] < bbw_threshold:
+            # default sideways
+            df.loc[df.index[i], 'sideways'] = True
+
+            # breakout check
+            close = df['close'].iloc[i]
+            upper = df['bb_upper'].iloc[i]
+            lower = df['bb_lower'].iloc[i]
+            volume = df['volume'].iloc[i]
+            avg_vol = df['volume'].iloc[max(0, i-20):i].mean()
+
+            if (close > upper or close < lower) and volume > avg_vol * vol_multiplier:
+                # override → tetap boleh entry
+                df.loc[df.index[i], 'sideways'] = False
+
+    return df
+
+def add_indicators(df, adx_period=14, bb_period=20):
+    # ATR components
+    df['H-L'] = df['high'] - df['low']
+    df['H-PC'] = abs(df['high'] - df['close'].shift(1))
+    df['L-PC'] = abs(df['low'] - df['close'].shift(1))
+    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+    df['ATR'] = df['TR'].rolling(adx_period).mean()
+
+    # ADX
+    df['upMove'] = df['high'] - df['high'].shift(1)
+    df['downMove'] = df['low'].shift(1) - df['low']
+    df['plusDM'] = np.where((df['upMove'] > df['downMove']) & (df['upMove'] > 0), df['upMove'], 0.0)
+    df['minusDM'] = np.where((df['downMove'] > df['upMove']) & (df['downMove'] > 0), df['downMove'], 0.0)
+    df['plusDI'] = 100 * (df['plusDM'].rolling(adx_period).mean() / df['ATR'])
+    df['minusDI'] = 100 * (df['minusDM'].rolling(adx_period).mean() / df['ATR'])
+    df['dx'] = (abs(df['plusDI'] - df['minusDI']) / (df['plusDI'] + df['minusDI'])) * 100
+    df['adx'] = df['dx'].rolling(adx_period).mean()
+
+    # Bollinger Bands
+    df['bb_middle'] = df['close'].rolling(bb_period).mean()
+    df['bb_std'] = df['close'].rolling(bb_period).std()
+    df['bb_upper'] = df['bb_middle'] + 2 * df['bb_std']
+    df['bb_lower'] = df['bb_middle'] - 2 * df['bb_std']
+    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+
+    return df
+
 def apply_filters(df):
+    df = add_indicators(df)
+
+    if 'raw_signal' not in df.columns:
+        df['raw_signal'] = df['signal']
+
     df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
     df.loc[df['false_reversal'], 'signal'] = 'HOLD'
+
+    df = add_sideways_filter(df)  # pakai refined version
+    for i in range(len(df)):
+        if df.iloc[i]['sideways'] and df['raw_signal'].iloc[i] in ['LONG', 'SHORT']:
+            df.loc[df.index[i], 'signal'] = f"SCALP_{df['raw_signal'].iloc[i]}"
+
     return df
 
 def period_to_start_timestamp(period: str) -> int:
@@ -247,22 +329,6 @@ def clear_folder(folder_path):
         except Exception as e:
             print(f"Failed to delete {file_path}: {e}")
 
-def detect_sideways(df, atr_threshold=0.02, bb_threshold=0.02, rsi_low=45, rsi_high=55):
-    df["sideways_signal"] = False
-    
-    # ATR relatif terhadap harga
-    df["atr_pct"] = df["atr"] / df["close"]
-    # Bandwidth relatif terhadap harga
-    df["bb_width"] = (df["bb_high"] - df["bb_low"]) / df["close"]
-
-    cond_atr = df["atr_pct"] < atr_threshold
-    cond_bb = df["bb_width"] < bb_threshold
-    cond_rsi = (df["rsi"] > rsi_low) & (df["rsi"] < rsi_high)
-
-    # sideways kalau minimal 2 dari 3 kondisi terpenuhi
-    df.loc[(cond_atr & cond_rsi) | (cond_bb & cond_rsi), "sideways_signal"] = True
-    
-    return df
 
 def trend_rider_signal(row, df, ma_fast=50, ma_slow=100):
     idx = df.index.get_loc(row.name)
@@ -442,7 +508,7 @@ def run_full_backtest(
         df_export.to_excel(full_all_path, index=False)
         print(f"📄 Full signals saved: {pair} {timeframe}")
 
-        df = df[df['signal'].isin(['LONG', 'SHORT'])].copy()   
+        df = df[df['signal'].isin(['LONG', 'SHORT','SCALP_LONG','SCALP_SHORT'])].copy()   
 
         if df.empty:
             # tidak ada sinyal sama sekali
@@ -468,6 +534,13 @@ def run_full_backtest(
         df.loc[df['signal'] == 'SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * tp_atr_mult
         df.loc[df['signal'] == 'SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * sl_atr_mult
         
+        # --- Tambahan untuk SCALPING mode ---
+        df.loc[df['signal'] == 'SCALP_LONG', 'tp_price'] = df['entry_price'] + df['atr'] * 0.5
+        df.loc[df['signal'] == 'SCALP_LONG', 'sl_price'] = df['entry_price'] - df['atr'] * 0.5
+
+        df.loc[df['signal'] == 'SCALP_SHORT', 'tp_price'] = df['entry_price'] - df['atr'] * 0.5
+        df.loc[df['signal'] == 'SCALP_SHORT', 'sl_price'] = df['entry_price'] + df['atr'] * 0.5
+
         # --- evaluasi ---
         df = evaluate_tp_sl(df, look_ahead=look_ahead)
         df['label'] = df['exit_status'].map({'TP HIT': 1, 'SL HIT': 0, 'NO HIT': -1})
