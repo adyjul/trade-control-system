@@ -107,11 +107,11 @@ def detect_signal(row):
             return 'HOLD'
         return 'SHORT'
 
-    return 'HOLD'
+    # return 'HOLD'
 
     # v2 mungkin untuk weekend
-    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-    #     return 'HOLD'
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+        return 'HOLD'
 
     # Filter ATR kecil → tidak volatile
     # if row['atr'] < 0.005 * row['close']:
@@ -167,7 +167,7 @@ def detect_signal(row):
     #         return 'HOLD'
     #     return 'SHORT'
 
-    # return 'HOLD'
+    return 'HOLD'
 
 def clear_folder(folder_path):
     for file_path in glob.glob(os.path.join(folder_path, '*')):
