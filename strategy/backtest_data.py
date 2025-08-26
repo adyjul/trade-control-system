@@ -310,8 +310,8 @@ def add_sideways_filter(df, adx_threshold=20, bbw_threshold=0.05):
 
 
 def apply_filters(df):
-    # df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
-    df['false_reversal'] = df.apply(lambda row: is_false_reversal_v2(row, df), axis=1)
+    df['false_reversal'] = df.apply(lambda row: is_false_reversal(row, df), axis=1)
+    # df['false_reversal'] = df.apply(lambda row: is_false_reversal_v2(row, df), axis=1)
     # Filter sinyal → hapus kalau false_reversal = True
     df.loc[df['false_reversal'], 'signal'] = 'HOLD'
     return df
