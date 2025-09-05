@@ -210,6 +210,10 @@ def run_predict():
                 #     (df['low'] < df['support'])
                 # )
 
+                # EMA untuk crossing line filter
+                df['ema_fast'] = df['close'].ewm(span=9, adjust=False).mean()
+                df['ema_slow'] = df['close'].ewm(span=21, adjust=False).mean()
+
                 df['signal'] = df.apply(detect_signal, axis=1)
                 df = apply_filters(df)
                 df = detect_potential_breakout(df)
