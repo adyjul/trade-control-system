@@ -473,7 +473,7 @@ def run_full_backtest(
         df['signal'] = df.apply(detect_signal, axis=1)
         df = apply_filters(df)
         # df = apply_trend_rider(df)  # ← trend rider
-        # df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
+        df['is_fake_breakout'] = df.apply(detect_breakout, axis=1)
         df = detect_potential_breakout(df)
 
         # df['is_potential_breakout'] = (
@@ -481,31 +481,30 @@ def run_full_backtest(
         #     (df['low'] < df['support'])
         # )
 
-        # df['is_breakout_zone'] = df['is_fake_breakout']
+        df['is_breakout_zone'] = df['is_fake_breakout']
         df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
         df['entry_signal'] = df['is_potential_breakout'].astype(int)
         
         for i in range(len(df)):
-            trigger_long = df.iloc[i]['high'] + df.iloc[i]['atr'] * 0.2
-            trigger_short = df.iloc[i]['low'] - df.iloc[i]['atr'] * 0.2
+            if df.iloc[i]['is_breakout_zone']:
+                trigger_long = df.iloc[i]['high'] + df.iloc[i]['atr'] * 0.2
+                trigger_short = df.iloc[i]['low'] - df.iloc[i]['atr'] * 0.2
 
-            future = df.iloc[i+1:i+3]  # 2 candle ke depan
+                future = df.iloc[i+1:i+3]  # 2 candle ke depan
 
-            triggered = False
-            for _, fut in future.iterrows():
-                if fut['high'] >= trigger_long:
-                    df.at[df.index[i], 'entry_type'] = 'LONG'
-                    triggered = True
-                    break
-                elif fut['low'] <= trigger_short:
-                    df.at[df.index[i], 'entry_type'] = 'SHORT'
-                    triggered = True
-                    break
+                triggered = False
+                for _, fut in future.iterrows():
+                    if fut['high'] >= trigger_long:
+                        df.at[df.index[i], 'entry_type'] = 'LONG'
+                        triggered = True
+                        break
+                    elif fut['low'] <= trigger_short:
+                        df.at[df.index[i], 'entry_type'] = 'SHORT'
+                        triggered = True
+                        break
 
-            if not triggered:
-                df.at[df.index[i], 'entry_type'] = 'CANCELLED'
-            # if df.iloc[i]['is_breakout_zone']:
-               
+                if not triggered:
+                    df.at[df.index[i], 'entry_type'] = 'CANCELLED'
 
         df_export = df.reset_index().rename(columns={'index': 'timestamp'})
         full_all_path = os.path.join(result_dir, f"{pair}_{timeframe}_all_signals.xlsx")
