@@ -481,7 +481,7 @@ def run_full_backtest(
         #     (df['low'] < df['support'])
         # )
 
-        df['is_breakout_zone'] = df['is_fake_breakout']
+        # df['is_breakout_zone'] = df['is_fake_breakout']
         df['entry_type'] = None  # 'LONG', 'SHORT', atau 'CANCELLED'
         df['entry_signal'] = df['is_potential_breakout'].astype(int)
         
