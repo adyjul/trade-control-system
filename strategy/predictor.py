@@ -18,21 +18,21 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 def detect_signal(row):
     # v1
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    #     return 'HOLD'
 
-    if row['atr'] < 0.005 * row['close']:
-        return 'HOLD'
+    # if row['atr'] < 0.005 * row['close']:
+    #     return 'HOLD'
 
-    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
+    # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+    #     return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
-    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-        if row['rsi'] < 35:
-            return 'HOLD'
-        return 'SHORT'
+    # if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+    #     if row['rsi'] < 35:
+    #         return 'HOLD'
+    #     return 'SHORT'
 
-    return 'HOLD'
+    # return 'HOLD'
 
     # v2 dihidupkan kalau sudah urgent
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
@@ -64,6 +64,26 @@ def detect_signal(row):
     #     return 'SHORT'
 
     # return 'HOLD'
+
+    # v4
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) \
+       or pd.isna(row['ema_fast']) or pd.isna(row['ema_slow']):
+        return 'HOLD'
+
+    if row['atr'] < 0.005 * row['close']:
+        return 'HOLD'
+
+    # LONG → butuh MACD bullish, RSI > 50, dan EMA fast > EMA slow
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 50 and row['ema_fast'] > row['ema_slow']:
+        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
+
+    # SHORT → butuh MACD bearish, RSI < 50, dan EMA fast < EMA slow
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 50 and row['ema_fast'] < row['ema_slow']:
+        if row['rsi'] < 35:
+            return 'HOLD'
+        return 'SHORT'
+
+    return 'HOLD'
 
 def clear_folder(folder_path):
     for file_path in glob.glob(os.path.join(folder_path, '*')):
