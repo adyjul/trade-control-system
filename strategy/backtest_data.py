@@ -118,47 +118,47 @@ def detect_potential_breakout(df, atr_mult=0.2, vol_mult=1.2):
 
 def detect_signal(row):
     # v1
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
-
-    if row['atr'] < 0.005 * row['close']:
-        return 'HOLD'
-
-    if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
-        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
-
-    if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
-        if row['rsi'] < 35:
-            return 'HOLD'
-        return 'SHORT'
-
-    return 'HOLD'
-
-    # v2 mungkin untuk weekend
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
     #     return 'HOLD'
 
-    # # Filter ATR kecil → tidak volatile
     # if row['atr'] < 0.005 * row['close']:
     #     return 'HOLD'
 
-    # # ========== LONG Condition ==========
-    # if row['macd'] > row['macd_signal'] and row['rsi'] > 55:
-    #     if row['rsi'] > 75:  # Overbought → hindari entry LONG
-    #         return 'HOLD'
-    #     if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
-    #         return 'HOLD'
-    #     return 'LONG'
+    # if row['macd'] > row['macd_signal'] and row['rsi'] > 50:
+    #     return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
 
-    # # ========== SHORT Condition ==========
-    # if row['macd'] < row['macd_signal'] and row['rsi'] < 45:
-    #     if row['rsi'] < 25:  # Oversold → hindari entry SHORT
-    #         return 'HOLD'
-    #     if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
+    # if row['macd'] < row['macd_signal'] and row['rsi'] < 50:
+    #     if row['rsi'] < 35:
     #         return 'HOLD'
     #     return 'SHORT'
 
     # return 'HOLD'
+
+    # v2 mungkin untuk weekend
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+        return 'HOLD'
+
+    # Filter ATR kecil → tidak volatile
+    if row['atr'] < 0.005 * row['close']:
+        return 'HOLD'
+
+    # ========== LONG Condition ==========
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 55:
+        if row['rsi'] > 75:  # Overbought → hindari entry LONG
+            return 'HOLD'
+        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
+            return 'HOLD'
+        return 'LONG'
+
+    # ========== SHORT Condition ==========
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 45:
+        if row['rsi'] < 25:  # Oversold → hindari entry SHORT
+            return 'HOLD'
+        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
+            return 'HOLD'
+        return 'SHORT'
+
+    return 'HOLD'
 
     # v3
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) or pd.isna(row['prev_high']):
