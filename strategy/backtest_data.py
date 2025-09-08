@@ -195,44 +195,44 @@ def detect_signal(row):
     # return 'HOLD'
 
     # v4
-    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) \
-    #    or pd.isna(row['ema_fast']) or pd.isna(row['ema_slow']):
-    #     return 'HOLD'
-
-    # if row['atr'] < 0.005 * row['close']:
-    #     return 'HOLD'
-
-    # # LONG → butuh MACD bullish, RSI > 50, dan EMA fast > EMA slow
-    # if row['macd'] > row['macd_signal'] and row['rsi'] > 50 and row['ema_fast'] > row['ema_slow']:
-    #     return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
-
-    # # SHORT → butuh MACD bearish, RSI < 50, dan EMA fast < EMA slow
-    # if row['macd'] < row['macd_signal'] and row['rsi'] < 50 and row['ema_fast'] < row['ema_slow']:
-    #     if row['rsi'] < 35:
-    #         return 'HOLD'
-    #     return 'SHORT'
-
-    # return 'HOLD'
-
-    # v5
-    # Filter data tidak lengkap
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']):
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) \
+       or pd.isna(row['ema_fast']) or pd.isna(row['ema_slow']):
         return 'HOLD'
 
-    # Filter volatilitas rendah
     if row['atr'] < 0.005 * row['close']:
         return 'HOLD'
 
-    # Filter trend kuat (ADX > 25) dan volume konfirmasi
-    if row['adx'] > 25 and row['volume'] > 2 * row['volume_sma20']:
-        # LONG: MACD bullish, RSI tidak overbought, dan close di atas resistance
-        if row['macd'] > row['macd_signal'] and 50 < row['rsi'] < 70 and row['close'] > row['resistance']:
-            return 'LONG'
-        # SHORT: MACD bearish, RSI tidak oversold, dan close di bawah support
-        elif row['macd'] < row['macd_signal'] and 35 < row['rsi'] < 45 and row['close'] < row['support']:
-            return 'SHORT'
+    # LONG → butuh MACD bullish, RSI > 50, dan EMA fast > EMA slow
+    if row['macd'] > row['macd_signal'] and row['rsi'] > 50 and row['ema_fast'] > row['ema_slow']:
+        return 'LONG' if row['volume'] > row['volume_sma20'] else 'LONG_WEAK'
+
+    # SHORT → butuh MACD bearish, RSI < 50, dan EMA fast < EMA slow
+    if row['macd'] < row['macd_signal'] and row['rsi'] < 50 and row['ema_fast'] < row['ema_slow']:
+        if row['rsi'] < 35:
+            return 'HOLD'
+        return 'SHORT'
 
     return 'HOLD'
+
+    # v5
+    # Filter data tidak lengkap
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']):
+    #     return 'HOLD'
+
+    # # Filter volatilitas rendah
+    # if row['atr'] < 0.005 * row['close']:
+    #     return 'HOLD'
+
+    # # Filter trend kuat (ADX > 25) dan volume konfirmasi
+    # if row['adx'] > 25 and row['volume'] > 2 * row['volume_sma20']:
+    #     # LONG: MACD bullish, RSI tidak overbought, dan close di atas resistance
+    #     if row['macd'] > row['macd_signal'] and 50 < row['rsi'] < 70 and row['close'] > row['resistance']:
+    #         return 'LONG'
+    #     # SHORT: MACD bearish, RSI tidak oversold, dan close di bawah support
+    #     elif row['macd'] < row['macd_signal'] and 35 < row['rsi'] < 45 and row['close'] < row['support']:
+    #         return 'SHORT'
+
+    # return 'HOLD'
 
 def clear_folder(folder_path):
     for file_path in glob.glob(os.path.join(folder_path, '*')):
