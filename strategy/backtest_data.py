@@ -490,6 +490,7 @@ def run_full_backtest_data(
         df['ema_slow'] = df['close'].ewm(span=21, adjust=False).mean()
 
         # --- sinyal ---
+        df = add_indicators(df)
         df['signal'] = df.apply(detect_signal, axis=1)
         # df = apply_filters(df)
         # df = add_sideways_filter(df)
