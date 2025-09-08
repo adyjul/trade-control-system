@@ -226,10 +226,10 @@ def detect_signal(row):
     # Filter trend kuat (ADX > 25) dan volume konfirmasi
     if row['adx'] > 25 and row['volume'] > 2 * row['volume_sma20']:
         # LONG: MACD bullish, RSI tidak overbought, dan close di atas resistance
-        if row['macd'] > row['macd_signal'] and 50 < row['rsi'] < 65 and row['close'] > row['resistance']:
+        if row['macd'] > row['macd_signal'] and 50 < row['rsi'] < 70 and row['close'] > row['resistance']:
             return 'LONG'
         # SHORT: MACD bearish, RSI tidak oversold, dan close di bawah support
-        elif row['macd'] < row['macd_signal'] and 35 < row['rsi'] < 50 and row['close'] < row['support']:
+        elif row['macd'] < row['macd_signal'] and 35 < row['rsi'] < 45 and row['close'] < row['support']:
             return 'SHORT'
 
     return 'HOLD'
