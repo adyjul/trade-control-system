@@ -135,30 +135,30 @@ def detect_signal(row):
     # return 'HOLD'
 
     # v2 mungkin untuk weekend
-    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
-        return 'HOLD'
+    # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']):
+    #     return 'HOLD'
 
     # Filter ATR kecil → tidak volatile
-    if row['atr'] < 0.005 * row['close']:
-        return 'HOLD'
+    # if row['atr'] < 0.005 * row['close']:
+    #     return 'HOLD'
 
     # ========== LONG Condition ==========
-    if row['macd'] > row['macd_signal'] and row['rsi'] > 55:
-        if row['rsi'] > 75:  # Overbought → hindari entry LONG
-            return 'HOLD'
-        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
-            return 'HOLD'
-        return 'LONG'
+    # if row['macd'] > row['macd_signal'] and row['rsi'] > 55:
+    #     if row['rsi'] > 75:  # Overbought → hindari entry LONG
+    #         return 'HOLD'
+    #     if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakout
+    #         return 'HOLD'
+    #     return 'LONG'
 
     # ========== SHORT Condition ==========
-    if row['macd'] < row['macd_signal'] and row['rsi'] < 45:
-        if row['rsi'] < 25:  # Oversold → hindari entry SHORT
-            return 'HOLD'
-        if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
-            return 'HOLD'
-        return 'SHORT'
+    # if row['macd'] < row['macd_signal'] and row['rsi'] < 45:
+    #     if row['rsi'] < 25:  # Oversold → hindari entry SHORT
+    #         return 'HOLD'
+    #     if row['volume'] < row['volume_sma20']:  # Volume rendah → hindari breakdown
+    #         return 'HOLD'
+    #     return 'SHORT'
 
-    return 'HOLD'
+    # return 'HOLD'
 
     # v3
     # if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) or pd.isna(row['prev_high']):
@@ -213,6 +213,26 @@ def detect_signal(row):
     #     return 'SHORT'
 
     # return 'HOLD'
+
+    # v5
+    # Filter data tidak lengkap
+    if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']):
+        return 'HOLD'
+
+    # Filter volatilitas rendah
+    if row['atr'] < 0.005 * row['close']:
+        return 'HOLD'
+
+    # Filter trend kuat (ADX > 25) dan volume konfirmasi
+    if row['adx'] > 25 and row['volume'] > 2 * row['volume_sma20']:
+        # LONG: MACD bullish, RSI tidak overbought, dan close di atas resistance
+        if row['macd'] > row['macd_signal'] and 50 < row['rsi'] < 65 and row['close'] > row['resistance']:
+            return 'LONG'
+        # SHORT: MACD bearish, RSI tidak oversold, dan close di bawah support
+        elif row['macd'] < row['macd_signal'] and 35 < row['rsi'] < 50 and row['close'] < row['support']:
+            return 'SHORT'
+
+    return 'HOLD'
 
 def clear_folder(folder_path):
     for file_path in glob.glob(os.path.join(folder_path, '*')):
@@ -471,7 +491,7 @@ def run_full_backtest_data(
 
         # --- sinyal ---
         df['signal'] = df.apply(detect_signal, axis=1)
-        df = apply_filters(df)
+        # df = apply_filters(df)
         # df = add_sideways_filter(df)
         # for i in range(len(df)):
         #     if df.iloc[i]['sideways']:
