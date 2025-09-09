@@ -106,7 +106,7 @@ def run_backtest(df, signals, cfg, tp_atr_mult=0.5, sl_atr_mult=0.5):
 
 if __name__=="__main__":
     cfg = BacktestConfig(initial_balance=100.0, risk_per_trade=0.01, leverage=3.0)
-    df = load_ohlcv("TIAUSDT_1m.csv")
+    df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
     signals = dual_entry_signals(df)
     trades_df, summary = run_backtest(df, signals, cfg)
     print("Summary:", summary)
