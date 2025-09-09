@@ -182,14 +182,21 @@ def run_backtest(df: pd.DataFrame,
     equity_df = pd.DataFrame(equity_curve).set_index('time')
     trades_df = pd.DataFrame(trades)
 
+    if len(trades_df) > 0:
+        wins = trades_df[trades_df['pnl'] > 0]
+        losses = trades_df[trades_df['pnl'] <= 0]
+    else:
+        wins = pd.DataFrame(columns=['pnl'])
+        losses = pd.DataFrame(columns=['pnl'])
+
     # summary metrics
     total_trades = len(trades_df)
-    wins = trades_df[trades_df['pnl'] > 0]
-    losses = trades_df[trades_df['pnl'] <= 0]
     net_profit = balance - config.initial_balance
     winrate = len(wins) / total_trades if total_trades > 0 else np.nan
     avg_win = wins['pnl'].mean() if len(wins) > 0 else 0
     avg_loss = losses['pnl'].mean() if len(losses) > 0 else 0
+    wins = trades_df[trades_df['pnl'] > 0]
+    losses = trades_df[trades_df['pnl'] <= 0]
     max_dd = compute_max_drawdown(equity_df['balance'])
 
     summary = {
