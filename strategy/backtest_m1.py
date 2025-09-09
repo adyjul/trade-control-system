@@ -130,13 +130,9 @@ def signal_straddle_simple(df: pd.DataFrame, lookback=10, range_threshold=0.0008
 def run_backtest(df: pd.DataFrame,
                  signals: pd.Series,
                  config: BacktestConfig,
-                 tp_pct: float = 0.001,   # 0.1% TP default
-                 sl_pct: float = 0.002    # 0.2% SL default
+                 tp_pct: float = 0.001,
+                 sl_pct: float = 0.002
                  ) -> Tuple[pd.DataFrame, dict]:
-    """
-    signals: series of 1/-1/0 each bar meaning we open a trade at next-open (discrete-time backtest)
-    Returns trades dataframe and summary metrics
-    """
     balance = config.initial_balance
     equity_curve = []
     trades = []
@@ -145,62 +141,62 @@ def run_backtest(df: pd.DataFrame,
     entry_index = None
     position_size_notional = 0.0
 
-    # compute fee per side function
     fee_rate = config.fee_taker if config.use_taker else config.fee_maker
 
-    for i in range(len(df)-1):  # we'll enter at next bar open to avoid lookahead
+    # safety: ensure signals aligned with df index and length
+    if not isinstance(signals, pd.Series):
+        raise ValueError("signals must be a pandas Series")
+    if len(signals) != len(df) or not signals.index.equals(df.index):
+        # try to reindex signals to df index (fill 0 where missing)
+        signals = signals.reindex(df.index, fill_value=0)
+
+    for i in range(len(df)-1):
         ts = df.index[i]
         next_ts = df.index[i+1]
         price_next_open = df['open'].iat[i+1]
-        # If no position, check signal to open
+
+        # entry
         if position == 0:
-            sig = signals.iloc[i]
+            sig = int(signals.iloc[i]) if not pd.isna(signals.iloc[i]) else 0
             if sig != 0:
-                # position sizing: risk-based sizing using SL distance
-                sl_price = price_next_open * (1 - sl_pct) if sig==1 else price_next_open * (1 + sl_pct)
-                # per-trade risk notional = balance * risk_per_trade
+                sl_price = price_next_open * (1 - sl_pct) if sig == 1 else price_next_open * (1 + sl_pct)
                 risk_notional = balance * config.risk_per_trade
                 sl_distance = abs(price_next_open - sl_price) / price_next_open
                 if sl_distance == 0:
                     continue
-                size_notional = (risk_notional / sl_distance)  # notional
-                # apply leverage
-                size_notional = size_notional * config.leverage
+                size_notional = (risk_notional / sl_distance) * config.leverage
                 if size_notional < config.min_size:
                     continue
                 position = sig
-                entry_price = price_next_open * (1 + config.slippage if sig==1 else 1 - config.slippage)
+                entry_price = price_next_open * (1 + config.slippage if sig == 1 else 1 - config.slippage)
                 position_size_notional = size_notional
                 entry_index = next_ts
-                # pay taker fee on entry
                 fee_entry = position_size_notional * fee_rate
-                balance -= fee_entry  # fees reduce cash
+                balance -= fee_entry
                 trades.append({
                     'entry_time': entry_index,
+                    'signal': sig,
                     'side': 'LONG' if position==1 else 'SHORT',
                     'entry_price': entry_price,
                     'size_notional': position_size_notional,
                     'fee_entry': fee_entry
                 })
         else:
-            # have a position: check exit by TP/SL intrabar using high/low of current bar (i)
-            # We simulate exits during same bar using that bar's high/low.
+            # exit checks intrabar current i
             high = df['high'].iat[i]
             low = df['low'].iat[i]
             exit_reason = None
             exit_price = None
-            # For LONG: TP when high >= entry*(1+tp), SL when low <= entry*(1-sl)
             if position == 1:
                 tp_price = entry_price * (1 + tp_pct)
                 sl_price = entry_price * (1 - sl_pct)
                 if low <= sl_price:
                     exit_reason = 'SL'
-                    exit_price = sl_price * (1 + config.slippage)  # slippage unfavorable
+                    exit_price = sl_price * (1 + config.slippage)
                 elif high >= tp_price:
                     exit_reason = 'TP'
-                    exit_price = tp_price * (1 - config.slippage)  # favorable slippage
+                    exit_price = tp_price * (1 - config.slippage)
             else:
-                # SHORT: TP when low <= entry*(1-tp), SL when high >= entry*(1+sl)
                 tp_price = entry_price * (1 - tp_pct)
                 sl_price = entry_price * (1 + sl_pct)
                 if high >= sl_price:
@@ -211,13 +207,11 @@ def run_backtest(df: pd.DataFrame,
                     exit_price = tp_price * (1 + config.slippage)
 
             if exit_reason is not None:
-                # compute P&L: for notional-based: pnl = (exit_price - entry_price)/entry_price * position_size_notional * sign
                 price_return = (exit_price - entry_price) / entry_price
                 pnl = price_return * position_size_notional * (1 if position==1 else -1)
                 fee_exit = position_size_notional * fee_rate
                 balance += pnl
                 balance -= fee_exit
-                # update last trade record
                 trades[-1].update({
                     'exit_time': df.index[i],
                     'exit_price': exit_price,
@@ -226,7 +220,7 @@ def run_backtest(df: pd.DataFrame,
                     'exit_reason': exit_reason,
                     'balance_after': balance
                 })
-                # reset pos
+                # reset
                 position = 0
                 entry_price = None
                 position_size_notional = 0.0
@@ -237,25 +231,37 @@ def run_backtest(df: pd.DataFrame,
     equity_df = pd.DataFrame(equity_curve).set_index('time')
     trades_df = pd.DataFrame(trades)
 
-    if len(trades_df) == 0 or 'pnl' not in trades_df.columns:
-        wins = pd.DataFrame(columns=['pnl'])
-        losses = pd.DataFrame(columns=['pnl'])
-    else:
-        wins = trades_df[trades_df['pnl'] > 0]
-        losses = trades_df[trades_df['pnl'] <= 0]
+    # safe summary even when no trades
+    if trades_df.empty or 'pnl' not in trades_df.columns:
+        total_trades = 0
+        net_profit = balance - config.initial_balance
+        winrate = np.nan
+        avg_win = 0
+        avg_loss = 0
+        max_dd = compute_max_drawdown(equity_df['balance'])
+        summary = {
+            'initial_balance': config.initial_balance,
+            'final_balance': balance,
+            'net_profit': net_profit,
+            'total_trades': total_trades,
+            'winrate': winrate,
+            'avg_win': avg_win,
+            'avg_loss': avg_loss,
+            'max_drawdown': max_dd
+        }
+        # debug prints
+        print("DEBUG trades_df columns:", trades_df.columns)
+        print("No trades executed.")
+        return trades_df, equity_df, summary
 
-    # summary metrics
+    # else normal path
+    wins = trades_df[trades_df['pnl'] > 0]
+    losses = trades_df[trades_df['pnl'] <= 0]
     total_trades = len(trades_df)
     net_profit = balance - config.initial_balance
     winrate = len(wins) / total_trades if total_trades > 0 else np.nan
     avg_win = wins['pnl'].mean() if len(wins) > 0 else 0
     avg_loss = losses['pnl'].mean() if len(losses) > 0 else 0
-
-    print("DEBUG trades_df columns:", trades_df.columns)
-    print(trades_df.head())
-
-    wins = trades_df[trades_df['pnl'] > 0]
-    losses = trades_df[trades_df['pnl'] <= 0]
     max_dd = compute_max_drawdown(equity_df['balance'])
 
     summary = {
@@ -268,6 +274,9 @@ def run_backtest(df: pd.DataFrame,
         'avg_loss': avg_loss,
         'max_drawdown': max_dd
     }
+    # debug
+    print("DEBUG trades_df columns:", trades_df.columns)
+    print(trades_df.head())
     return trades_df, equity_df, summary
 
 def compute_max_drawdown(equity_series: pd.Series):
