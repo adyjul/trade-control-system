@@ -111,18 +111,13 @@ def signal_mean_reversion(df: pd.DataFrame, bb_period=20, bb_dev=2.0, rsi_period
     sig[short_cond] = -1
     return sig.fillna(0)
 
-def signal_straddle_simple(df: pd.DataFrame, lookback=10, range_threshold=0.0008) -> pd.DataFrame:
-    """
-    Straddle idea: detect narrow range (consolidation). Returns a frame with breakout levels.
-    - 'enter' column: 1 if narrow-range detected at that bar (we'll place long and short orders)
-    - 'long_level' and 'short_level': price thresholds to consider as breakout
-    """
-    high_lb = df['high'].rolling(lookback).max()
-    low_lb = df['low'].rolling(lookback).min()
-    rng = (high_lb - low_lb) / df['close']
-    enter = rng < range_threshold
-    long_level = high_lb
-    short_level = low_lb
+def signal_straddle_simple(df, ema_period=20, atr_period=14, atr_multiplier=0.5) -> pd.DataFrame:
+    ema = df['close'].ewm(span=ema_period, adjust=False).mean()
+    tr = df['high'] - df['low']
+    atr = tr.rolling(atr_period).mean()
+    long_level = df['close'] + atr * atr_multiplier
+    short_level = df['close'] - atr * atr_multiplier
+    enter = df['close'].shift(1) < ema  # misal filter trend
     out = pd.DataFrame({'enter': enter, 'long_level': long_level, 'short_level': short_level}, index=df.index)
     return out
 
@@ -351,7 +346,7 @@ if __name__ == "__main__":
     df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
 
     # 2) generate straddle setup
-    straddle = signal_straddle_simple(df, lookback=8, range_threshold=0.0006)
+    straddle = signal_straddle_simple(df, ema_period=20, atr_period=14, atr_multiplier=0.5)
 
     # 3) run backtest with dual straddle engine
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004,
