@@ -89,7 +89,7 @@ def compute_max_drawdown(equity_series):
 
 if __name__ == "__main__":
     cfg = BacktestConfig()
-    df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
+    df = load_ohlcv("/root/trade-control-system/backtest_by_data/AVAXUSDT_1m.csv")
     trades_df, equity_df, summary = dual_entry_backtest(df, cfg)
     print("Summary:", summary)
     trades_df.to_csv("trades_dual_entry.csv", index=False)
