@@ -181,21 +181,17 @@ def run_backtest(df: pd.DataFrame,
 
     equity_df = pd.DataFrame(equity_curve).set_index('time')
     trades_df = pd.DataFrame(trades)
+
     # summary metrics
     total_trades = len(trades_df)
-    trades_df['side'] = np.where(trades_df['signal'] == 1, 'LONG', 'SHORT')
-    trades_df['pnl'] = np.where(
-        trades_df['side'] == 'LONG',
-        (trades_df['exit_price'] - trades_df['entry_price']) / trades_df['entry_price'],
-        (trades_df['entry_price'] - trades_df['exit_price']) / trades_df['entry_price']
-    )
-    wins = trades_df[trades_df['pnl']>0]
-    losses = trades_df[trades_df['pnl']<=0]
+    wins = trades_df[trades_df['pnl'] > 0]
+    losses = trades_df[trades_df['pnl'] <= 0]
     net_profit = balance - config.initial_balance
-    winrate = len(wins) / total_trades if total_trades>0 else np.nan
-    avg_win = wins['pnl'].mean() if len(wins)>0 else 0
-    avg_loss = losses['pnl'].mean() if len(losses)>0 else 0
+    winrate = len(wins) / total_trades if total_trades > 0 else np.nan
+    avg_win = wins['pnl'].mean() if len(wins) > 0 else 0
+    avg_loss = losses['pnl'].mean() if len(losses) > 0 else 0
     max_dd = compute_max_drawdown(equity_df['balance'])
+
     summary = {
         'initial_balance': config.initial_balance,
         'final_balance': balance,
