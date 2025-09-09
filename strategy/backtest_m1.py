@@ -227,9 +227,9 @@ if __name__ == "__main__":
     df = load_ohlcv("/root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")  # replace with your file
 
     # 2) pick signals
-    # signals = signal_mean_reversion(df)         # single-side signals
+    signals = signal_mean_reversion(df)         # single-side signals
     # OR for straddle approach, we can generate signals when narrow range detected:
-    straddle = signal_straddle_simple(df, lookback=8, range_threshold=0.0006)
+    # straddle = signal_straddle_simple(df, lookback=8, range_threshold=0.0006)
     # For a simple straddle backtest, we'll convert "enter" to a pseudo-signal: 1 means open both sides -> we'll simulate opening LONG when price breaks above long_level, SHORT when breaks below short_level
     signals = pd.Series(0, index=df.index)
 
@@ -251,8 +251,7 @@ if __name__ == "__main__":
 
     # 3) run backtest
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
-    print("Signals sample:\n", signals.head())
-    print("Jumlah sinyal:", len(signals))
+
     trades_df, equity_df, summary = run_backtest(df, signals, cfg, tp_pct=0.001, sl_pct=0.0015)
 
     print("Summary:", summary)
