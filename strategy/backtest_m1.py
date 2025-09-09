@@ -315,8 +315,8 @@ if __name__ == "__main__":
 
     # 3) run backtest
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
-    print("Signals sample:\n", signals.head())
-    print("Jumlah sinyal:", len(signals))
+    print("Jumlah sinyal BUY:", (signals == 1).sum())
+    print("Jumlah sinyal SELL:", (signals == -1).sum())
     trades_df, equity_df, summary = run_backtest(df, signals, cfg, tp_pct=0.001, sl_pct=0.0015)
 
     print("Summary:", summary)
