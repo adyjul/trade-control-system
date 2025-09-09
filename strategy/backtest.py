@@ -391,7 +391,7 @@ def run_full_backtest(
     look_ahead: int = 6,
     tp_atr_mult: float = 1.2,
    
-    sl_atr_mult: float = 1.0,
+    sl_atr_mult: float = 0.9,
     data_dir: str = DEFAULT_DATA_DIR,
     result_dir: str = DEFAULT_RESULT_DIR,
     save_summary: bool = True,
