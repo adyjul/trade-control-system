@@ -126,6 +126,66 @@ def signal_straddle_simple(df: pd.DataFrame, lookback=10, range_threshold=0.0008
     out = pd.DataFrame({'enter': enter, 'long_level': long_level, 'short_level': short_level}, index=df.index)
     return out
 
+def run_backtest_straddle(df, straddle, cfg, tp_pct=0.001, sl_pct=0.0015, monitor_window=3):
+    balance = cfg.initial_balance
+    equity_curve = []
+    trades = []
+
+    for i in range(len(df) - monitor_window):
+        if straddle['enter'].iat[i]:
+            high_level = straddle['long_level'].iat[i]
+            low_level = straddle['short_level'].iat[i]
+
+            # pasang 2 order pending
+            for j in range(1, monitor_window+1):
+                idx = i + j
+                high = df['high'].iat[idx]
+                low = df['low'].iat[idx]
+
+                if high >= high_level:
+                    # LONG aktif, cancel SHORT
+                    entry_price = high_level
+                    tp_price = entry_price * (1 + tp_pct)
+                    sl_price = entry_price * (1 - sl_pct)
+                    exit_reason, exit_price = None, None
+                    if df['low'].iat[idx] <= sl_price:
+                        exit_reason, exit_price = 'SL', sl_price
+                    elif df['high'].iat[idx] >= tp_price:
+                        exit_reason, exit_price = 'TP', tp_price
+                    pnl = (exit_price - entry_price) / entry_price * balance if exit_reason else 0
+                    balance += pnl
+                    trades.append((df.index[idx], "LONG", entry_price, exit_price, pnl, exit_reason))
+                    break
+
+                elif low <= low_level:
+                    # SHORT aktif, cancel LONG
+                    entry_price = low_level
+                    tp_price = entry_price * (1 - tp_pct)
+                    sl_price = entry_price * (1 + sl_pct)
+                    exit_reason, exit_price = None, None
+                    if df['high'].iat[idx] >= sl_price:
+                        exit_reason, exit_price = 'SL', sl_price
+                    elif df['low'].iat[idx] <= tp_price:
+                        exit_reason, exit_price = 'TP', tp_price
+                    pnl = (entry_price - exit_price) / entry_price * balance if exit_reason else 0
+                    balance += pnl
+                    trades.append((df.index[idx], "SHORT", entry_price, exit_price, pnl, exit_reason))
+                    break
+
+        equity_curve.append({'time': df.index[i], 'balance': balance})
+
+    trades_df = pd.DataFrame(trades, columns=["time","side","entry","exit","pnl","exit_reason"])
+    equity_df = pd.DataFrame(equity_curve).set_index("time")
+    summary = {
+        "initial_balance": cfg.initial_balance,
+        "final_balance": balance,
+        "net_profit": balance - cfg.initial_balance,
+        "total_trades": len(trades_df),
+        "winrate": (trades_df['pnl']>0).mean() if len(trades_df)>0 else np.nan,
+        "max_drawdown": compute_max_drawdown(equity_df['balance']) if not equity_df.empty else 0
+    }
+    return trades_df, equity_df, summary
+
 # --- Execution engine ---
 def run_backtest(df: pd.DataFrame,
                  signals: pd.Series,
@@ -316,13 +376,13 @@ if __name__ == "__main__":
     # 3) run backtest
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
 
-    signals = pd.Series(0, index=df.index)
-    signals[df['close'] > df['close'].shift(1)] = 1    # BUY kalau naik
-    signals[df['close'] < df['close'].shift(1)] = -1
+    
 
-    print("Jumlah sinyal BUY:", (signals == 1).sum())
-    print("Jumlah sinyal SELL:", (signals == -1).sum())
-    trades_df, equity_df, summary = run_backtest(df, signals, cfg, tp_pct=0.001, sl_pct=0.0015)
+    # print("Jumlah sinyal BUY:", (signals == 1).sum())
+    # print("Jumlah sinyal SELL:", (signals == -1).sum())
+
+    # trades_df, equity_df, summary = run_backtest(df, signals, cfg, tp_pct=0.001, sl_pct=0.0015)
+    trades_df, equity_df, summary = run_backtest_straddle(df, straddle, cfg)
 
     print("Summary:", summary)
     trades_df.to_csv("trades_result.csv", index=False)
