@@ -234,20 +234,20 @@ if __name__ == "__main__":
     signals = pd.Series(0, index=df.index)
 
     # Simple straddle logic: when 'enter' == True at i, mark next bar to monitor breakout for next N bars
-    monitor_window = 3
-    for i in range(len(df)-monitor_window):
-        if straddle['enter'].iat[i]:
-            high_level = straddle['long_level'].iat[i]
-            low_level = straddle['short_level'].iat[i]
-            # monitor next few bars
-            for j in range(1, monitor_window+1):
-                idx = i+j
-                if df['high'].iat[idx] >= high_level:
-                    signals.iat[idx] = 1
-                    break
-                if df['low'].iat[idx] <= low_level:
-                    signals.iat[idx] = -1
-                    break
+    # monitor_window = 3
+    # for i in range(len(df)-monitor_window):
+    #     if straddle['enter'].iat[i]:
+    #         high_level = straddle['long_level'].iat[i]
+    #         low_level = straddle['short_level'].iat[i]
+    #         # monitor next few bars
+    #         for j in range(1, monitor_window+1):
+    #             idx = i+j
+    #             if df['high'].iat[idx] >= high_level:
+    #                 signals.iat[idx] = 1
+    #                 break
+    #             if df['low'].iat[idx] <= low_level:
+    #                 signals.iat[idx] = -1
+    #                 break
 
     # 3) run backtest
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
