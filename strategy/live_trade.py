@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from binance import AsyncClient, BinanceSocketManager
 from dataclasses import dataclass
+from openpyxl import Workbook, load_workbook
 
 # ------------------- Config -------------------
 @dataclass
@@ -52,7 +53,40 @@ class LiveBot:
         self.entry_price = None
         self.position_size = 0.0
         self.trades = []
+        self.logfile = "trades_log.xlsx"
+        self._init_excel()
+    
+    def _init_excel(self):
+        try:
+            # Coba load workbook yang sudah ada
+            self.wb = load_workbook(self.logfile)
+            self.ws = self.wb.active
+        except FileNotFoundError:
+            # Kalau belum ada file, buat baru
+            self.wb = Workbook()
+            self.ws = self.wb.active
+            self.ws.append([
+                "time", "side", "entry", "size", "fee",
+                "exit_time", "exit_price", "pnl", "exit_reason", "balance_after"
+            ])
+            self.wb.save(self.logfile)
 
+    def _save_trade(self, trade: dict):
+        row = [
+            trade.get("time"),
+            trade.get("side"),
+            trade.get("entry"),
+            trade.get("size"),
+            trade.get("fee"),
+            trade.get("exit_time"),
+            trade.get("exit_price"),
+            trade.get("pnl"),
+            trade.get("exit_reason"),
+            trade.get("balance_after"),
+        ]
+        self.ws.append(row)
+        self.wb.save(self.logfile)
+    
     async def start(self):
         client = await AsyncClient.create()
         bm = BinanceSocketManager(client)
@@ -93,6 +127,7 @@ class LiveBot:
                 'size': size,
                 'fee': fee
             })
+            self._save_trade(self.trades[-1])   # <--- SIMPAN ENTRY
             print(f"[ENTRY] {self.trades[-1]} | Balance: {self.balance:.4f}")
 
         # Exit logic
@@ -120,6 +155,7 @@ class LiveBot:
                 fee = self.position_size * fee_rate
                 self.balance += pnl - fee
                 self.trades[-1].update({'exit_time': df.index[-1], 'exit_price': exit_price, 'pnl': pnl, 'exit_reason': exit_reason, 'balance_after': self.balance})
+                self._save_trade(self.trades[-1])   # <--- SIMPAN EXIT
                 print(f"[EXIT] {self.trades[-1]} | Balance: {self.balance:.4f}")
                 self.position = 0
                 self.entry_price = None
