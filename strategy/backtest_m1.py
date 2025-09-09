@@ -348,7 +348,7 @@ def compute_max_drawdown(equity_series: pd.Series):
 # --- Example usage ---
 if __name__ == "__main__":
     # 1) load 1m OHLCV CSV
-    df = load_ohlcv("/root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")
+    df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
 
     # 2) generate straddle setup
     straddle = signal_straddle_simple(df, lookback=8, range_threshold=0.0006)
