@@ -213,7 +213,7 @@ def compute_max_drawdown(equity_series: pd.Series):
 # --- Example usage ---
 if __name__ == "__main__":
     # 1) load 1m OHLCV CSV
-    df = load_ohlcv("/root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")  # replace with your file
+    df = load_ohlcv("root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")  # replace with your file
 
     # 2) pick signals
     # signals = signal_mean_reversion(df)         # single-side signals
