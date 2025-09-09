@@ -16,7 +16,13 @@ class BacktestConfig:
 
 def load_ohlcv(path: str):
     df = pd.read_csv(path)
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+    
+    # Cek apakah timestamp numeric atau string
+    if df['timestamp'].dtype == object:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)  # string → datetime UTC
+    else:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)  # ms → datetime UTC
+
     df = df.set_index('timestamp')
     for col in ['open','high','low','close','volume']:
         df[col] = df[col].astype(float)
