@@ -347,10 +347,14 @@ def compute_max_drawdown(equity_series: pd.Series):
 # --- Example usage ---
 if __name__ == "__main__":
     df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
-    straddle = signal_straddle_simple(df, ema_period=30, atr_period=14, atr_multiplier=0.8, min_atr=0.0008)
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0005, risk_per_trade=0.01, leverage=3.0)
-    trades_df, equity_df, summary = run_backtest_straddle(df, straddle, cfg, tp_atr_mult=1.0, sl_atr_mult=1.0)
+    
+    # 1) generate mean reversion signals
+    signals = signal_mean_reversion(df, bb_period=20, bb_dev=2.0, rsi_period=14)
+    
+    # 2) run backtest MR
+    trades_df, equity_df, summary = run_backtest(df, signals, cfg, tp_pct=0.001, sl_pct=0.0015)
 
     print("Summary:", summary)
-    trades_df.to_csv("trades_result_ema_atr.csv", index=False)
-    equity_df.to_csv("equity_curve_ema_atr.csv")
+    trades_df.to_csv("trades_result_mr.csv", index=False)
+    equity_df.to_csv("equity_curve_mr.csv")
