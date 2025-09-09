@@ -98,10 +98,12 @@ class LiveDualEntryBot:
         client = await AsyncClient.create()
         bm = BinanceSocketManager(client)
         kline_socket = bm.kline_socket(self.cfg.pair, interval=self.cfg.interval)
+
         print(f"[INFO] Live forward-test dual-entry for {self.cfg.pair} ({self.cfg.interval})")
         async with kline_socket as stream:
             while True:
                 res = await stream.recv()
+                print(res)
                 # res is dict containing 'k' for kline
                 k = res.get('k', {})
                 is_closed = k.get('x', False)
