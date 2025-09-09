@@ -20,7 +20,7 @@ def load_ohlcv(csv_path: str) -> pd.DataFrame:
     CSV columns: timestamp (ms or ISO), open, high, low, close, volume
     index must be datetime-like. Returns dataframe with datetime index.
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_excel(csv_path)
     if 'timestamp' in df.columns:
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='ignore')
         df = df.set_index('timestamp')
@@ -211,7 +211,7 @@ def compute_max_drawdown(equity_series: pd.Series):
 # --- Example usage ---
 if __name__ == "__main__":
     # 1) load 1m OHLCV CSV
-    df = load_ohlcv("data/BTCUSDT_1m.csv")  # replace with your file
+    df = load_ohlcv("/root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")  # replace with your file
 
     # 2) pick signals
     # signals = signal_mean_reversion(df)         # single-side signals
