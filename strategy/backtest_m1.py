@@ -15,21 +15,76 @@ class BacktestConfig:
     leverage: float = 1.0
     min_size: float = 1e-6       # minimal position notional constraint
 
-def load_ohlcv(csv_path: str) -> pd.DataFrame:
+def load_ohlcv(path: str) -> pd.DataFrame:
     """
-    CSV columns: timestamp (ms or ISO), open, high, low, close, volume
-    index must be datetime-like. Returns dataframe with datetime index.
+    Load OHLCV dari CSV/XLSX. Auto-detect timestamp column (ms or ISO) dan konversi ke UTC index.
+    Mengembalikan df dengan kolom: open, high, low, close, volume (float) dan datetime index tz-aware UTC.
     """
-    df = pd.read_excel(csv_path)
-    if 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='ignore')
-        df = df.set_index('timestamp')
+    if path.endswith(".csv"):
+        df = pd.read_csv(path)
+    elif path.endswith(".xls") or path.endswith(".xlsx"):
+        df = pd.read_excel(path)
     else:
-        df.index = pd.to_datetime(df.iloc[:,0])
-        df.index.name = 'timestamp'
-        df = df.iloc[:,1:]
+        raise ValueError("File must be .csv or .xls/.xlsx")
+
+    # Standarisasi kolom names -> lowercase keys
+    cols_map = {c.lower(): c for c in df.columns}
+    # possible timestamp column names
+    ts_candidates = ['timestamp', 'open_time', 'time', 'date', 'datetime']
+    ts_col = None
+    for cand in ts_candidates:
+        if cand in cols_map:
+            ts_col = cols_map[cand]
+            break
+    if ts_col is None:
+        # fallback: assume first column is timestamp
+        ts_col = df.columns[0]
+
+    # try numeric (ms) first
+    try:
+        # check if can be converted to numeric w/o producing many NaN
+        num = pd.to_numeric(df[ts_col], errors='coerce')
+        non_na_ratio = num.notna().mean()
+        if non_na_ratio > 0.9:
+            df[ts_col] = pd.to_datetime(num.astype('Int64'), unit='ms', utc=True)
+        else:
+            # parse as string datetime
+            df[ts_col] = pd.to_datetime(df[ts_col], utc=True, errors='coerce')
+    except Exception:
+        df[ts_col] = pd.to_datetime(df[ts_col], utc=True, errors='coerce')
+
+    df = df.set_index(ts_col)
+    # rename columns to expected names if variants exist
+    rename_map = {}
+    for want in ['open','high','low','close','volume']:
+        for c in df.columns:
+            if c.lower() == want:
+                rename_map[c] = want
+                break
+    df = df.rename(columns=rename_map)
+
+    # keep only required cols
+    for c in ['open','high','low','close','volume']:
+        if c not in df.columns:
+            raise ValueError(f"Missing required column '{c}' in input file")
+
     df = df.sort_index()
-    return df[['open','high','low','close','volume']].astype(float)
+    # ensure timezone-aware UTC
+    if df.index.tz is None:
+        df.index = df.index.tz_localize('UTC')
+    else:
+        df.index = df.index.tz_convert('UTC')
+
+    # cast types
+    df = df[['open','high','low','close','volume']].astype(float)
+
+    # optional: reindex contiguous 1-minute (uncomment if you want fill missing)
+    # idx = pd.date_range(start=df.index[0].ceil('T'), end=df.index[-1].floor('T'), freq='1T', tz='UTC')
+    # df = df.reindex(idx)
+    # df[['open','high','low','close']] = df[['open','high','low','close']].ffill()
+    # df['volume'] = df['volume'].fillna(0.0)
+
+    return df
 
 # --- Example signal generators ---
 def signal_mean_reversion(df: pd.DataFrame, bb_period=20, bb_dev=2.0, rsi_period=14) -> pd.Series:
