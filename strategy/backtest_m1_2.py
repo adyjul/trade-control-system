@@ -122,7 +122,7 @@ def compute_max_drawdown(series):
 # --- Example usage ---
 if __name__ == "__main__":
     df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
-    signals = signal_dual_entry(df, lookback=8, range_threshold=0.0006, atr_period=14)
+    signals = signal_dual_entry(df, lookback=8, range_threshold=0.002, atr_period=14)
     cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0005, risk_per_trade=0.01, leverage=3.0, monitor_candles=3)
     trades_df, equity_df, summary = run_backtest_dual(df, signals, cfg, tp_mult=1.0, sl_mult=1.5)
     print("Summary:", summary)
