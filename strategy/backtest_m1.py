@@ -348,41 +348,18 @@ def compute_max_drawdown(equity_series: pd.Series):
 # --- Example usage ---
 if __name__ == "__main__":
     # 1) load 1m OHLCV CSV
-    df = load_ohlcv("/root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")  # replace with your file
+    df = load_ohlcv("/root/trade-control-system/backtest_result_data/TIAUSDT_1m_all_signals.xlsx")
 
-    # 2) pick signals
-    # signals = signal_mean_reversion(df)         # single-side signals
-    # OR for straddle approach, we can generate signals when narrow range detected:
+    # 2) generate straddle setup
     straddle = signal_straddle_simple(df, lookback=8, range_threshold=0.0006)
-    # For a simple straddle backtest, we'll convert "enter" to a pseudo-signal: 1 means open both sides -> we'll simulate opening LONG when price breaks above long_level, SHORT when breaks below short_level
-    signals = pd.Series(0, index=df.index)
 
-    # Simple straddle logic: when 'enter' == True at i, mark next bar to monitor breakout for next N bars
-    monitor_window = 3
-    for i in range(len(df)-monitor_window):
-        if straddle['enter'].iat[i]:
-            high_level = straddle['long_level'].iat[i]
-            low_level = straddle['short_level'].iat[i]
-            # monitor next few bars
-            for j in range(1, monitor_window+1):
-                idx = i+j
-                if df['high'].iat[idx] >= high_level:
-                    signals.iat[idx] = 1
-                    break
-                if df['low'].iat[idx] <= low_level:
-                    signals.iat[idx] = -1
-                    break
+    # 3) run backtest with dual straddle engine
+    cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004,
+                         slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
 
-    # 3) run backtest
-    cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
-
-    
-
-    # print("Jumlah sinyal BUY:", (signals == 1).sum())
-    # print("Jumlah sinyal SELL:", (signals == -1).sum())
-
-    # trades_df, equity_df, summary = run_backtest(df, signals, cfg, tp_pct=0.001, sl_pct=0.0015)
-    trades_df, equity_df, summary = run_backtest_straddle(df, straddle, cfg)
+    trades_df, equity_df, summary = run_backtest_straddle(df, straddle, cfg,
+                                                          tp_pct=0.001,
+                                                          sl_pct=0.0015)
 
     print("Summary:", summary)
     trades_df.to_csv("trades_result.csv", index=False)
