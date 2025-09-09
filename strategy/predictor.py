@@ -65,7 +65,7 @@ def detect_signal(row):
 
     # return 'HOLD'
 
-    # v4
+    # v3
     if pd.isna(row['macd']) or pd.isna(row['macd_signal']) or pd.isna(row['rsi']) or pd.isna(row['volume_sma20']) \
        or pd.isna(row['ema_fast']) or pd.isna(row['ema_slow']):
         return 'HOLD'
