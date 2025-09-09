@@ -56,12 +56,18 @@ def init_excel(path: str):
         wb.save(path)
 
 def append_trade_excel(path: str, row: List):
-    # open, append row, save
     wb = load_workbook(path)
     ws = wb["Trades"]
-    ws.append(row)
-    wb.save(path)
 
+    clean_row = []
+    for v in row:
+        if isinstance(v, datetime):
+            clean_row.append(v.replace(tzinfo=None))  # buang timezone
+        else:
+            clean_row.append(v)
+
+    ws.append(clean_row)
+    wb.save(path)
 # ---------------- Technical helpers ----------------
 def compute_atr_from_df(df: pd.DataFrame, period: int):
     # df must have high, low, close
