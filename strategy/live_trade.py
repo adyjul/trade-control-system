@@ -159,6 +159,7 @@ class LiveBot:
                 print(f"[EXIT] {self.trades[-1]} | Balance: {self.balance:.4f}")
                 self.position = 0
                 self.entry_price = None
+                
                 self.position_size = 0.0
 
 # ------------------- Main -------------------
