@@ -111,58 +111,62 @@ def signal_mean_reversion(df: pd.DataFrame, bb_period=20, bb_dev=2.0, rsi_period
     sig[short_cond] = -1
     return sig.fillna(0)
 
-def signal_straddle_simple(df, ema_period=20, atr_period=14, atr_multiplier=0.5) -> pd.DataFrame:
+def signal_straddle_simple(df, ema_period=30, atr_period=14, atr_multiplier=0.8, min_atr=0.0008) -> pd.DataFrame:
     ema = df['close'].ewm(span=ema_period, adjust=False).mean()
-    tr = df['high'] - df['low']
+    tr = pd.concat([df['high'] - df['low'],
+                    (df['high'] - df['close'].shift(1)).abs(),
+                    (df['low'] - df['close'].shift(1)).abs()], axis=1).max(axis=1)
     atr = tr.rolling(atr_period).mean()
     long_level = df['close'] + atr * atr_multiplier
     short_level = df['close'] - atr * atr_multiplier
-    enter = df['close'].shift(1) < ema  # misal filter trend
-    out = pd.DataFrame({'enter': enter, 'long_level': long_level, 'short_level': short_level}, index=df.index)
-    return out
+    # enter hanya jika ATR cukup (market tidak flat)
+    enter = atr > min_atr
+    return pd.DataFrame({'enter': enter, 'long_level': long_level, 'short_level': short_level}, index=df.index)
 
-def run_backtest_straddle(df, straddle, cfg, tp_pct=0.001, sl_pct=0.0015, monitor_window=3):
+def run_backtest_straddle(df, straddle, cfg, tp_atr_mult=1.0, sl_atr_mult=1.0):
     balance = cfg.initial_balance
-    equity_curve = []
     trades = []
+    equity_curve = []
 
-    for i in range(len(df) - monitor_window):
+    for i in range(len(df)-1):
         if straddle['enter'].iat[i]:
             high_level = straddle['long_level'].iat[i]
             low_level = straddle['short_level'].iat[i]
-
-            # pasang 2 order pending
-            for j in range(1, monitor_window+1):
-                idx = i + j
+            atr_now = (high_level - low_level) / 2  # estimate ATR at this bar
+            # monitor next 3 candles
+            for j in range(1,4):
+                idx = i+j
+                if idx >= len(df):
+                    break
                 high = df['high'].iat[idx]
                 low = df['low'].iat[idx]
 
+                # LONG
                 if high >= high_level:
-                    # LONG aktif, cancel SHORT
                     entry_price = high_level
-                    tp_price = entry_price * (1 + tp_pct)
-                    sl_price = entry_price * (1 - sl_pct)
+                    tp_price = entry_price + atr_now * tp_atr_mult
+                    sl_price = entry_price - atr_now * sl_atr_mult
                     exit_reason, exit_price = None, None
                     if df['low'].iat[idx] <= sl_price:
                         exit_reason, exit_price = 'SL', sl_price
                     elif df['high'].iat[idx] >= tp_price:
                         exit_reason, exit_price = 'TP', tp_price
-                    pnl = (exit_price - entry_price) / entry_price * balance if exit_reason else 0
+                    pnl = (exit_price - entry_price)/entry_price*balance if exit_reason else 0
                     balance += pnl
                     trades.append((df.index[idx], "LONG", entry_price, exit_price, pnl, exit_reason))
                     break
 
+                # SHORT
                 elif low <= low_level:
-                    # SHORT aktif, cancel LONG
                     entry_price = low_level
-                    tp_price = entry_price * (1 - tp_pct)
-                    sl_price = entry_price * (1 + sl_pct)
+                    tp_price = entry_price - atr_now * tp_atr_mult
+                    sl_price = entry_price + atr_now * sl_atr_mult
                     exit_reason, exit_price = None, None
                     if df['high'].iat[idx] >= sl_price:
                         exit_reason, exit_price = 'SL', sl_price
                     elif df['low'].iat[idx] <= tp_price:
                         exit_reason, exit_price = 'TP', tp_price
-                    pnl = (entry_price - exit_price) / entry_price * balance if exit_reason else 0
+                    pnl = (entry_price - exit_price)/entry_price*balance if exit_reason else 0
                     balance += pnl
                     trades.append((df.index[idx], "SHORT", entry_price, exit_price, pnl, exit_reason))
                     break
@@ -342,20 +346,11 @@ def compute_max_drawdown(equity_series: pd.Series):
 
 # --- Example usage ---
 if __name__ == "__main__":
-    # 1) load 1m OHLCV CSV
     df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
-
-    # 2) generate straddle setup
-    straddle = signal_straddle_simple(df, ema_period=20, atr_period=14, atr_multiplier=0.5)
-
-    # 3) run backtest with dual straddle engine
-    cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004,
-                         slippage=0.0006, risk_per_trade=0.01, leverage=3.0)
-
-    trades_df, equity_df, summary = run_backtest_straddle(df, straddle, cfg,
-                                                          tp_pct=0.001,
-                                                          sl_pct=0.0015)
+    straddle = signal_straddle_simple(df, ema_period=30, atr_period=14, atr_multiplier=0.8, min_atr=0.0008)
+    cfg = BacktestConfig(initial_balance=100.0, fee_taker=0.0004, slippage=0.0005, risk_per_trade=0.01, leverage=3.0)
+    trades_df, equity_df, summary = run_backtest_straddle(df, straddle, cfg, tp_atr_mult=1.0, sl_atr_mult=1.0)
 
     print("Summary:", summary)
-    trades_df.to_csv("trades_result.csv", index=False)
-    equity_df.to_csv("equity_curve.csv")
+    trades_df.to_csv("trades_result_ema_atr.csv", index=False)
+    equity_df.to_csv("equity_curve_ema_atr.csv")
