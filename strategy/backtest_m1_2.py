@@ -37,6 +37,12 @@ def compute_atr(df, period=14):
     atr = tr.max(axis=1).rolling(period).mean()
     return atr
 
+def compute_max_drawdown(equity_series: pd.Series):
+    roll_max = equity_series.cummax()
+    drawdown = (equity_series - roll_max) / roll_max
+    max_dd = drawdown.min()
+    return max_dd
+
 def dual_entry_signals(df, atr_period=14, atr_multiplier=0.5):
     atr = compute_atr(df, atr_period)
     ema = df['close'].ewm(span=30).mean()
@@ -57,6 +63,7 @@ def dual_entry_signals(df, atr_period=14, atr_multiplier=0.5):
 def run_backtest(df, signals, cfg, tp_atr_mult=0.5, sl_atr_mult=0.5):
     balance = cfg.initial_balance
     trades = []
+    equity_curve = []
     position = 0
     entry_price = 0
     fee_rate = cfg.fee_taker if cfg.use_taker else cfg.fee_maker
@@ -98,16 +105,52 @@ def run_backtest(df, signals, cfg, tp_atr_mult=0.5, sl_atr_mult=0.5):
                 trades[-1].update({'exit': exit_price, 'pnl': pnl, 'exit_reason': exit_reason, 'balance_after': balance})
                 position = 0
 
+        equity_curve.append({'time': df.index[i], 'balance': balance})
+
+
+    equity_df = pd.DataFrame(equity_curve).set_index('time')
     trades_df = pd.DataFrame(trades)
     final_balance = balance
-    summary = {
-        'initial_balance': cfg.initial_balance,
-        'final_balance': final_balance,
-        'net_profit': final_balance-cfg.initial_balance,
-        'total_trades': len(trades_df),
-        'winrate': (trades_df['pnl']>0).mean() if len(trades_df)>0 else np.nan,
-        'max_drawdown': np.min(trades_df['balance_after']/cfg.initial_balance-1) if len(trades_df)>0 else 0
-    }
+    
+    if trades_df.empty or 'pnl' not in trades_df.columns:
+        summary = {
+            'initial_balance': cfg.initial_balance,
+            'final_balance': balance,
+            'net_profit': balance - cfg.initial_balance,
+            'total_trades': 0,
+            'winrate': np.nan,
+            'avg_win': 0,
+            'avg_loss': 0,
+            'max_drawdown': compute_max_drawdown(equity_df['balance'])
+        }
+    else:
+        wins = trades_df[trades_df['pnl'] > 0]
+        losses = trades_df[trades_df['pnl'] <= 0]
+        total_trades = len(trades_df)
+        net_profit = balance - cfg.initial_balance
+        winrate = len(wins)/total_trades
+        avg_win = wins['pnl'].mean() if len(wins)>0 else 0
+        avg_loss = losses['pnl'].mean() if len(losses)>0 else 0
+        max_dd = compute_max_drawdown(equity_df['balance'])
+        summary = {
+            'initial_balance': cfg.initial_balance,
+            'final_balance': balance,
+            'net_profit': net_profit,
+            'total_trades': total_trades,
+            'winrate': winrate,
+            'avg_win': avg_win,
+            'avg_loss': avg_loss,
+            'max_drawdown': max_dd
+        }
+
+    # summary = {
+    #     'initial_balance': cfg.initial_balance,
+    #     'final_balance': final_balance,
+    #     'net_profit': final_balance-cfg.initial_balance,
+    #     'total_trades': len(trades_df),
+    #     'winrate': (trades_df['pnl']>0).mean() if len(trades_df)>0 else np.nan,
+    #     'max_drawdown': np.min(trades_df['balance_after']/cfg.initial_balance-1) if len(trades_df)>0 else 0
+    # }
     return trades_df, summary
 
 if __name__=="__main__":
