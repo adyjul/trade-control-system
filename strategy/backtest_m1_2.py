@@ -1,4 +1,3 @@
-# strategy/backtest_m1_dual.py
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
@@ -6,83 +5,68 @@ from dataclasses import dataclass
 @dataclass
 class BacktestConfig:
     initial_balance: float = 100.0
-    fee_taker: float = 0.0004
-    slippage: float = 0.0005
     risk_per_trade: float = 0.01
     leverage: float = 3.0
-    min_size: float = 1e-6
+    fee_rate: float = 0.0004
+    min_atr: float = 0.0005  # filter market flat
+    tp_atr_mult: float = 0.8
+    sl_atr_mult: float = 0.8
 
 def load_ohlcv(path):
     df = pd.read_csv(path)
-    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     df = df.set_index('timestamp')
     df = df[['open','high','low','close','volume']].astype(float)
     return df
 
-def signal_dual_entry(df, window=20, dev=0.5):
-    sma = df['close'].rolling(window).mean()
-    upper = sma + dev * df['close'].rolling(window).std()
-    lower = sma - dev * df['close'].rolling(window).std()
-    sig = pd.Series(0, index=df.index)
-    sig[df['close'] < lower] = 1   # long
-    sig[df['close'] > upper] = -1  # short
-    return sig
+def compute_atr(df, period=14):
+    tr = pd.concat([df['high'] - df['low'],
+                    (df['high'] - df['close'].shift(1)).abs(),
+                    (df['low'] - df['close'].shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(period).mean()
+    return atr
 
-def run_backtest(df, signals, cfg: BacktestConfig, tp_pct=0.001, sl_pct=0.001):
+def dual_entry_backtest(df, cfg: BacktestConfig):
     balance = cfg.initial_balance
-    equity_curve = []
     trades = []
-    position = 0
-    entry_price = None
-    position_size_notional = 0
+    equity_curve = []
+    atr = compute_atr(df)
 
     for i in range(len(df)-1):
-        sig = signals.iloc[i]
-        next_open = df['open'].iat[i+1]
+        atr_now = atr.iat[i]
+        if np.isnan(atr_now) or atr_now < cfg.min_atr:
+            equity_curve.append({'time': df.index[i], 'balance': balance})
+            continue
 
-        # entry logic
-        if position == 0 and sig != 0:
-            sl_price = next_open * (1 - sl_pct) if sig==1 else next_open*(1 + sl_pct)
-            size_notional = balance * cfg.risk_per_trade / abs(next_open - sl_price) * cfg.leverage
-            if size_notional < cfg.min_size:
-                continue
-            position = sig
-            entry_price = next_open * (1 + cfg.slippage if sig==1 else 1 - cfg.slippage)
-            position_size_notional = size_notional
-            trades.append({'entry_time': df.index[i+1], 'side':'LONG' if sig==1 else 'SHORT', 'entry_price':entry_price})
+        long_level = df['close'].iat[i] + atr_now * 0.2
+        short_level = df['close'].iat[i] - atr_now * 0.2
 
-        # exit logic
-        elif position != 0:
-            high = df['high'].iat[i]
-            low = df['low'].iat[i]
-            exit_price = None
-            exit_reason = None
-            if position == 1:
-                tp_price = entry_price * (1 + tp_pct)
-                sl_price = entry_price * (1 - sl_pct)
-                if high >= tp_price:
-                    exit_price = tp_price * (1 - cfg.slippage)
-                    exit_reason = 'TP'
-                elif low <= sl_price:
-                    exit_price = sl_price * (1 + cfg.slippage)
-                    exit_reason = 'SL'
-            else:
-                tp_price = entry_price * (1 - tp_pct)
-                sl_price = entry_price * (1 + sl_pct)
-                if low <= tp_price:
-                    exit_price = tp_price * (1 + cfg.slippage)
-                    exit_reason = 'TP'
-                elif high >= sl_price:
-                    exit_price = sl_price * (1 - cfg.slippage)
-                    exit_reason = 'SL'
-
-            if exit_reason:
-                pnl = (exit_price - entry_price)/entry_price*position_size_notional*(1 if position==1 else -1)
+        # cek candle berikut untuk kena TP/SL
+        for j in range(1,4):
+            if i+j >= len(df):
+                break
+            high = df['high'].iat[i+j]
+            low = df['low'].iat[i+j]
+            # LONG
+            if high >= long_level:
+                entry_price = df['close'].iat[i]
+                tp = entry_price + atr_now*cfg.tp_atr_mult
+                sl = entry_price - atr_now*cfg.sl_atr_mult
+                exit_price = min(tp, high) if low > sl else sl
+                pnl = (exit_price - entry_price)/entry_price * balance * cfg.leverage - cfg.fee_rate*balance
                 balance += pnl
-                trades[-1].update({'exit_time':df.index[i],'exit_price':exit_price,'pnl':pnl,'exit_reason':exit_reason,'balance_after':balance})
-                position = 0
-                entry_price = None
-                position_size_notional = 0
+                trades.append({'time': df.index[i+j], 'side':'LONG', 'pnl':pnl})
+                break
+            # SHORT
+            if low <= short_level:
+                entry_price = df['close'].iat[i]
+                tp = entry_price - atr_now*cfg.tp_atr_mult
+                sl = entry_price + atr_now*cfg.sl_atr_mult
+                exit_price = max(tp, low) if high < sl else sl
+                pnl = (entry_price - exit_price)/entry_price * balance * cfg.leverage - cfg.fee_rate*balance
+                balance += pnl
+                trades.append({'time': df.index[i+j], 'side':'SHORT', 'pnl':pnl})
+                break
 
         equity_curve.append({'time': df.index[i], 'balance': balance})
 
@@ -93,18 +77,20 @@ def run_backtest(df, signals, cfg: BacktestConfig, tp_pct=0.001, sl_pct=0.001):
         'final_balance': balance,
         'net_profit': balance - cfg.initial_balance,
         'total_trades': len(trades_df),
-        'winrate': (trades_df['pnl']>0).mean() if not trades_df.empty else np.nan,
-        'avg_win': trades_df[trades_df['pnl']>0]['pnl'].mean() if not trades_df.empty else 0,
-        'avg_loss': trades_df[trades_df['pnl']<=0]['pnl'].mean() if not trades_df.empty else 0,
-        'max_drawdown': (equity_df['balance']/equity_df['balance'].cummax()-1).min()
+        'winrate': (trades_df['pnl']>0).mean() if len(trades_df)>0 else np.nan,
+        'max_drawdown': compute_max_drawdown(equity_df['balance'])
     }
     return trades_df, equity_df, summary
 
+def compute_max_drawdown(equity_series):
+    roll_max = equity_series.cummax()
+    drawdown = (equity_series - roll_max)/roll_max
+    return drawdown.min()
+
 if __name__ == "__main__":
-    df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
-    signals = signal_dual_entry(df)
     cfg = BacktestConfig()
-    trades_df, equity_df, summary = run_backtest(df, signals, cfg)
+    df = load_ohlcv("/root/trade-control-system/backtest_by_data/TIAUSDT_1m.csv")
+    trades_df, equity_df, summary = dual_entry_backtest(df, cfg)
     print("Summary:", summary)
-    trades_df.to_csv("trades_dual.csv", index=False)
-    equity_df.to_csv("equity_dual.csv")
+    trades_df.to_csv("trades_dual_entry.csv", index=False)
+    equity_df.to_csv("equity_dual_entry.csv")
