@@ -103,7 +103,7 @@ class LiveDualEntryBot:
         async with kline_socket as stream:
             while True:
                 res = await stream.recv()
-                print(res)
+                # print(res)
                 # res is dict containing 'k' for kline
                 k = res.get('k', {})
                 is_closed = k.get('x', False)
