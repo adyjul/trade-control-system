@@ -183,6 +183,7 @@ def run_backtest(df: pd.DataFrame,
     trades_df = pd.DataFrame(trades)
     # summary metrics
     total_trades = len(trades_df)
+    trades_df['side'] = np.where(trades_df['signal'] == 1, 'LONG', 'SHORT')
     trades_df['pnl'] = np.where(
         trades_df['side'] == 'LONG',
         (trades_df['exit_price'] - trades_df['entry_price']) / trades_df['entry_price'],
