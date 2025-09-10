@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from binance import AsyncClient, BinanceSocketManager
 from openpyxl import Workbook, load_workbook
-from config import BINANCE_API_KEY, BINANCE_API_SECRET, BINANCE_TESTNET
+from config import BINANCE_API_KEY, BINANCE_API_SECRET
 # ---------------- Config ----------------
 @dataclass
 class BotConfig:
