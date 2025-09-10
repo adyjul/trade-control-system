@@ -327,7 +327,6 @@ if __name__ == "__main__":
     load_dotenv()
     cfg.api_key = os.getenv("BINANCE_API_KEY")
     cfg.api_secret = os.getenv("BINANCE_API_SECRET")
-    print(os.getenv("BINANCE_API_SECRET"))
     # kalau mau testnet (akun demo), set True
     # cfg.testnet = True  
 
