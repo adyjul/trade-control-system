@@ -324,6 +324,7 @@ class LiveDualEntryLiveTradeBot:
 # ---------------- Run ----------------
 if __name__ == "__main__":
      # --- isi API KEY & SECRET kamu di sini ---
+    load_dotenv()
     cfg.api_key = os.getenv("BINANCE_API_KEY")
     cfg.api_secret = os.getenv("BINANCE_API_SECRET")
     print(os.getenv("BINANCE_API_SECRET"))
