@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from binance import AsyncClient, BinanceSocketManager
 from openpyxl import Workbook, load_workbook
-from config import BINANCE_API_KEY, BINANCE_API_SECRET
+from dotenv import load_dotenv
 # ---------------- Config ----------------
 @dataclass
 class BotConfig:
@@ -324,11 +324,11 @@ class LiveDualEntryLiveTradeBot:
 # ---------------- Run ----------------
 if __name__ == "__main__":
      # --- isi API KEY & SECRET kamu di sini ---
-    cfg.api_key = BINANCE_API_KEY
-    cfg.api_secret = BINANCE_API_SECRET
+    cfg.api_key = os.getenv("BINANCE_API_KEY")
+    cfg.api_secret = os.getenv("BINANCE_API_SECRET")
 
     # kalau mau testnet (akun demo), set True
-    cfg.testnet = True  
+    # cfg.testnet = True  
 
     # kalau mau langsung real, set ke False
     cfg.testnet = False  
