@@ -27,8 +27,8 @@ load_dotenv()  # loads BINANCE_API_KEY, BINANCE_API_SECRET if present in .env
 class BotConfig:
     pair: str = "AVAXUSDT"
     interval: str = "1m"
-    initial_balance: float = 20.0
-    leverage: int = 3
+    initial_balance: float = 15.0
+    leverage: int = 10
     fee_rate: float = 0.0004
     min_atr: float = 0.0005
     atr_period: int = 14
@@ -234,6 +234,8 @@ class LiveDualEntryLiveTrade:
                 sl_price = entry_price - atr_now * self.cfg.sl_atr_mult if side == 'LONG' else entry_price + atr_now * self.cfg.sl_atr_mult
 
                 # compute quantity: (balance * leverage) / entry_price (approx USD exposure)
+                # qty = max((self.balance * self.cfg.leverage) / entry_price, 0.000001)
+                # qty = await self._format_quantity(qty)
                 qty = max((self.balance * self.cfg.leverage) / entry_price, 0.000001)
                 qty = await self._format_quantity(qty)
 
