@@ -101,6 +101,21 @@ class LiveDualEntryLiveTradeBot:
         else:
             self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret)
         return self.client
+    
+    async def _format_quantity(self, qty: float):
+        client = await self._init_client()
+        info = await client.futures_exchange_info()
+        for s in info['symbols']:
+            if s['symbol'] == self.cfg.pair:
+                for f in s['filters']:
+                    if f['filterType'] == 'LOT_SIZE':
+                        step_size = float(f['stepSize'])
+                        min_qty = float(f['minQty'])
+                        # bulatkan ke step_size
+                        precision = int(round(-np.log10(step_size)))
+                        qty = max(min_qty, round(qty, precision))
+                        return qty
+        return qty
 
     async def _close_client(self):
         if self.client:
@@ -230,7 +245,9 @@ class LiveDualEntryLiveTradeBot:
             if triggered and exit_price is not None:
                 # Compute qty based on current (simulated) balance and leverage
                 # qty = (balance * leverage) / entry_price
+                # qty = max((self.balance * self.cfg.leverage) / entry_price, 0.000001)
                 qty = max((self.balance * self.cfg.leverage) / entry_price, 0.000001)
+                qty = await self._format_quantity(qty)
                 # map to Binance side: LONG -> BUY to open, SHORT -> SELL to open
                 open_side = "BUY" if side == 'LONG' else "SELL"
                 close_side = "SELL" if side == 'LONG' else "BUY"
