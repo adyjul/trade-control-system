@@ -28,7 +28,7 @@ class BotConfig:
     pair: str = "AVAXUSDT"
     interval: str = "1m"
     initial_balance: float = 20.0
-    leverage: float = 3.0
+    leverage: int = 3
     fee_rate: float = 0.0004
     min_atr: float = 0.0005
     atr_period: int = 14
@@ -101,7 +101,7 @@ class LiveDualEntryLiveTrade:
             self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret)
         # set leverage on the symbol if live_mode
         try:
-            print("DEBUG leverage:", self.cfg.leverage, type(self.cfg.leverage))
+            # print("DEBUG leverage:", self.cfg.leverage, type(self.cfg.leverage))
             await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=self.cfg.leverage)
             print(f"[INFO] Leverage set to {self.cfg.leverage}")
         except Exception as e:
