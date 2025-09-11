@@ -2,11 +2,13 @@ import time
 import os
 from binance.um_futures import UMFutures
 from binance.error import ClientError
-from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
+# from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from dotenv import load_dotenv
+from binance.um_futures import UMFutures
+
+# client = UMFutures(key="API_KEY", secret="API_SECRET")
 
 load_dotenv()
-
 API_KEY = os.getenv("BINANCE_API_KEY")
 API_SECRET = os.getenv("BINANCE_API_SECRET")
 
