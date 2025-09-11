@@ -236,7 +236,7 @@ class LiveDualEntryLiveTrade:
                 # compute quantity: (balance * leverage) / entry_price (approx USD exposure)
                 # qty = max((self.balance * self.cfg.leverage) / entry_price, 0.000001)
                 # qty = await self._format_quantity(qty)
-                qty = max((self.balance * self.cfg.leverage) / entry_price, 0.000001)
+                qty = 1
                 qty = await self._format_quantity(qty)
 
                 executed_entry_price = None
