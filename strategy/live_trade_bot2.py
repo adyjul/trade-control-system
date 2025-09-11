@@ -40,8 +40,8 @@ class BotConfig:
     min_hold_sec: int = 30
     logfile: str = "trades_log_live.xlsx"
     live_mode: bool = False        # True -> place real orders
-    api_key: str = os.getenv("BINANCE_API_KEY", "")
-    api_secret: str = os.getenv("BINANCE_API_SECRET", "")
+    api_key: str = os.getenv("BINANCE_API_KEY")
+    api_secret: str = os.getenv("BINANCE_API_SECRET")
     testnet: bool = False          # True -> AsyncClient.create(..., testnet=True)
 
 cfg = BotConfig()
