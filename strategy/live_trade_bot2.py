@@ -1,10 +1,13 @@
 import time
 import asyncio
+import os
 from binance.client import Client
 from binance import BinanceSocketManager
+from dotenv import load_dotenv
 
-API_KEY = "API_KEY"
-API_SECRET = "API_SECRET"
+load_dotenv()
+API_KEY = os.getenv("BINANCE_API_KEY")
+API_SECRET = os.getenv("BINANCE_API_SECRET")
 
 client = Client(API_KEY, API_SECRET)
 
