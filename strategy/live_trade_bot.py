@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 class BotConfig:
     pair: str = "AVAXUSDT"
     interval: str = "1m"
-    initial_balance: float = 300.0
+    initial_balance: float = 30.0
     leverage: float = 3.0
     fee_rate: float = 0.0004
     min_atr: float = 0.0005
