@@ -101,6 +101,7 @@ class LiveDualEntryLiveTrade:
             self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret)
         # set leverage on the symbol if live_mode
         try:
+            print("DEBUG leverage:", self.cfg.leverage, type(self.cfg.leverage))
             await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=self.cfg.leverage)
             print(f"[INFO] Leverage set to {self.cfg.leverage}")
         except Exception as e:
