@@ -325,7 +325,7 @@ class LiveDualEntryLiveTrade:
 if __name__ == "__main__":
     # config quick toggles:
     cfg.testnet = False      # set True to use Binance futures testnet (recommended initial)
-    cfg.live_mode = False   # set True to place real orders (only after verified)
+    cfg.live_mode = True   # set True to place real orders (only after verified)
     # API keys read from .env by default (BINANCE_API_KEY, BINANCE_API_SECRET)
     # Or set directly:
     # cfg.api_key = "..." 
