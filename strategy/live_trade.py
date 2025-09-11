@@ -28,14 +28,14 @@ from openpyxl import Workbook, load_workbook
 class BotConfig:
     pair: str = "AVAXUSDT"
     interval: str = "1m"
-    initial_balance: float = 100.0
-    leverage: float = 3.0
+    initial_balance: float = 20.0
+    leverage: float = 10.0
     fee_rate: float = 0.0004
     min_atr: float = 0.0005
     atr_period: int = 14
     level_mult: float = 0.2    # long/short trigger offset: close +/- atr*level_mult
-    tp_atr_mult: float = 0.8
-    sl_atr_mult: float = 0.8
+    tp_atr_mult: float = 0.9
+    sl_atr_mult: float = 0.9
     monitor_candles: int = 3   # how many closed candles to watch for breakout
     candles_buffer: int = 500   # how many recent candles to keep (for ATR etc.)
     logfile: str = "trades_log.xlsx"
