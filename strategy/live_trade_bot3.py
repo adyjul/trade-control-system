@@ -126,6 +126,21 @@ class LimitScalpBot:
             print("[WARN] set leverage failed:", e)
         return self.client
 
+    async def _format_price(self, price: float) -> float:
+        client = await self._init_client()
+        try:
+            info = await client.futures_exchange_info()
+            for s in info['symbols']:
+                if s['symbol'] == self.cfg.pair:
+                    for f in s['filters']:
+                        if f['filterType'] == 'PRICE_FILTER':
+                            tick_size = float(f['tickSize'])
+                            precision = int(round(-np.log10(tick_size)))
+                            return round(price, precision)
+        except Exception as e:
+            print("[WARN] format price failed:", e)
+        return price
+
     async def _close_client(self):
         if self.client:
             await self.client.close_connection()
@@ -317,7 +332,9 @@ class LimitScalpBot:
                     side = 'SELL'
 
                 # place entry limit order
-                resp = await self._place_limit_order(side, round(limit_price,8), qty, reduce_only=False)
+                # resp = await self._place_limit_order(side, round(limit_price,8), qty, reduce_only=False)
+                limit_price = await self._format_price(limit_price)
+                resp = await self._place_limit_order(side, limit_price, qty, reduce_only=False)
                 if resp is None:
                     print('[WARN] entry order failed to create')
                     continue
@@ -371,10 +388,16 @@ class LimitScalpBot:
                 }
                 # place TP and SL as limit reduceOnly orders
                 # TP (take profit)
-                tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
-                sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
-                tp_resp = await self._place_limit_order(tp_side, round(meta['tp_price'],8), meta['qty'], reduce_only=True)
-                sl_resp = await self._place_limit_order(sl_side, round(meta['sl_price'],8), meta['qty'], reduce_only=True)
+                # tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
+                # sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
+                # tp_resp = await self._place_limit_order(tp_side, round(meta['tp_price'],8), meta['qty'], reduce_only=True)
+                # sl_resp = await self._place_limit_order(sl_side, round(meta['sl_price'],8), meta['qty'], reduce_only=True)
+                
+                tp_price = await self._format_price(meta['tp_price'])
+                sl_price = await self._format_price(meta['sl_price'])
+                tp_resp = await self._place_limit_order(tp_side, tp_price, meta['qty'], reduce_only=True)
+                sl_resp = await self._place_limit_order(sl_side, sl_price, meta['qty'], reduce_only=True)
+
 
                 tp_oid = str(tp_resp.get('orderId') if isinstance(tp_resp, dict) else f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
                 sl_oid = str(sl_resp.get('orderId') if isinstance(sl_resp, dict) else f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
@@ -427,7 +450,9 @@ class LimitScalpBot:
 
                 # place market close to ensure exit (this is taker and incurs fee) -> optional; instead we try to place a LIMIT at exit_price to remain maker
                 close_side = 'SELL' if pos['side']=='LONG' else 'BUY'
-                resp_close = await self._place_limit_order(close_side, round(exit_price,8), pos['qty'], reduce_only=True)
+                # resp_close = await self._place_limit_order(close_side, round(exit_price,8), pos['qty'], reduce_only=True)
+                exit_price_fmt = await self._format_price(exit_price)
+                resp_close = await self._place_limit_order(close_side, exit_price_fmt, pos['qty'], reduce_only=True)
                 executed_exit_price = float(resp_close.get('avgPrice') or resp_close.get('price') or exit_price) if isinstance(resp_close, dict) else exit_price
             else:
                 executed_exit_price = exit_price
