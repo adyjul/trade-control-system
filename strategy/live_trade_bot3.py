@@ -388,8 +388,8 @@ class LimitScalpBot:
                 }
                 # place TP and SL as limit reduceOnly orders
                 # TP (take profit)
-                # tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
-                # sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
+                tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
+                sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
                 # tp_resp = await self._place_limit_order(tp_side, round(meta['tp_price'],8), meta['qty'], reduce_only=True)
                 # sl_resp = await self._place_limit_order(sl_side, round(meta['sl_price'],8), meta['qty'], reduce_only=True)
                 
