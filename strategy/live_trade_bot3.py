@@ -22,7 +22,7 @@ Run: python3 live_bot_limit_scalper_m1.py
 import asyncio
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 
 import numpy as np
@@ -359,24 +359,82 @@ class LimitScalpBot:
         # after placing, check quickly if any pending entry got filled (paper-mode simulates fill immediately)
         await self._poll_pending_entries_and_handle_fills()
 
+    # async def _poll_pending_entries_and_handle_fills(self):
+    #     # iterate over pending entry orders and see if filled
+    #     for oid, meta in list(self._pending_entry_orders.items()):
+    #         # in live_mode, poll order status
+    #         order_info = await self._get_order(oid) if self.cfg.live_mode else {'status':'FILLED', 'avgPrice': str(meta['limit_price'])}
+    #         status = (order_info.get('status') if isinstance(order_info, dict) else None) or order_info
+    #         if isinstance(status, str) and status.upper() == 'FILLED' or (isinstance(order_info, dict) and order_info.get('status') == 'FILLED'):
+    #             # handle fill
+    #             executed_price = None
+    #             if isinstance(order_info, dict):
+    #                 executed_price = float(order_info.get('avgPrice') or order_info.get('price') or meta['limit_price'])
+    #             else:
+    #                 executed_price = meta['limit_price']
+
+    #             # set current position metadata
+    #             self._current_position = {
+    #                 'side': meta['side'],
+    #                 'entry_price': meta['trigger_price'],
+    #                 'executed_entry_price': executed_price,
+    #                 'tp_price': meta['tp_price'],
+    #                 'sl_price': meta['sl_price'],
+    #                 'qty': meta['qty'],
+    #                 'entry_time': datetime.now(timezone.utc),   # tz-aware
+    #                 'entry_order_id': oid,
+    #                 'tp_order_id': None,
+    #                 'sl_order_id': None
+    #             }
+    #             # place TP and SL as limit reduceOnly orders
+    #             # TP (take profit)
+    #             tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
+    #             sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
+    #             # tp_resp = await self._place_limit_order(tp_side, round(meta['tp_price'],8), meta['qty'], reduce_only=True)
+    #             # sl_resp = await self._place_limit_order(sl_side, round(meta['sl_price'],8), meta['qty'], reduce_only=True)
+                
+    #             tp_price = await self._format_price(meta['tp_price'])
+    #             sl_price = await self._format_price(meta['sl_price'])
+
+    #             try:
+    #                 tp_resp = await self._place_limit_order(tp_side, tp_price, meta['qty'], reduce_only=True)
+    #             except Exception as e:
+    #                 print(f"[WARN] TP order failed (ReduceOnly?): {e}")
+    #                 tp_resp = {'orderId': f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"}
+                
+    #             try:
+    #                 sl_resp = await self._place_limit_order(sl_side, sl_price, meta['qty'], reduce_only=True)
+    #             except Exception as e:
+    #                 print(f"[WARN] SL order failed (ReduceOnly?): {e}")
+    #                 sl_resp = {'orderId': f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"}
+
+    #             # tp_resp = await self._place_limit_order(tp_side, tp_price, meta['qty'], reduce_only=True)
+    #             # sl_resp = await self._place_limit_order(sl_side, sl_price, meta['qty'], reduce_only=True)
+
+
+    #             tp_oid = str(tp_resp.get('orderId') if isinstance(tp_resp, dict) else f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
+    #             sl_oid = str(sl_resp.get('orderId') if isinstance(sl_resp, dict) else f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
+
+    #             self._current_position['tp_order_id'] = tp_oid
+    #             self._current_position['sl_order_id'] = sl_oid
+
+    #             print(f"[FILLED] entry executed={executed_price:.6f} qty={meta['qty']} tp_oid={tp_oid} sl_oid={sl_oid}")
+
+    #             # remove pending entry record
+    #             self._pending_entry_orders.pop(oid, None)
+    #             self._last_trade_time = datetime.utcnow()
+
     async def _poll_pending_entries_and_handle_fills(self):
-        # iterate over pending entry orders and see if filled
         for oid, meta in list(self._pending_entry_orders.items()):
-            # in live_mode, poll order status
+            # cek status order
             order_info = await self._get_order(oid) if self.cfg.live_mode else {'status':'FILLED', 'avgPrice': str(meta['limit_price'])}
             status = (order_info.get('status') if isinstance(order_info, dict) else None) or order_info
             if isinstance(status, str) and status.upper() == 'FILLED' or (isinstance(order_info, dict) and order_info.get('status') == 'FILLED'):
-                # handle fill
-                executed_price = None
-                if isinstance(order_info, dict):
-                    executed_price = float(order_info.get('avgPrice') or order_info.get('price') or meta['limit_price'])
-                else:
-                    executed_price = meta['limit_price']
+                executed_price = float(order_info.get('avgPrice') or order_info.get('price') or meta['limit_price']) if isinstance(order_info, dict) else meta['limit_price']
 
-                # set current position metadata
                 self._current_position = {
                     'side': meta['side'],
-                    'entry_price': meta['trigger_price'],            # keep trigger-level for log/backtest
+                    'entry_price': meta['trigger_price'],
                     'executed_entry_price': executed_price,
                     'tp_price': meta['tp_price'],
                     'sl_price': meta['sl_price'],
@@ -386,28 +444,35 @@ class LimitScalpBot:
                     'tp_order_id': None,
                     'sl_order_id': None
                 }
-                # place TP and SL as limit reduceOnly orders
-                # TP (take profit)
+
                 tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
                 sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
-                # tp_resp = await self._place_limit_order(tp_side, round(meta['tp_price'],8), meta['qty'], reduce_only=True)
-                # sl_resp = await self._place_limit_order(sl_side, round(meta['sl_price'],8), meta['qty'], reduce_only=True)
-                
-                tp_price = await self._format_price(meta['tp_price'])
-                sl_price = await self._format_price(meta['sl_price'])
-                tp_resp = await self._place_limit_order(tp_side, tp_price, meta['qty'], reduce_only=True)
-                sl_resp = await self._place_limit_order(sl_side, sl_price, meta['qty'], reduce_only=True)
 
+                # ===== PRE-CHECK BEFORE TP/SL =====
+                tp_order_id = None
+                sl_order_id = None
+                if self._current_position['qty'] > 0:
+                    try:
+                        tp_price = await self._format_price(meta['tp_price'])
+                        tp_resp = await self._place_limit_order(tp_side, tp_price, self._current_position['qty'], reduce_only=True)
+                        tp_order_id = str(tp_resp.get('orderId') if isinstance(tp_resp, dict) else f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
+                    except Exception as e:
+                        print(f"[WARN] TP order failed (ReduceOnly?): {e}")
+                        tp_order_id = f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"
 
-                tp_oid = str(tp_resp.get('orderId') if isinstance(tp_resp, dict) else f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
-                sl_oid = str(sl_resp.get('orderId') if isinstance(sl_resp, dict) else f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
+                    try:
+                        sl_price = await self._format_price(meta['sl_price'])
+                        sl_resp = await self._place_limit_order(sl_side, sl_price, self._current_position['qty'], reduce_only=True)
+                        sl_order_id = str(sl_resp.get('orderId') if isinstance(sl_resp, dict) else f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
+                    except Exception as e:
+                        print(f"[WARN] SL order failed (ReduceOnly?): {e}")
+                        sl_order_id = f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"
 
-                self._current_position['tp_order_id'] = tp_oid
-                self._current_position['sl_order_id'] = sl_oid
+                self._current_position['tp_order_id'] = tp_order_id
+                self._current_position['sl_order_id'] = sl_order_id
 
-                print(f"[FILLED] entry executed={executed_price:.6f} qty={meta['qty']} tp_oid={tp_oid} sl_oid={sl_oid}")
+                print(f"[FILLED] entry executed={executed_price:.6f} qty={self._current_position['qty']} tp_oid={tp_order_id} sl_oid={sl_order_id}")
 
-                # remove pending entry record
                 self._pending_entry_orders.pop(oid, None)
                 self._last_trade_time = datetime.utcnow()
 
@@ -495,6 +560,7 @@ if __name__ == '__main__':
         asyncio.get_event_loop().run_until_complete(bot.start())
     except KeyboardInterrupt:
         print('[STOP] interrupted. Trades saved to', cfg.logfile)
+    finally:
         try:
             asyncio.get_event_loop().run_until_complete(bot._close_client())
         except:
