@@ -39,7 +39,7 @@ class BotConfig:
     pair: str = "AVAXUSDT"
     interval: str = "1m"
     initial_balance: float = 15.0
-    leverage: int = 10
+    leverage: int = 20
     fee_rate: float = 0.0004
     min_atr: float = 0.0005
     atr_period: int = 14
