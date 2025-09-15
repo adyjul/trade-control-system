@@ -522,6 +522,9 @@ class LimitScalpBot:
                 self._last_trade_time = datetime.now(timezone.utc)
 
     async def _process_current_position_and_maybe_close(self):
+        """Detect TP/SL hit (based on candle high/low) and actually close on exchange.
+           Only write [CLOSED] log when exchange confirmed the close (close_position returned executed price).
+        """
         if self._current_position is None:
             return
         pos = self._current_position
@@ -534,41 +537,36 @@ class LimitScalpBot:
         exit_price = None
         executed_exit_price = None
 
+        # NOTE: use consistent keys: tp_price / sl_price
+        side = pos.get("side")
+        qty = pos.get("qty", 0)
+        tp_price = pos.get("tp_price")
+        sl_price = pos.get("sl_price")
+
         if elapsed >= self.cfg.min_hold_sec:
-            if pos['side'] == 'LONG':
-                if latest_candle['high'] >= pos['tp_price']:
-                    exit_price = pos['tp_price']; exit_reason = 'TP'
-                elif latest_candle['low'] <= pos['sl_price']:
-                    exit_price = pos['sl_price']; exit_reason = 'SL'
-            else:
-                if latest_candle['low'] <= pos['tp_price']:
-                    exit_price = pos['tp_price']; exit_reason = 'TP'
-                elif latest_candle['high'] >= pos['sl_price']:
-                    exit_price = pos['sl_price']; exit_reason = 'SL'
+            if side == 'LONG':
+                if tp_price is not None and latest_candle['high'] >= tp_price:
+                    exit_price = tp_price; exit_reason = 'TP'
+                elif sl_price is not None and latest_candle['low'] <= sl_price:
+                    exit_price = sl_price; exit_reason = 'SL'
+            else:  # SHORT
+                if tp_price is not None and latest_candle['low'] <= tp_price:
+                    exit_price = tp_price; exit_reason = 'TP'
+                elif sl_price is not None and latest_candle['high'] >= sl_price:
+                    exit_price = sl_price; exit_reason = 'SL'
 
         if exit_price is not None:
-            # to close, cancel the opposite order (if exists) then let TP/SL order fill or place market close (we prefer maker TP/SL)
-            # For safety, we cancel both reduceOnly orders and place a market close (optional). Here we'll cancel both and simulate fill in paper-mode.
-            if self.cfg.live_mode:
-                # try cancel TP & SL to avoid duplicates; actual behavior depends on which was hit first
-                try:
-                    if pos.get('tp_order_id'):
-                        await self._cancel_order(pos['tp_order_id'])
-                    if pos.get('sl_order_id'):
-                        await self._cancel_order(pos['sl_order_id'])
-                except Exception:
-                    pass
+            # Try to close on exchange. prefer_limit=False to ensure it closes (use market fallback)
+            executed = await self.close_position(side, qty, exit_price=exit_price, prefer_limit=False)
 
-                # place market close to ensure exit (this is taker and incurs fee) -> optional; instead we try to place a LIMIT at exit_price to remain maker
-                close_side = 'SELL' if pos['side']=='LONG' else 'BUY'
-                # resp_close = await self._place_limit_order(close_side, round(exit_price,8), pos['qty'], reduce_only=True)
-                exit_price_fmt = await self._format_price(exit_price)
-                resp_close = await self._place_limit_order(close_side, exit_price_fmt, pos['qty'], reduce_only=True)
-                executed_exit_price = float(resp_close.get('avgPrice') or resp_close.get('price') or exit_price) if isinstance(resp_close, dict) else exit_price
-            else:
-                executed_exit_price = exit_price
+            if executed is None:
+                # close failed — do not mark closed in log; keep position and warn
+                print(f"[ERROR] close failed on exchange for {side} qty={qty} exit_price={exit_price}. Keeping position open.")
+                return
 
-            used_entry_price = pos.get('executed_entry_price') or pos['entry_price']
+            executed_exit_price = float(executed)
+
+            used_entry_price = pos.get('executed_entry_price') or pos.get('entry_price')
             pnl = self._compute_pnl(used_entry_price, executed_exit_price, pos['side'], pos['qty'])
             self.balance += pnl
 
@@ -579,7 +577,135 @@ class LimitScalpBot:
             ]
             append_trade_excel(self.cfg.logfile, trade)
             print(f"[CLOSED] {now} {pos['side']} entry={used_entry_price:.6f} exit={executed_exit_price:.6f} pnl={pnl:.6f} balance={self.balance:.4f}")
+
+            # clear current position only after confirmed close
             self._current_position = None
+
+    async def close_position(self, side: str, qty: float, exit_price: Optional[float] = None, prefer_limit: bool = False):
+        """
+        Close a position on the exchange.
+        - side: "LONG" or "SHORT" (bot internal)
+        - qty: quantity to close
+        - exit_price: prefered limit price (if prefer_limit True)
+        - prefer_limit: try limit reduceOnly close first; if fails, use market
+        Returns executed_price (float) on success, None on failure.
+        """
+        if qty <= 0:
+            print("[WARN] close_position called with qty <= 0")
+            return None
+
+        close_side = 'SELL' if side == 'LONG' else 'BUY'
+
+        # cancel existing TP/SL orders to avoid conflicts (safe: _cancel_order skips paper ids)
+        try:
+            if self._current_position:
+                if self._current_position.get('tp_order_id'):
+                    await self._cancel_order(self._current_position.get('tp_order_id'))
+                if self._current_position.get('sl_order_id'):
+                    await self._cancel_order(self._current_position.get('sl_order_id'))
+        except Exception as e:
+            print("[WARN] failed canceling tp/sl before close:", e)
+
+        # PAPER MODE: emulate immediate close using last known price
+        if not self.cfg.live_mode:
+            executed = exit_price if exit_price is not None else float(self.candles['close'].iat[-1])
+            return float(executed)
+
+        client = await self._init_client()
+
+        # helper to extract executed price from resp
+        def _extract_price(resp):
+            if not resp:
+                return None
+            # common fields
+            for k in ('avgPrice', 'avgFilledPrice', 'price'):
+                if isinstance(resp.get(k), (str, float)):
+                    try:
+                        return float(resp.get(k))
+                    except:
+                        pass
+            # tries fills if available
+            fills = resp.get('fills') or resp.get('fill') or []
+            if fills and isinstance(fills, list):
+                num = 0.0; den = 0.0
+                for f in fills:
+                    p = float(f.get('price', 0))
+                    q = float(f.get('qty', f.get('qty', 0)))
+                    num += p * q; den += q
+                if den > 0:
+                    return num/den
+            return None
+
+        # Try preferred route: LIMIT reduceOnly at exit_price (to remain maker) if requested
+        if prefer_limit and exit_price is not None:
+            try:
+                px = await self._format_price(exit_price)
+                resp = await client.futures_create_order(
+                    symbol=self.cfg.pair,
+                    side=close_side,
+                    type='LIMIT',
+                    timeInForce='GTC',
+                    quantity=qty,
+                    price=str(px),
+                    reduceOnly=True
+                )
+                exec_px = _extract_price(resp)
+                # if order created but not filled immediately, we should wait/poll — but for safety, fallback to market if not filled
+                if exec_px is not None:
+                    # quick verification
+                    await asyncio.sleep(0.2)
+                    return exec_px
+                else:
+                    # place market fallback
+                    print("[INFO] limit-close created but not filled immediately -> fallback to MARKET close")
+            except Exception as e:
+                print("[WARN] limit reduceOnly close failed:", e)
+
+        # MARKET close (guaranteed fill). Use reduceOnly if exchange supports for MARKET; otherwise market without reduceOnly.
+        try:
+            # try with reduceOnly param first (some API versions support it)
+            try:
+                resp = await client.futures_create_order(
+                    symbol=self.cfg.pair,
+                    side=close_side,
+                    type='MARKET',
+                    quantity=qty,
+                    reduceOnly=True
+                )
+            except Exception:
+                # fallback: market without reduceOnly (still should close)
+                resp = await client.futures_create_order(
+                    symbol=self.cfg.pair,
+                    side=close_side,
+                    type='MARKET',
+                    quantity=qty
+                )
+
+            exec_px = _extract_price(resp)
+            # small pause and verify position actually zeroed
+            await asyncio.sleep(0.3)
+            try:
+                pos_info = await client.futures_position_information(symbol=self.cfg.pair)
+                # pos_info usually list of dicts
+                pos_amt = None
+                if isinstance(pos_info, list):
+                    for p in pos_info:
+                        if p.get('symbol') == self.cfg.pair:
+                            pos_amt = float(p.get('positionAmt', 0))
+                            break
+                elif isinstance(pos_info, dict):
+                    pos_amt = float(pos_info.get('positionAmt', 0))
+
+                if pos_amt is not None and abs(pos_amt) > 1e-8:
+                    print(f"[WARN] close_position: positionAmt still not zero after close ({pos_amt}).")
+                return exec_px if exec_px is not None else float(self.candles['close'].iat[-1])
+            except Exception as e:
+                print("[WARN] unable to verify position after close:", e)
+                return exec_px if exec_px is not None else float(self.candles['close'].iat[-1])
+
+        except Exception as e:
+            print("[ERROR] close_position failed:", e)
+            return None
 
     def _compute_pnl(self, entry_price: float, exit_price: float, side: str, qty: float):
         if side == 'LONG':
