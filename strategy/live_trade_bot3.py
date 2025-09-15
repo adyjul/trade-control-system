@@ -167,25 +167,43 @@ class LimitScalpBot:
         """Place a LIMIT order. Returns order dict or None in paper-mode."""
         if not self.cfg.live_mode:
             # emulate an order id for paper-mode
-            return {"orderId": f"paper-{int(datetime.utcnow().timestamp()*1000)}", "status": "NEW", "price": str(price), "origQty": str(qty)}
+            return {
+                "orderId": f"paper-{int(datetime.utcnow().timestamp()*1000)}",
+                "status": "NEW",
+                "price": str(price),
+                "origQty": str(qty),
+                "avgPrice": str(price)
+            }
+
         client = await self._init_client()
         try:
-            # TimeInForce GTC; for some futures APIs, POST_ONLY isn't supported. We place limit slightly away to aim for maker.
-            resp = await client.futures_create_order(
-                symbol=self.cfg.pair,
-                side=side,
-                type='LIMIT',
-                timeInForce='GTC',
-                quantity=qty,
-                price=str(price),
-                reduceOnly=reduce_only
-            )
-            return resp
+            params = {
+                "symbol": self.cfg.pair,    # <-- use cfg.pair (fix)
+                "side": side,
+                "type": "LIMIT",
+                "timeInForce": "GTC",
+                "quantity": qty,
+                "price": str(price),
+            }
+            if reduce_only:
+                params["reduceOnly"] = True
+
+            # use futures_create_order for futures endpoints
+            order = await client.futures_create_order(**params)
+            return order
+
         except Exception as e:
-            print('[ERROR] place_limit_order failed:', e)
+            # helpful debug log
+            print(f"[ERROR] place_limit_order failed: {e}")
             return None
 
     async def _cancel_order(self, order_id: str):
+        """Safe cancel: skip paper ids and empty ids."""
+        if not order_id:
+            return False
+        # if it's a paper-mode id, nothing to cancel
+        if str(order_id).startswith("paper-"):
+            return True
         if not self.cfg.live_mode:
             return True
         client = await self._init_client()
@@ -195,6 +213,24 @@ class LimitScalpBot:
         except Exception as e:
             print('[WARN] cancel order failed:', e)
             return False
+    
+    async def place_tp_order(self, side: str, price: float, qty: float):
+        if qty <= 0:
+            return None
+        try:
+            return await self._place_limit_order(side, price, qty, reduce_only=True)
+        except Exception as e:
+            print(f"[WARN] TP order failed, fallback paper: {e}")
+            return {"orderId": f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"}
+
+    async def place_sl_order(self, side: str, price: float, qty: float):
+        if qty <= 0:
+            return None
+        try:
+            return await self._place_limit_order(side, price, qty, reduce_only=True)
+        except Exception as e:
+            print(f"[WARN] SL order failed, fallback paper: {e}")
+            return {"orderId": f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"}
 
     async def _get_order(self, order_id: str):
         if not self.cfg.live_mode:
@@ -453,18 +489,26 @@ class LimitScalpBot:
                 tp_order_id = None
                 sl_order_id = None
                 if self._current_position['qty'] > 0:
+                    # TP
                     try:
                         tp_price = await self._format_price(meta['tp_price'])
-                        tp_resp = await self._place_limit_order(tp_side, tp_price, self._current_position['qty'], reduce_only=True)
-                        tp_order_id = str(tp_resp.get('orderId') if isinstance(tp_resp, dict) else f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
+                        tp_resp = await self.place_tp_order(tp_side, tp_price, self._current_position['qty'])
+                        if tp_resp:
+                            tp_order_id = str(tp_resp.get('orderId') or tp_resp.get('clientOrderId') or f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
+                        else:
+                            tp_order_id = f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"
                     except Exception as e:
                         print(f"[WARN] TP order failed (ReduceOnly?): {e}")
                         tp_order_id = f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"
 
+                    # SL
                     try:
                         sl_price = await self._format_price(meta['sl_price'])
-                        sl_resp = await self._place_limit_order(sl_side, sl_price, self._current_position['qty'], reduce_only=True)
-                        sl_order_id = str(sl_resp.get('orderId') if isinstance(sl_resp, dict) else f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
+                        sl_resp = await self.place_sl_order(sl_side, sl_price, self._current_position['qty'])
+                        if sl_resp:
+                            sl_order_id = str(sl_resp.get('orderId') or sl_resp.get('clientOrderId') or f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
+                        else:
+                            sl_order_id = f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"
                     except Exception as e:
                         print(f"[WARN] SL order failed (ReduceOnly?): {e}")
                         sl_order_id = f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"
