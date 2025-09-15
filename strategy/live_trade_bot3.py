@@ -36,7 +36,7 @@ load_dotenv()
 # --------- Config ---------
 @dataclass
 class BotConfig:
-    pair: str = "INJUSDT"
+    pair: str = "AVAXUSDT"
     interval: str = "1m"
     initial_balance: float = 15.0
     leverage: int = 20
