@@ -36,7 +36,7 @@ load_dotenv()
 # --------- Config ---------
 @dataclass
 class BotConfig:
-    pair: str = "AVAXUSDT"
+    pair: str = "INJUSDT"
     interval: str = "1m"
     initial_balance: float = 15.0
     leverage: int = 20
@@ -50,7 +50,7 @@ class BotConfig:
     candles_buffer: int = 500
     min_hold_sec: int = 30
     logfile: str = "trades_log_limit.xlsx"
-    live_mode: bool = False        # place orders when True
+    live_mode: bool = True        # place orders when True
     api_key: Optional[str] = os.getenv("BINANCE_API_KEY")
     api_secret: Optional[str] = os.getenv("BINANCE_API_SECRET")
     testnet: bool = False
