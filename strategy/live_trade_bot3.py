@@ -256,7 +256,7 @@ class LimitScalpBot:
         # remove / cancel pending entry orders that timed out
         if not self._pending_entry_orders:
             return
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         to_remove = []
         for oid, meta in list(self._pending_entry_orders.items()):
             created = meta['created_at']
@@ -347,7 +347,7 @@ class LimitScalpBot:
                     'qty': qty,
                     'tp_price': tp_price,
                     'sl_price': sl_price,
-                    'created_at': datetime.utcnow()
+                    'created_at': datetime.now(timezone.utc)
                 }
                 print(f"[ENTRY_ORDER] id={order_id} side={triggered_side} limit={limit_price:.6f} qty={qty} tp={tp_price:.6f} sl={sl_price:.6f}")
                 # do not re-add watch
@@ -439,7 +439,8 @@ class LimitScalpBot:
                     'tp_price': meta['tp_price'],
                     'sl_price': meta['sl_price'],
                     'qty': meta['qty'],
-                    'entry_time': datetime.utcnow(),
+                    # 'entry_time': datetime.utcnow(),
+                    'entry_time': datetime.now(timezone.utc),
                     'entry_order_id': oid,
                     'tp_order_id': None,
                     'sl_order_id': None
@@ -474,13 +475,14 @@ class LimitScalpBot:
                 print(f"[FILLED] entry executed={executed_price:.6f} qty={self._current_position['qty']} tp_oid={tp_order_id} sl_oid={sl_order_id}")
 
                 self._pending_entry_orders.pop(oid, None)
-                self._last_trade_time = datetime.utcnow()
+                self._last_trade_time = datetime.now(timezone.utc)
 
     async def _process_current_position_and_maybe_close(self):
         if self._current_position is None:
             return
         pos = self._current_position
         latest_candle = self.candles.iloc[-1]
+
         now = self.candles.index[-1]
         elapsed = (now - pos['entry_time']).total_seconds()
 
