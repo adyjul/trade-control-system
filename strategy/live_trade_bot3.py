@@ -598,7 +598,6 @@ class LimitScalpBot:
             print(f"[ERROR] Failed to close {side} position qty={qty} at {exit_price}")
             return
 
-        # update balance dan log trade
         pos = self._current_position
         if pos is None:
             return
@@ -615,10 +614,13 @@ class LimitScalpBot:
             pos.get('entry_order_id'), pos.get('tp_order_id'), pos.get('sl_order_id')
         ]
         append_trade_excel(self.cfg.logfile, trade)
-        print(f"[CLOSED] {now} {side} entry={used_entry_price:.6f} exit={executed_price:.6f} pnl={pnl:.6f} balance={self.balance:.4f}")
+        print(f"[CLOSED] {now} {side} entry={used_entry_price:.6f} exit={executed_price:.6f} "
+            f"pnl={pnl:.6f} balance={self.balance:.4f}")
 
-        # hapus posisi aktif
+        # reset posisi & kembali ke WATCH
         self._current_position = None
+        print("[INFO] Posisi ditutup, kembali ke mode WATCH")
+        await self._watch_loop()
     
     async def _wait_for_entry_fill(self, order_id, side, entry_price, qty, tp_price, sl_price):
         """Cek status order sampai FILLED, baru aktifkan socket close."""
