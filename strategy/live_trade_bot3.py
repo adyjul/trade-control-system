@@ -626,7 +626,7 @@ class LimitScalpBot:
 
         while True:
             try:
-                order = self.client.get_order(symbol=self.cfg.pair, orderId=order_id)
+                order = await self.client.get_order(symbol=self.cfg.pair, orderId=order_id)
                 status = order["status"]
 
                 if status == "FILLED":
