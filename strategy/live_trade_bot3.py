@@ -660,9 +660,28 @@ class LimitScalpBot:
                     await asyncio.sleep(1)
 
             except Exception as e:
+                if hasattr(e, 'code') and e.code == -2013:
+                    print(f"[WARNING] Order {order_id} tidak ditemukan, anggap sudah terisi atau hilang.")
+                    # anggap entry executed di harga order_price
+                    executed_entry_price = entry_price
+                    entry_time = pd.Timestamp.utcnow()
+                    self._current_position = {
+                        "side": side,
+                        "qty": qty,
+                        "entry_price": entry_price,
+                        "executed_entry_price": executed_entry_price,
+                        "entry_time": entry_time,
+                        "tp_price": tp_price,
+                        "sl_price": sl_price,
+                        "entry_order_id": order_id,
+                    }
+                    # mulai socket untuk pantau TP/SL
+                    await self.start_socket_for_close()
+                    return True
+            else:
                 print(f"[ERROR] cek status order: {e}")
                 await asyncio.sleep(2)
-    
+                
     async def start_socket_for_close(self):
        bm = BinanceSocketManager(self.client)
 
@@ -679,6 +698,7 @@ class LimitScalpBot:
     def _on_price_tick(self, price: float):
         try:
             if self._current_position is None:
+                print("[INFO] Tidak ada posisi aktif, skip tick")
                 return
 
             pos = self._current_position
