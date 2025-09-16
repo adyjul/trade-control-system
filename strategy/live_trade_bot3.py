@@ -685,13 +685,18 @@ class LimitScalpBot:
     async def start_socket_for_close(self):
        bm = BinanceSocketManager(self.client)
 
-       async with bm.all_mark_price_socket(symbol=self.cfg.pair) as stream:
+       async with bm.all_mark_price_socket() as stream:
             print("[SOCKET] Listening mark price for close...")
             while self._current_position is not None:
                 msg = await stream.recv()
-                for data in msg['data']:
-                    price = float(data['p'])  # mark price
-                    self._on_price_tick(price)  # panggil TP/SL cek langsung
+                data = msg['data']
+                
+                # hanya proses pair yang sedang dipantau
+                if data['s'] != self.cfg.pair:
+                    continue
+                
+                price = float(data['p'])
+                self._on_price_tick(price)
 
     def _on_price_tick(self, price: float):
         try:
