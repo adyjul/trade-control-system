@@ -700,8 +700,8 @@ class LimitScalpBot:
                 return
 
             pos = self._current_position
-            if pos is None:
-                return  
+            # if pos is None:
+            #     return  
             side = pos["side"]
             qty = pos["qty"]
             tp_price = pos.get("tp_price")
