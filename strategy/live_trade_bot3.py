@@ -681,11 +681,11 @@ class LimitScalpBot:
             else:
                 print(f"[ERROR] cek status order: {e}")
                 await asyncio.sleep(2)
-                
+
     async def start_socket_for_close(self):
        bm = BinanceSocketManager(self.client)
 
-       async with bm.mark_price_socket(symbol=self.cfg.pair) as stream:
+       async with bm.all_mark_price_socket(symbol=self.cfg.pair) as stream:
             print("[SOCKET] Listening mark price for close...")
             while self._current_position is not None:
                 msg = await stream.recv()
