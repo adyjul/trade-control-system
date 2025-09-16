@@ -691,12 +691,15 @@ class LimitScalpBot:
                 msg = await stream.recv()
                 data = msg['data']
                 
-                # hanya proses pair yang sedang dipantau
-                if data['s'] != self.cfg.pair:
-                    continue
-                
-                price = float(data['p'])
-                self._on_price_tick(price)
+                if isinstance(data, list):
+                    for d in data:
+                        if d["s"] == self.cfg.pair:  # filter sesuai pair bot
+                            price = float(d["p"])
+                            self._on_price_tick(price)
+                elif isinstance(data, dict):
+                    if data["s"] == self.cfg.pair:
+                        price = float(data["p"])
+                        self._on_price_tick(price)
 
     def _on_price_tick(self, price: float):
         try:
