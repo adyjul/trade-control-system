@@ -689,11 +689,9 @@ class LimitScalpBot:
             print("[SOCKET] Listening mark price for close...")
             while self._current_position is not None:
                 msg = await stream.recv()
-                data = msg['data']
-                price = float(data['p'])   # mark price
-
-                # kirim price langsung, bukan msg dict
-                self._on_price_tick(price)
+                for data in msg['data']:
+                    price = float(data['p'])  # mark price
+                    self._on_price_tick(price)  # panggil TP/SL cek langsung
 
     def _on_price_tick(self, price: float):
         try:
@@ -702,6 +700,8 @@ class LimitScalpBot:
                 return
 
             pos = self._current_position
+            if pos is None:
+                return  
             side = pos["side"]
             qty = pos["qty"]
             tp_price = pos.get("tp_price")
