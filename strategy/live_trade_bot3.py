@@ -688,29 +688,21 @@ class LimitScalpBot:
                 await asyncio.sleep(2)
 
     async def start_socket_for_close(self):
-       bm = BinanceSocketManager(self.client)
-        # gunakan trade_socket per-symbol untuk harga realtime (last trade price)
-       trade_socket = bm.trade_socket(self.cfg.pair)
-       print("[SOCKET] Listening trade stream for close...")
-       async with trade_socket as stream:
-            while self._current_position is not None:
-                msg = await stream.recv()
-                # msg format for trade: { "e":"trade", "E":..., "s":"AVAXUSDT", "p":"29.79", ... }
-                price = None
-                # sometimes library returns dict inside 'data', sometimes direct; handle both
-                if isinstance(msg, dict):
-                    data = msg.get('data') or msg
-                    # if data is list or dict, normalize
-                    if isinstance(data, dict):
-                        price = float(data.get('p') or data.get('price') or 0)
-                    else:
-                        # unexpected format, continue
-                        continue
-                else:
-                    continue
-
-                if price is not None:
-                    self._on_price_tick(price)
+       bm = BinanceSocketManager(self.client) 
+       async with bm.all_mark_price_socket() as stream: 
+        print("[SOCKET] Listening mark price for close...") 
+        while self._current_position is not None: 
+            msg = await stream.recv() 
+            data = msg['data'] 
+            if isinstance(data, list): 
+                for d in data: 
+                    if d["s"] == self.cfg.pair: # filter sesuai pair bot 
+                        price = float(d["p"]) 
+                        self._on_price_tick(price) 
+                    elif isinstance(data, dict):
+                        if data["s"] == self.cfg.pair: 
+                            price = float(data["p"]) 
+                            self._on_price_tick(price)
 
     def _on_price_tick(self, price: float):
         try:
