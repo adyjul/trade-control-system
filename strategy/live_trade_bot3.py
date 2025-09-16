@@ -309,7 +309,14 @@ class LimitScalpBot:
             elapsed = (now - created).total_seconds()
             if elapsed >= self.cfg.entry_timeout_sec:
                 print(f"[TIMEOUT] Cancelling entry order {oid} after {elapsed:.1f}s")
-                await self._cancel_order(oid)
+                try:
+                    await self._cancel_order(oid)
+                except Exception as e:
+                    code = getattr(e, "code", None)
+                    if code == -2011:  # Unknown order
+                        print(f"[INFO] Order {oid} sudah tidak ada saat cancel (ok).")
+                    else:
+                        print(f"[WARN] cancel order failed: {e}")
                 to_remove.append(oid)
         for oid in to_remove:
             self._pending_entry_orders.pop(oid, None)
@@ -472,12 +479,12 @@ class LimitScalpBot:
 
     async def _poll_pending_entries_and_handle_fills(self):
         for oid, meta in list(self._pending_entry_orders.items()):
-            # cek status order
             order_info = await self._get_order(oid) if self.cfg.live_mode else {'status':'FILLED', 'avgPrice': str(meta['limit_price'])}
             status = (order_info.get('status') if isinstance(order_info, dict) else None) or order_info
-            if isinstance(status, str) and status.upper() == 'FILLED' or (isinstance(order_info, dict) and order_info.get('status') == 'FILLED'):
+            if (isinstance(status, str) and status.upper() == 'FILLED') or (isinstance(order_info, dict) and order_info.get('status') == 'FILLED'):
                 executed_price = float(order_info.get('avgPrice') or order_info.get('price') or meta['limit_price']) if isinstance(order_info, dict) else meta['limit_price']
 
+                # set current position (pure tick-mode: no TP/SL placed on exchange)
                 self._current_position = {
                     'side': meta['side'],
                     'entry_price': meta['trigger_price'],
@@ -485,48 +492,13 @@ class LimitScalpBot:
                     'tp_price': meta['tp_price'],
                     'sl_price': meta['sl_price'],
                     'qty': meta['qty'],
-                    # 'entry_time': datetime.utcnow(),
                     'entry_time': datetime.now(timezone.utc),
                     'entry_order_id': oid,
                     'tp_order_id': None,
                     'sl_order_id': None
                 }
 
-                tp_side = 'SELL' if meta['side']=='LONG' else 'BUY'
-                sl_side = 'SELL' if meta['side']=='SHORT' else 'BUY'
-
-                # ===== PRE-CHECK BEFORE TP/SL =====
-                tp_order_id = None
-                sl_order_id = None
-                if self._current_position['qty'] > 0:
-                    # TP
-                    try:
-                        tp_price = await self._format_price(meta['tp_price'])
-                        tp_resp = await self.place_tp_order(tp_side, tp_price, self._current_position['qty'])
-                        if tp_resp:
-                            tp_order_id = str(tp_resp.get('orderId') or tp_resp.get('clientOrderId') or f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}")
-                        else:
-                            tp_order_id = f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"
-                    except Exception as e:
-                        print(f"[WARN] TP order failed (ReduceOnly?): {e}")
-                        tp_order_id = f"paper-tp-{int(datetime.utcnow().timestamp()*1000)}"
-
-                    # SL
-                    try:
-                        sl_price = await self._format_price(meta['sl_price'])
-                        sl_resp = await self.place_sl_order(sl_side, sl_price, self._current_position['qty'])
-                        if sl_resp:
-                            sl_order_id = str(sl_resp.get('orderId') or sl_resp.get('clientOrderId') or f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}")
-                        else:
-                            sl_order_id = f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"
-                    except Exception as e:
-                        print(f"[WARN] SL order failed (ReduceOnly?): {e}")
-                        sl_order_id = f"paper-sl-{int(datetime.utcnow().timestamp()*1000)}"
-
-                self._current_position['tp_order_id'] = tp_order_id
-                self._current_position['sl_order_id'] = sl_order_id
-
-                print(f"[FILLED] entry executed={executed_price:.6f} qty={self._current_position['qty']} tp_oid={tp_order_id} sl_oid={sl_order_id}")
+                print(f"[FILLED] entry executed={executed_price:.6f} qty={self._current_position['qty']} (tick-mode active)")
 
                 self._pending_entry_orders.pop(oid, None)
                 self._last_trade_time = datetime.now(timezone.utc)
@@ -600,6 +572,7 @@ class LimitScalpBot:
 
         pos = self._current_position
         if pos is None:
+            print("[WARN] Tidak ada posisi tersimpan saat close")
             return
 
         used_entry_price = pos.get('executed_entry_price') or pos.get('entry_price')
@@ -614,28 +587,29 @@ class LimitScalpBot:
             pos.get('entry_order_id'), pos.get('tp_order_id'), pos.get('sl_order_id')
         ]
         append_trade_excel(self.cfg.logfile, trade)
-        print(f"[CLOSED] {now} {side} entry={used_entry_price:.6f} exit={executed_price:.6f} "
-            f"pnl={pnl:.6f} balance={self.balance:.4f}")
+        print(f"[CLOSED] {now} {side} entry={used_entry_price:.6f} exit={executed_price:.6f} pnl={pnl:.6f} balance={self.balance:.4f}")
 
-        # reset posisi & kembali ke WATCH
+        # reset posisi & log kembali ke mode watch
         self._current_position = None
         print("[INFO] Posisi ditutup, kembali ke mode WATCH")
-        await self._watch_loop()
+        # tidak memanggil _watch_loop() karena start() sudah looping kline dan akan kembali memproses watches
     
     async def _wait_for_entry_fill(self, order_id, side, entry_price, qty, tp_price, sl_price):
-        """Cek status order sampai FILLED, baru aktifkan socket close."""
+        """Cek status order sampai FILLED, baru aktifkan socket close.
+       Jika order tidak ditemukan, cek posisi via futures_position_information.
+       Jika juga tidak ada posisi, return False (biar timeout/ retry jalan).
+        """
         print(f"[WAIT] Menunggu order {order_id} terisi...")
 
+        client = await self._init_client()
         while True:
             try:
-                order = await self.client.get_order(symbol=self.cfg.pair, orderId=order_id)
-                status = order["status"]
-
+                order = await client.futures_get_order(symbol=self.cfg.pair, orderId=order_id)
+                status = order.get("status")
                 if status == "FILLED":
-                    executed_entry_price = float(order["avgPrice"]) if order.get("avgPrice") else entry_price
+                    executed_entry_price = float(order.get("avgPrice") or entry_price)
                     entry_time = pd.Timestamp.utcnow()
-
-                    # Simpan posisi aktif
+                    # set position (pure tick-mode: no TP/SL placement on exchange)
                     self._current_position = {
                         "side": side,
                         "qty": qty,
@@ -645,63 +619,98 @@ class LimitScalpBot:
                         "tp_price": tp_price,
                         "sl_price": sl_price,
                         "entry_order_id": order_id,
+                        "tp_order_id": None,
+                        "sl_order_id": None
                     }
-
                     print(f"[FILLED] {side} qty={qty} @ {executed_entry_price}")
-                    
-                    # Mulai socket untuk pantau TP/SL real-time
                     await self.start_socket_for_close()
                     return True
 
                 elif status in ("CANCELED", "REJECTED", "EXPIRED"):
                     print(f"[FAILED] Entry order {order_id} status={status}")
                     return False
-
                 else:
-                    # status masih NEW / PARTIALLY_FILLED → tunggu
+                    # still NEW/PARTIALLY_FILLED
                     await asyncio.sleep(1)
+                    continue
 
             except Exception as e:
-                if hasattr(e, 'code') and e.code == -2013:
-                    print(f"[WARNING] Order {order_id} tidak ditemukan, anggap sudah terisi atau hilang.")
-                    # anggap entry executed di harga order_price
-                    executed_entry_price = entry_price
-                    entry_time = pd.Timestamp.utcnow()
-                    self._current_position = {
-                        "side": side,
-                        "qty": qty,
-                        "entry_price": entry_price,
-                        "executed_entry_price": executed_entry_price,
-                        "entry_time": entry_time,
-                        "tp_price": tp_price,
-                        "sl_price": sl_price,
-                        "entry_order_id": order_id,
-                    }
-                    # mulai socket untuk pantau TP/SL
-                    await self.start_socket_for_close()
-                    return True
-            else:
+                # try detect BinanceAPIException code -2013 (order does not exist)
+                code = getattr(e, "code", None)
+                if code == -2013:
+                    # check if position exists on account: sometimes order not found but position opened
+                    try:
+                        pos_info = await client.futures_position_information(symbol=self.cfg.pair)
+                        pos_amt = None
+                        entry_px = None
+                        if isinstance(pos_info, list):
+                            for p in pos_info:
+                                if p.get('symbol') == self.cfg.pair:
+                                    pos_amt = float(p.get('positionAmt', 0))
+                                    entry_px = float(p.get('entryPrice') or 0) if p.get('entryPrice') else None
+                                    break
+                        elif isinstance(pos_info, dict):
+                            pos_amt = float(pos_info.get('positionAmt', 0))
+                            entry_px = float(pos_info.get('entryPrice') or 0) if pos_info.get('entryPrice') else None
+
+                        if pos_amt is not None and abs(pos_amt) > 1e-8:
+                            # position exists -> treat as filled
+                            executed_entry_price = entry_px if entry_px and entry_px > 0 else entry_price
+                            entry_time = pd.Timestamp.utcnow()
+                            self._current_position = {
+                                "side": side,
+                                "qty": qty,
+                                "entry_price": entry_price,
+                                "executed_entry_price": executed_entry_price,
+                                "entry_time": entry_time,
+                                "tp_price": tp_price,
+                                "sl_price": sl_price,
+                                "entry_order_id": order_id,
+                                "tp_order_id": None,
+                                "sl_order_id": None
+                            }
+                            print(f"[WARNING] Order {order_id} tidak ditemukan, namun positionAmt={pos_amt} => anggap terisi @{executed_entry_price}")
+                            await self.start_socket_for_close()
+                            return True
+                        else:
+                            # order hilang dan tidak ada posisi -> treat as not filled, let timeout handler cancel/retry
+                            print(f"[WARNING] Order {order_id} tidak ditemukan dan tidak ada posisi aktif. Biarkan timeout menangani (cancel/retry).")
+                            return False
+
+                    except Exception as e2:
+                        print(f"[ERROR] saat cek posisi fallback setelah order tidak ditemukan: {e2}")
+                        # fallback: sleep and retry a bit (avoid busy loop)
+                        await asyncio.sleep(1)
+                        continue
+
+                # other unexpected errors: log and sleep then retry
                 print(f"[ERROR] cek status order: {e}")
                 await asyncio.sleep(2)
 
     async def start_socket_for_close(self):
        bm = BinanceSocketManager(self.client)
-
-       async with bm.all_mark_price_socket() as stream:
-            print("[SOCKET] Listening mark price for close...")
+        # gunakan trade_socket per-symbol untuk harga realtime (last trade price)
+       trade_socket = bm.trade_socket(self.cfg.pair)
+       print("[SOCKET] Listening trade stream for close...")
+       async with trade_socket as stream:
             while self._current_position is not None:
                 msg = await stream.recv()
-                data = msg['data']
-                
-                if isinstance(data, list):
-                    for d in data:
-                        if d["s"] == self.cfg.pair:  # filter sesuai pair bot
-                            price = float(d["p"])
-                            self._on_price_tick(price)
-                elif isinstance(data, dict):
-                    if data["s"] == self.cfg.pair:
-                        price = float(data["p"])
-                        self._on_price_tick(price)
+                # msg format for trade: { "e":"trade", "E":..., "s":"AVAXUSDT", "p":"29.79", ... }
+                price = None
+                # sometimes library returns dict inside 'data', sometimes direct; handle both
+                if isinstance(msg, dict):
+                    data = msg.get('data') or msg
+                    # if data is list or dict, normalize
+                    if isinstance(data, dict):
+                        price = float(data.get('p') or data.get('price') or 0)
+                    else:
+                        # unexpected format, continue
+                        continue
+                else:
+                    continue
+
+                if price is not None:
+                    self._on_price_tick(price)
 
     def _on_price_tick(self, price: float):
         try:
