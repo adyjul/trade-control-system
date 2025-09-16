@@ -286,7 +286,17 @@ class LimitScalpBot:
                             print(f"[WATCH] {watch['trigger_time']} ATR={current_atr:.6f} long={long_level:.6f} short={short_level:.6f}")
 
                     await self._process_watches_and_place_limit_entries()
-                    await self._process_current_position_and_maybe_close()
+                    # await self._process_current_position_and_maybe_close()
+                    # cek apakah ada entry yang sudah terisi → mulai tick mode
+                    for oid, meta in list(self._pending_entry_orders.items()):
+                        await self._wait_for_entry_fill(
+                            order_id=oid,
+                            side=meta['side'],
+                            entry_price=meta['trigger_price'],
+                            qty=meta['qty'],
+                            tp_price=meta['tp_price'],
+                            sl_price=meta['sl_price']
+                        )
 
     async def _check_pending_entries(self):
         # remove / cancel pending entry orders that timed out
@@ -580,6 +590,93 @@ class LimitScalpBot:
 
             # clear current position only after confirmed close
             self._current_position = None
+    
+    async def _wait_for_entry_fill(self, order_id, side, entry_price, qty, tp_price, sl_price):
+        """Cek status order sampai FILLED, baru aktifkan socket close."""
+        print(f"[WAIT] Menunggu order {order_id} terisi...")
+
+        while True:
+            try:
+                order = self.client.get_order(symbol=self.cfg.pair, orderId=order_id)
+                status = order["status"]
+
+                if status == "FILLED":
+                    executed_entry_price = float(order["avgPrice"]) if order.get("avgPrice") else entry_price
+                    entry_time = pd.Timestamp.utcnow()
+
+                    # Simpan posisi aktif
+                    self._current_position = {
+                        "side": side,
+                        "qty": qty,
+                        "entry_price": entry_price,
+                        "executed_entry_price": executed_entry_price,
+                        "entry_time": entry_time,
+                        "tp_price": tp_price,
+                        "sl_price": sl_price,
+                        "entry_order_id": order_id,
+                    }
+
+                    print(f"[FILLED] {side} qty={qty} @ {executed_entry_price}")
+                    
+                    # Mulai socket untuk pantau TP/SL real-time
+                    await self.start_socket_for_close()
+                    return True
+
+                elif status in ("CANCELED", "REJECTED", "EXPIRED"):
+                    print(f"[FAILED] Entry order {order_id} status={status}")
+                    return False
+
+                else:
+                    # status masih NEW / PARTIALLY_FILLED → tunggu
+                    await asyncio.sleep(1)
+
+            except Exception as e:
+                print(f"[ERROR] cek status order: {e}")
+                await asyncio.sleep(2)
+    
+    async def start_socket_for_close(self):
+       bm = BinanceSocketManager(self.client)
+
+       async with bm.mark_price_socket(symbol=self.cfg.pair) as stream:
+            print("[SOCKET] Listening mark price for close...")
+            while self._current_position is not None:
+                msg = await stream.recv()
+                data = msg['data']
+                price = float(data['p'])   # mark price
+
+                # kirim price langsung, bukan msg dict
+                self._on_price_tick(price)
+
+    def _on_price_tick(self, price: float):
+        try:
+            if self._current_position is None:
+                return
+
+            pos = self._current_position
+            side = pos["side"]
+            qty = pos["qty"]
+            tp_price = pos.get("tp_price")
+            sl_price = pos.get("sl_price")
+
+            exit_price = None
+            exit_reason = None
+
+            if side == "LONG":
+                if tp_price and price >= tp_price:
+                    exit_price = tp_price; exit_reason = "TP"
+                elif sl_price and price <= sl_price:
+                    exit_price = sl_price; exit_reason = "SL"
+            else:  # SHORT
+                if tp_price and price <= tp_price:
+                    exit_price = tp_price; exit_reason = "TP"
+                elif sl_price and price >= sl_price:
+                    exit_price = sl_price; exit_reason = "SL"
+
+            if exit_price is not None:
+                asyncio.create_task(self._execute_close(side, qty, exit_price, exit_reason))
+
+        except Exception as e:
+            print(f"[ERROR] on_price_tick: {e}")
 
     async def close_position(self, side: str, qty: float, exit_price: Optional[float] = None, prefer_limit: bool = False):
         """
