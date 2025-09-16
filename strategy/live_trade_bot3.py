@@ -591,6 +591,35 @@ class LimitScalpBot:
             # clear current position only after confirmed close
             self._current_position = None
     
+    async def _execute_close(self, side: str, qty: float, exit_price: float, exit_reason: str):
+        """Wrapper untuk menutup posisi saat TP/SL kena dari tick mode."""
+        executed_price = await self.close_position(side, qty, exit_price=exit_price, prefer_limit=False)
+        if executed_price is None:
+            print(f"[ERROR] Failed to close {side} position qty={qty} at {exit_price}")
+            return
+
+        # update balance dan log trade
+        pos = self._current_position
+        if pos is None:
+            return
+
+        used_entry_price = pos.get('executed_entry_price') or pos.get('entry_price')
+        pnl = self._compute_pnl(used_entry_price, executed_price, side, qty)
+        self.balance += pnl
+
+        now = datetime.now(timezone.utc)
+        trade = [
+            self.cfg.pair, pos['entry_time'], side, pos['entry_price'], None,
+            pos['entry_time'], used_entry_price, now, executed_price, pnl,
+            exit_reason, self.balance, pos.get('executed_entry_price'), executed_price, qty,
+            pos.get('entry_order_id'), pos.get('tp_order_id'), pos.get('sl_order_id')
+        ]
+        append_trade_excel(self.cfg.logfile, trade)
+        print(f"[CLOSED] {now} {side} entry={used_entry_price:.6f} exit={executed_price:.6f} pnl={pnl:.6f} balance={self.balance:.4f}")
+
+        # hapus posisi aktif
+        self._current_position = None
+    
     async def _wait_for_entry_fill(self, order_id, side, entry_price, qty, tp_price, sl_price):
         """Cek status order sampai FILLED, baru aktifkan socket close."""
         print(f"[WAIT] Menunggu order {order_id} terisi...")
