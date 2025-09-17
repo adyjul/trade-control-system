@@ -411,6 +411,7 @@ class LimitScalpBot:
 
         # after placing, check quickly if any pending entry got filled (paper-mode simulates fill immediately)
         await self._poll_pending_entries_and_handle_fills()
+        
 
     # async def _poll_pending_entries_and_handle_fills(self):
     #     # iterate over pending entry orders and see if filled
@@ -756,7 +757,6 @@ class LimitScalpBot:
             if self._current_position is None:
                 print("[INFO] Tidak ada posisi aktif, skip tick")
                 return
-
             pos = self._current_position
             # if pos is None:
             #     return  
@@ -768,6 +768,7 @@ class LimitScalpBot:
             exit_price = None
             exit_reason = None
 
+            print(f"[TICK] price={price}, tp={tp_price}, sl={sl_price}, side={side}")
             if side == "LONG":
                 if tp_price and price >= tp_price:
                     exit_price = tp_price; exit_reason = "TP"
