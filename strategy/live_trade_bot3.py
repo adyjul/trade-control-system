@@ -322,11 +322,12 @@ class LimitScalpBot:
             self._pending_entry_orders.pop(oid, None)
 
     async def _process_watches_and_place_limit_entries(self):
-        # throttle openings
         if self._current_position is not None:
             return
+
         now_idx = len(self.candles)-1
         now_ts = self.candles.index[-1]
+
         if self._last_trade_time is not None:
             elapsed_since = (now_ts - self._last_trade_time).total_seconds()
             if elapsed_since < self.cfg.min_time_between_trades_sec:
@@ -338,7 +339,8 @@ class LimitScalpBot:
         new_watches = []
         for w in self.watches:
             if now_idx <= w['start_idx']:
-                new_watches.append(w); continue
+                new_watches.append(w)
+                continue
 
             triggered_side = None
             trigger_price = None
@@ -354,10 +356,9 @@ class LimitScalpBot:
                 tp_price = trigger_price + atr_now * self.cfg.tp_atr_mult if triggered_side == 'LONG' else trigger_price - atr_now * self.cfg.tp_atr_mult
                 sl_price = trigger_price - atr_now * self.cfg.sl_atr_mult if triggered_side == 'LONG' else trigger_price + atr_now * self.cfg.sl_atr_mult
 
-                # ensure minimal TP absolute
+                # minimal TP/SL
                 tp_abs = abs(tp_price - trigger_price)
                 if tp_abs < self.cfg.min_tp_abs:
-                    # bump tp outward
                     if triggered_side == 'LONG':
                         tp_price = trigger_price + self.cfg.min_tp_abs
                         sl_price = trigger_price - self.cfg.min_tp_abs
@@ -376,7 +377,7 @@ class LimitScalpBot:
                 qty = max(0.000001, qty)
                 qty = await self._format_quantity(qty)
 
-                # prepare limit entry price with offset to try be maker
+                # limit price offset
                 if triggered_side == 'LONG':
                     limit_price = trigger_price * (1 - self.cfg.entry_offset)
                     side = 'BUY'
@@ -384,8 +385,6 @@ class LimitScalpBot:
                     limit_price = trigger_price * (1 + self.cfg.entry_offset)
                     side = 'SELL'
 
-                # place entry limit order
-                # resp = await self._place_limit_order(side, round(limit_price,8), qty, reduce_only=False)
                 limit_price = await self._format_price(limit_price)
                 resp = await self._place_limit_order(side, limit_price, qty, reduce_only=False)
                 if resp is None:
@@ -403,13 +402,12 @@ class LimitScalpBot:
                     'created_at': datetime.now(timezone.utc)
                 }
                 print(f"[ENTRY_ORDER] id={order_id} side={triggered_side} limit={limit_price:.6f} qty={qty} tp={tp_price:.6f} sl={sl_price:.6f}")
-                # do not re-add watch
             else:
                 if now_idx < w['expire_idx']:
                     new_watches.append(w)
         self.watches = new_watches
 
-        # after placing, check quickly if any pending entry got filled (paper-mode simulates fill immediately)
+        # langsung handle FILLED orders
         await self._poll_pending_entries_and_handle_fills()
         
 
@@ -480,29 +478,49 @@ class LimitScalpBot:
 
     async def _poll_pending_entries_and_handle_fills(self):
         for oid, meta in list(self._pending_entry_orders.items()):
-            order_info = await self._get_order(oid) if self.cfg.live_mode else {'status':'FILLED', 'avgPrice': str(meta['limit_price'])}
-            status = (order_info.get('status') if isinstance(order_info, dict) else None) or order_info
-            if (isinstance(status, str) and status.upper() == 'FILLED') or (isinstance(order_info, dict) and order_info.get('status') == 'FILLED'):
-                executed_price = float(order_info.get('avgPrice') or order_info.get('price') or meta['limit_price']) if isinstance(order_info, dict) else meta['limit_price']
-
-                # set current position (pure tick-mode: no TP/SL placed on exchange)
-                self._current_position = {
-                    'side': meta['side'],
-                    'entry_price': meta['trigger_price'],
-                    'executed_entry_price': executed_price,
-                    'tp_price': meta['tp_price'],
-                    'sl_price': meta['sl_price'],
-                    'qty': meta['qty'],
-                    'entry_time': datetime.now(timezone.utc),
-                    'entry_order_id': oid,
-                    'tp_order_id': None,
-                    'sl_order_id': None
+            try:
+                order_info = await self._get_order(oid) if self.cfg.live_mode else {
+                    'status': 'FILLED', 'avgPrice': str(meta['limit_price'])
                 }
+                status = (order_info.get('status') if isinstance(order_info, dict) else None) or order_info
 
-                print(f"[FILLED] entry executed={executed_price:.6f} qty={self._current_position['qty']} (tick-mode active)")
+                if (isinstance(status, str) and status.upper() == 'FILLED') or \
+                (isinstance(order_info, dict) and order_info.get('status') == 'FILLED'):
 
-                self._pending_entry_orders.pop(oid, None)
-                self._last_trade_time = datetime.now(timezone.utc)
+                    executed_price = float(order_info.get('avgPrice') or order_info.get('price') or meta['limit_price']) \
+                        if isinstance(order_info, dict) else meta['limit_price']
+
+                    # Cek apakah tick-mode sudah aktif untuk posisi lain
+                    if self._current_position is not None:
+                        print(f"[WARN] tick-mode sudah aktif, skip setting _current_position untuk order {oid}")
+                        continue
+
+                    # set current position
+                    self._current_position = {
+                        'side': meta['side'],
+                        'entry_price': meta['trigger_price'],
+                        'executed_entry_price': executed_price,
+                        'tp_price': meta['tp_price'],
+                        'sl_price': meta['sl_price'],
+                        'qty': meta['qty'],
+                        'entry_time': datetime.now(timezone.utc),
+                        'entry_order_id': oid,
+                        'tp_order_id': None,
+                        'sl_order_id': None
+                    }
+
+                    print(f"[FILLED] entry executed={executed_price:.6f} qty={self._current_position['qty']} (tick-mode active)")
+
+                    # Start tick-mode di try-except supaya tidak stuck
+                    try:
+                        asyncio.create_task(self._start_tick_mode(self._current_position))
+                        self._pending_entry_orders.pop(oid, None)
+                        self._last_trade_time = datetime.now(timezone.utc)
+                    except Exception as e:
+                        print(f"[ERROR] gagal start tick-mode untuk order {oid}: {e}")
+                        # Jangan pop, nanti retry di loop berikutnya
+            except Exception as e:
+                print(f"[ERROR] poll pending entry {oid} gagal: {e}")
 
     async def _process_current_position_and_maybe_close(self):
         """Detect TP/SL hit (based on candle high/low) and actually close on exchange.
