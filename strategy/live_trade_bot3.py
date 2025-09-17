@@ -736,21 +736,68 @@ class LimitScalpBot:
                 pass
 
     async def start_socket_for_close(self):
-       bm = BinanceSocketManager(self.client) 
-       async with bm.all_mark_price_socket() as stream: 
-        print("[SOCKET] Listening mark price for close...") 
-        while self._current_position is not None: 
-            msg = await stream.recv() 
-            data = msg['data'] 
-            if isinstance(data, list): 
-                for d in data: 
-                    if d["s"] == self.cfg.pair: # filter sesuai pair bot 
-                        price = float(d["p"]) 
-                        self._on_price_tick(price) 
+        """
+        Tick-mode socket untuk memonitor posisi saat ini (TP/SL) menggunakan mark price socket Binance.
+        """
+        if not self._current_position:
+            print("[TICK] no active position, tick-mode not started")
+            return
+
+        bm = BinanceSocketManager(self.client)
+        async with bm.all_mark_price_socket() as stream:
+            print("[TICK] tick-mode started for", self.cfg.pair)
+            while self._current_position:
+                try:
+                    msg = await stream.recv()
+                    data = msg.get('data')
+                    if isinstance(data, list):
+                        # kadang data list
+                        prices = [float(d['p']) for d in data if d['s'] == self.cfg.pair]
+                        price = prices[-1] if prices else None
                     elif isinstance(data, dict):
-                        if data["s"] == self.cfg.pair: 
-                            price = float(data["p"]) 
-                            self._on_price_tick(price)
+                        if data.get('s') == self.cfg.pair:
+                            price = float(data['p'])
+                        else:
+                            price = None
+                    else:
+                        price = None
+
+                    if price is None:
+                        continue
+
+                    side = self._current_position["side"]
+                    tp = self._current_position["tp_price"]
+                    sl = self._current_position["sl_price"]
+                    qty = self._current_position["qty"]
+
+                    exit_price = None
+                    exit_reason = None
+
+                    if side == "LONG":
+                        if tp and price >= tp:
+                            exit_price = tp
+                            exit_reason = "TP"
+                        elif sl and price <= sl:
+                            exit_price = sl
+                            exit_reason = "SL"
+                    else:  # SHORT
+                        if tp and price <= tp:
+                            exit_price = tp
+                            exit_reason = "TP"
+                        elif sl and price >= sl:
+                            exit_price = sl
+                            exit_reason = "SL"
+
+                    if exit_price is not None:
+                        print(f"[TICK] Closing {side} qty={qty} at {exit_price} ({exit_reason})")
+                        # jalankan close secara async
+                        asyncio.create_task(self._execute_close(side, qty, exit_price, exit_reason))
+                        # hentikan tick-mode
+                        # self._current_position = None
+
+                except Exception as e:
+                    print(f"[ERROR] tick-mode socket error: {e}")
+                    await asyncio.sleep(0.5)
 
     def _on_price_tick(self, price: float):
         try:
