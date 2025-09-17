@@ -513,7 +513,7 @@ class LimitScalpBot:
 
                     # Start tick-mode di try-except supaya tidak stuck
                     try:
-                        asyncio.create_task(self._start_tick_mode(self._current_position))
+                        asyncio.create_task(self.start_socket_for_close())
                         self._pending_entry_orders.pop(oid, None)
                         self._last_trade_time = datetime.now(timezone.utc)
                     except Exception as e:
