@@ -151,7 +151,11 @@ class LiveDualEntryBot:
     def _append_candle(self, ts, o, h, l, c, v):
         # use UTC timestamps (pandas index)
         row = pd.DataFrame([[o, h, l, c, v]], index=[ts], columns=['open', 'high', 'low', 'close', 'volume'])
-        self.candles = pd.concat([self.candles, row])
+        # self.candles = pd.concat([self.candles, row])
+        if self.candles.empty:
+            self.candles = row
+        else:
+            self.candles = pd.concat([self.candles, row])
         if len(self.candles) > self.cfg.candles_buffer:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
 
