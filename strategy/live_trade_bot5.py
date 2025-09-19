@@ -12,7 +12,7 @@ from openpyxl import Workbook, load_workbook
 from binance import AsyncClient, BinanceSocketManager
 from binance.enums import SIDE_BUY, SIDE_SELL, ORDER_TYPE_MARKET
 from dotenv import load_dotenv
-
+load_dotenv()
 # ---------------- Config ----------------
 @dataclass
 class BotConfig:
