@@ -11,12 +11,13 @@ import pandas as pd
 from openpyxl import Workbook, load_workbook
 from binance import AsyncClient, BinanceSocketManager
 from binance.enums import SIDE_BUY, SIDE_SELL, ORDER_TYPE_MARKET
+from dotenv import load_dotenv
 
 # ---------------- Config ----------------
 @dataclass
 class BotConfig:
-    api_key: str = ""           # <-- set your API key here
-    api_secret: str = ""        # <-- set your API secret here
+    api_key: str = os.getenv('BINANCE_API_KEY')           # <-- set your API key here
+    api_secret: str = os.getenv('BINANCE_API_SECRET')      # <-- set your API secret here
     pair: str = "AVAXUSDT"
     interval: str = "1m"
     initial_balance: float = 20.0   # assumed in USDT
@@ -378,8 +379,8 @@ class LiveDualEntryBot:
 if __name__ == "__main__":
     cfg = BotConfig()
     # --- IMPORTANT: fill your API keys here BEFORE running ---
-    cfg.api_key = ""    # <-- put API key
-    cfg.api_secret = "" # <-- put API secret
+    cfg.api_key = os.getenv('BINANCE_API_KEY')    # <-- put API key
+    cfg.api_secret = os.getenv('BINANCE_API_SECRET') # <-- put API secret
     cfg.use_testnet = False   # set True if you want testnet
 
     init_excel(cfg.logfile)
