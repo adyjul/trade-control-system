@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from binance import AsyncClient, BinanceSocketManager
 from openpyxl import Workbook, load_workbook
-from binance.exceptions import BinanceWebsocketException
+# from binance.exceptions import BinanceWebsocketException
 import aiohttp
 
 # ---------------- Config ----------------
@@ -19,23 +19,25 @@ class BotConfig:
     pair: str = "AVAXUSDT"
     interval: str = "1m"
     initial_balance: float = 20.0
-    leverage: float = 5.0  # Reduced from 20.0 to 5.0 for more realistic risk
-    fee_rate: float = 0.0004  # 0.04% fee
+    leverage: float = 5.0
+    fee_rate: float = 0.0004
     min_atr: float = 0.0005
     atr_period: int = 14
     level_mult: float = 0.2
-    tp_atr_mult: float = 1.5  # Increased from 0.9 for better risk/reward
-    sl_atr_mult: float = 1.0  # Adjusted from 0.9
+    tp_atr_mult: float = 1.5
+    sl_atr_mult: float = 1.0
     monitor_candles: int = 3
     candles_buffer: int = 500
-    min_hold_sec: int = 30    # minimal holding time sebelum exit
+    min_hold_sec: int = 30
     logfile: str = "trades_log.xlsx"
-    
-    # New realistic parameters
-    slippage_factor: float = 0.0003  # 0.03% slippage
-    execution_probability: float = 0.85  # 85% chance of execution at desired price
-    min_volume_ratio: float = 1.2  # Minimum volume ratio vs 20-period average
-    max_position_pct: float = 0.1  # Maximum 10% of balance per trade
+    slippage_factor: float = 0.0003
+    execution_probability: float = 0.85
+    min_volume_ratio: float = 1.2
+    max_position_pct: float = 0.1
+    # Tambahan config untuk connection
+    ws_timeout: int = 30
+    max_reconnect_attempts: int = 10
+    reconnect_delay: int = 5
 
 cfg = BotConfig()
 
@@ -123,43 +125,58 @@ class LiveDualEntryBot:
         self.candles = pd.DataFrame(columns=['open','high','low','close','volume'])
         self._current_position: Optional[Dict] = None
         self.watches: List[Dict] = []
+        self.pending_actions = []
+        self.reconnect_attempts = 0
         init_excel(self.cfg.logfile)
 
     async def start(self):
-        max_retries = 5
-        retry_delay = 5  # seconds
-        
-        for attempt in range(max_retries):
+        while self.reconnect_attempts < self.cfg.max_reconnect_attempts:
             try:
                 client = await AsyncClient.create()
                 bm = BinanceSocketManager(client)
                 
-                # Set timeout untuk mencegah hanging connection
+                # Get historical data first
+                print("Loading historical data...")
+                historical_klines = await client.get_klines(
+                    symbol=self.cfg.pair,
+                    interval=self.cfg.interval,
+                    limit=self.cfg.candles_buffer
+                )
+                
+                for kline in historical_klines:
+                    ts = pd.to_datetime(kline[0], unit='ms', utc=True)
+                    o, h, l, c, v = map(float, kline[1:6])
+                    self._append_candle(ts, o, h, l, c, v)
+                
+                print(f"Loaded {len(self.candles)} historical candles")
+                
+                # Start streaming with timeout handling
                 async with bm.kline_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
-                    print(f"[INFO] Connected to WebSocket (Attempt {attempt + 1}/{max_retries})")
                     print(f"[INFO] Live dual-entry forward-test for {self.cfg.pair}")
+                    print(f"[INFO] Initial balance: {self.balance:.2f} USDT")
+                    self.reconnect_attempts = 0  # Reset counter on successful connection
                     
                     while True:
                         try:
-                            # Tambahkan timeout untuk receive data
-                            res = await asyncio.wait_for(stream.recv(), timeout=30.0)
+                            # Use wait_for to implement timeout
+                            res = await asyncio.wait_for(stream.recv(), timeout=self.cfg.ws_timeout)
                             k = res.get('k', {})
                             
-                            # Pastikan data tidak None sebelum processing
+                            # Validate data before processing
                             if not k:
                                 continue
                                 
                             is_closed = k.get('x', False)
-                            ts = k.get('t')
-                            o, h, l, c, v = k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')
+                            ts_val = k.get('t')
+                            o_val, h_val, l_val, c_val, v_val = k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')
                             
-                            # Validasi data sebelum processing
-                            if None in [ts, o, h, l, c, v]:
+                            # Skip if any value is None
+                            if None in [ts_val, o_val, h_val, l_val, c_val, v_val]:
                                 print("[WARNING] Received incomplete candle data, skipping...")
                                 continue
                                 
-                            ts = pd.to_datetime(ts, unit='ms', utc=True)
-                            o, h, l, c, v = map(float, (o, h, l, c, v))
+                            ts = pd.to_datetime(ts_val, unit='ms', utc=True)
+                            o, h, l, c, v = map(float, (o_val, h_val, l_val, c_val, v_val))
                             
                             self._append_candle(ts, o, h, l, c, v)
                             
@@ -168,24 +185,43 @@ class LiveDualEntryBot:
                                 await self._process_strategies()
                                 
                         except asyncio.TimeoutError:
-                            print("[WARNING] WebSocket timeout, reconnecting...")
-                            break
+                            print("[WARNING] WebSocket timeout, checking connection...")
+                            # Check if connection is still alive
+                            try:
+                                # Simple API call to check connection
+                                await client.get_server_time()
+                                print("[INFO] Connection is still alive, continuing...")
+                                continue
+                            except Exception:
+                                print("[ERROR] Connection lost, reconnecting...")
+                                break
                         except Exception as e:
                             print(f"[ERROR] Processing error: {e}")
                             continue
                             
-            except (BinanceWebsocketException, aiohttp.ClientError, ConnectionError) as e:
-                print(f"[ERROR] Connection failed (Attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    print(f"Retrying in {retry_delay} seconds...")
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+            except (aiohttp.ClientError, ConnectionError, asyncio.TimeoutError) as e:
+                self.reconnect_attempts += 1
+                print(f"[ERROR] Connection failed (Attempt {self.reconnect_attempts}/{self.cfg.max_reconnect_attempts}): {e}")
+                
+                if self.reconnect_attempts < self.cfg.max_reconnect_attempts:
+                    delay = self.cfg.reconnect_delay * (2 ** (self.reconnect_attempts - 1))  # Exponential backoff
+                    print(f"Retrying in {delay} seconds...")
+                    await asyncio.sleep(delay)
                 else:
-                    print("[CRITICAL] Max retries exceeded. Exiting...")
+                    print("[CRITICAL] Max reconnection attempts exceeded. Exiting...")
                     break
             except Exception as e:
                 print(f"[CRITICAL] Unexpected error: {e}")
-                break
+                self.reconnect_attempts += 1
+                if self.reconnect_attempts < self.cfg.max_reconnect_attempts:
+                    await asyncio.sleep(self.cfg.reconnect_delay)
+                else:
+                    print("[CRITICAL] Max reconnection attempts exceeded. Exiting...")
+                    break
+            finally:
+                # Clean up client if it exists
+                if 'client' in locals():
+                    await client.close_connection()
 
     def _append_candle(self, ts, o, h, l, c, v):
         self.candles.loc[ts] = [o, h, l, c, v]
@@ -380,3 +416,5 @@ if __name__ == "__main__":
         asyncio.get_event_loop().run_until_complete(bot.start())
     except KeyboardInterrupt:
         print("[STOP] Interrupted by user. Trades saved to", cfg.logfile)
+    except Exception as e:
+        print(f"[CRITICAL] Fatal error: {e}")
