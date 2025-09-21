@@ -552,6 +552,7 @@ class ImprovedLiveDualEntryBot:
                     print(f"[ERROR] cancel order {order['order_id']}:", e)
 
     async def _process_current_position(self):
+        print('[DEBUG] _process_current_position', self._current_position)
         if self._current_position is None:
             return
 
