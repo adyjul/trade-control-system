@@ -303,7 +303,7 @@ class ImprovedLiveDualEntryBot:
         #     print("[OPEN SKIP] calculated qty <= 0 (minQty or too small).")
         #     return
 
-        qty = 1.0  # 1 AVAX
+        qty = 1  # 1 AVAX
         # Calculate actual risk percentage untuk monitoring
         risk_per_trade = abs(entry_price - sl_price) * qty
         risk_percentage = (risk_per_trade / self.balance) * 100
