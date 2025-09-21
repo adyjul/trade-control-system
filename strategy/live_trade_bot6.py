@@ -240,7 +240,14 @@ class ImprovedLiveDualEntryBot:
                         'entry_time': datetime.now(timezone.utc),
                         'status': 'FILLED'
                     })
-                    
+
+                    self._current_position = {
+                        **order,
+                        'entry_price': float(order_status['avgPrice']),
+                        'entry_time': datetime.now(timezone.utc),
+                        'status': 'FILLED'
+                    }
+
                 elif order_status['status'] == 'CANCELED' or order_status['status'] == 'EXPIRED':
                     # Order canceled or expired, remove from pending
                     print(f"[ORDER {order_status['status']}] {order['order_id']}")
