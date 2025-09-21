@@ -35,12 +35,14 @@ class BotConfig:
     logfile: str = "trades_log.xlsx"
     risk_pct: float = 0.012
     margin_type: str = "ISOLATED"
-    use_testnet: bool = True  # Set True for testing
-    # New parameters for improvement
-    use_limit_orders: bool = True  # Use limit orders instead of market orders
-    slippage_pct: float = 0.001  # Estimated slippage for market orders
-    require_confirmation: bool = True  # Require candle close confirmation for entries
-    adaptive_tp_sl: bool = True  # Adjust TP/SL based on current volatility
+    use_testnet: bool = True
+    use_limit_orders: bool = True
+    slippage_pct: float = 0.001
+    require_confirmation: bool = True
+    adaptive_tp_sl: bool = True
+    # AVAX-specific precision settings
+    qty_precision: int = 1  # 1 decimal for AVAX
+    price_precision: int = 3  # 3 decimals for AVAX
 
 # ---------------- Excel Logger ----------------
 def init_excel(path: str):
@@ -51,7 +53,7 @@ def init_excel(path: str):
         ws.append([
             "pair", "entry_time", "side", "entry_price", "qty", "tp_price", "sl_price",
             "exit_time", "exit_price", "pnl", "fees", "exit_reason", "balance_after",
-            "atr_value", "volatility_ratio"  # Added fields for analysis
+            "atr_value", "volatility_ratio"
         ])
         wb.save(path)
 
@@ -72,7 +74,6 @@ def compute_atr_from_df(df: pd.DataFrame, period: int):
     return atr
 
 def compute_volatility_ratio(df: pd.DataFrame, atr_period: int = 14):
-    """Calculate volatility ratio to adjust TP/SL dynamically"""
     atr = compute_atr_from_df(df, atr_period)
     current_atr = atr.iat[-1] if len(atr) > 0 else 0
     price = df['close'].iat[-1] if len(df) > 0 else 1
@@ -112,11 +113,19 @@ class ImprovedLiveDualEntryBot:
         self.candles = pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume'])
         self._current_position: Optional[Dict] = None
         self.watches: List[Dict] = []
-        self.pending_orders: List[Dict] = []  # Track pending limit orders
+        self.pending_orders: List[Dict] = []
         init_excel(self.cfg.logfile)
         self.client: Optional[AsyncClient] = None
         self.bm: Optional[BinanceSocketManager] = None
         self.volatility_ratio = 0.0
+
+    def _round_price(self, price: float) -> float:
+        """Round price to configured precision"""
+        return round(price, self.cfg.price_precision)
+
+    def _round_qty(self, qty: float) -> float:
+        """Round quantity to configured precision"""
+        return round(qty, self.cfg.qty_precision)
 
     async def start(self):
         self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
@@ -131,7 +140,7 @@ class ImprovedLiveDualEntryBot:
 
         self.bm = BinanceSocketManager(self.client)
         print(f"[INFO] Starting improved live-dual-entry bot for {self.cfg.pair} (testnet={self.cfg.use_testnet})")
-        print(f"[CONFIG] Use limit orders: {self.cfg.use_limit_orders}, Require confirmation: {self.cfg.require_confirmation}")
+        print(f"[CONFIG] Price precision: {self.cfg.price_precision}, Qty precision: {self.cfg.qty_precision}")
         
         async with self.bm.kline_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
             while True:
@@ -143,7 +152,6 @@ class ImprovedLiveDualEntryBot:
                     o, h, l, c, v = map(float, (k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')))
                     self._append_candle(ts, o, h, l, c, v)
 
-                    # Update volatility ratio
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
 
                     if is_closed:
@@ -155,7 +163,7 @@ class ImprovedLiveDualEntryBot:
 
                         await self._process_watches()
                         await self._process_current_position()
-                        await self._check_pending_orders()  # Check if pending orders need cancellation
+                        await self._check_pending_orders()
                 except Exception as e:
                     print("[ERROR] main loop:", e)
                     await asyncio.sleep(1)
@@ -174,24 +182,23 @@ class ImprovedLiveDualEntryBot:
             return
         last_close = self.candles['close'].iat[-1]
         
-        # Adjust levels based on volatility
         volatility_mult = 1.0
-        if self.cfg.adaptive_tp_sl and self.volatility_ratio > 0.005:  # High volatility
-            volatility_mult = 1.2  # Increase distance in high volatility
-        elif self.cfg.adaptive_tp_sl and self.volatility_ratio < 0.002:  # Low volatility
-            volatility_mult = 0.8  # Decrease distance in low volatility
+        if self.cfg.adaptive_tp_sl and self.volatility_ratio > 0.005:
+            volatility_mult = 1.2
+        elif self.cfg.adaptive_tp_sl and self.volatility_ratio < 0.002:
+            volatility_mult = 0.8
             
         watch = {
             "start_idx": len(self.candles) - 1,
             "expire_idx": len(self.candles) - 1 + self.cfg.monitor_candles,
-            "long_level": last_close + atr_value * self.cfg.level_mult * volatility_mult,
-            "short_level": last_close - atr_value * self.cfg.level_mult * volatility_mult,
+            "long_level": self._round_price(last_close + atr_value * self.cfg.level_mult * volatility_mult),
+            "short_level": self._round_price(last_close - atr_value * self.cfg.level_mult * volatility_mult),
             "atr": atr_value,
             "trigger_time": self.candles.index[-1],
             "volatility_mult": volatility_mult
         }
         self.watches.append(watch)
-        print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.6f} short={watch['short_level']:.6f} vol_mult={volatility_mult:.2f}")
+        print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.3f} short={watch['short_level']:.3f} vol_mult={volatility_mult:.2f}")
 
     async def _process_watches(self):
         if self._current_position is not None:
@@ -214,7 +221,6 @@ class ImprovedLiveDualEntryBot:
             tp_price = None
             sl_price = None
 
-            # Check if we need candle close confirmation
             if self.cfg.require_confirmation:
                 long_condition = candle_close >= w['long_level']
                 short_condition = candle_close <= w['short_level']
@@ -226,23 +232,21 @@ class ImprovedLiveDualEntryBot:
                 triggered = True
                 side = 'LONG'
                 entry_price = w['long_level']
-                # Adjust TP/SL based on volatility
                 tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
                 sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
-                tp_price = entry_price + w['atr'] * tp_mult
-                sl_price = entry_price - w['atr'] * sl_mult
+                tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
+                sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
             elif short_condition:
                 triggered = True
                 side = 'SHORT'
                 entry_price = w['short_level']
-                # Adjust TP/SL based on volatility
                 tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
                 sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
-                tp_price = entry_price - w['atr'] * tp_mult
-                sl_price = entry_price + w['atr'] * sl_mult
+                tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
+                sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
 
             if triggered:
-                print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.6f} tp={tp_price:.6f} sl={sl_price:.6f}")
+                print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
                 if self.cfg.use_limit_orders:
                     await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
                 else:
@@ -254,32 +258,24 @@ class ImprovedLiveDualEntryBot:
         self.watches = new_watches
 
     async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
-        # Add small buffer for limit orders to improve fill rate
-        # if side == 'LONG':
-        #     order_price = entry_price * (1 - 0.0005)  # 0.05% below trigger
-        # else:
-        #     order_price = entry_price * (1 + 0.0005)  # 0.05% above trigger
-            
-        # raw_qty = compute_qty_by_risk(self.balance, self.cfg.risk_pct, entry_price, sl_price)
-        # qty = await round_qty_to_step(self.client, self.cfg.pair, raw_qty)
-        # if qty <= 0:
-        #     print("[ORDER SKIP] calculated qty <= 0 (minQty or too small).")
-        #     return
-
-        qty = 1  # 1 AVAX
-        # Calculate actual risk percentage untuk monitoring
-        risk_per_trade = abs(entry_price - sl_price) * qty
-        risk_percentage = (risk_per_trade / self.balance) * 100
+        qty = self._round_qty(1.0)  # 1 AVAX
 
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0005)  # 0.05% below trigger
         else:
             order_price = entry_price * (1 + 0.0005)  # 0.05% above trigger
 
+        # Round prices
+        order_price = self._round_price(order_price)
+        entry_price = self._round_price(entry_price)
+        tp_price = self._round_price(tp_price)
+        sl_price = self._round_price(sl_price)
+
+        risk_per_trade = abs(entry_price - sl_price) * qty
+        risk_percentage = (risk_per_trade / self.balance) * 100
         print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
         try:
-            # Place limit order
             order = await self.client.futures_create_order(
                 symbol=self.cfg.pair,
                 side=SIDE_BUY if side == 'LONG' else SIDE_SELL,
@@ -289,7 +285,6 @@ class ImprovedLiveDualEntryBot:
                 price=order_price
             )
             
-            # Store pending order
             self.pending_orders.append({
                 "order_id": order['orderId'],
                 "side": side,
@@ -301,35 +296,30 @@ class ImprovedLiveDualEntryBot:
                 "atr": atr_value,
                 "vol_mult": vol_mult,
                 "place_time": datetime.now(timezone.utc),
-                "expiry_time": datetime.now(timezone.utc) + timedelta(minutes=5)  # Cancel after 5 minutes
+                "expiry_time": datetime.now(timezone.utc) + timedelta(minutes=5)
             })
-            print(f"[LIMIT ORDER PLACED] {side} {qty} @ {order_price:.6f} (orderId: {order['orderId']})")
+            print(f"[LIMIT ORDER PLACED] {side} {qty} @ {order_price:.3f} (orderId: {order['orderId']})")
         except Exception as e:
             print("[ERROR] place limit order:", e)
 
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
+        qty = self._round_qty(1.0)  # 1 AVAX
 
-        # raw_qty = compute_qty_by_risk(self.balance, self.cfg.risk_pct, entry_price, sl_price)
-        # qty = await round_qty_to_step(self.client, self.cfg.pair, raw_qty)
-        # if qty <= 0:
-        #     print("[OPEN SKIP] calculated qty <= 0 (minQty or too small).")
-        #     return
+        # Round prices
+        entry_price = self._round_price(entry_price)
+        tp_price = self._round_price(tp_price)
+        sl_price = self._round_price(sl_price)
 
-        qty = 1  # 1 AVAX
-        # Calculate actual risk percentage untuk monitoring
         risk_per_trade = abs(entry_price - sl_price) * qty
         risk_percentage = (risk_per_trade / self.balance) * 100
-
         print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
         try:
-            # Apply slippage estimate for market orders
             if side == 'LONG':
                 exec_price = entry_price * (1 + self.cfg.slippage_pct)
             else:
                 exec_price = entry_price * (1 - self.cfg.slippage_pct)
                 
-            # Place market order
             order = await self.client.futures_create_order(
                 symbol=self.cfg.pair,
                 side=SIDE_BUY if side == 'LONG' else SIDE_SELL,
@@ -337,7 +327,6 @@ class ImprovedLiveDualEntryBot:
                 quantity=qty
             )
             
-            # Get execution details
             exec_qty = 0.0
             avg_price = 0.0
             if 'fills' in order and order['fills']:
@@ -349,7 +338,8 @@ class ImprovedLiveDualEntryBot:
                 avg_price = exec_price
                 exec_qty = qty
 
-            print(f"[POSITION OPENED] {side} {exec_qty} @ {avg_price:.6f}")
+            avg_price = self._round_price(avg_price)
+            print(f"[POSITION OPENED] {side} {exec_qty} @ {avg_price:.3f}")
 
             self._current_position = {
                 "side": side,
@@ -365,7 +355,6 @@ class ImprovedLiveDualEntryBot:
             print("[ERROR] open position:", e)
 
     async def _check_pending_orders(self):
-        # Check and cancel expired pending orders
         now = datetime.now(timezone.utc)
         for order in self.pending_orders[:]:
             if now >= order['expiry_time']:
@@ -418,7 +407,6 @@ class ImprovedLiveDualEntryBot:
                     quantity=pos['qty']
                 )
                 
-                # Get execution price
                 exit_exec_price = 0.0
                 exit_qty = 0.0
                 if 'fills' in close_order and close_order['fills']:
@@ -429,26 +417,23 @@ class ImprovedLiveDualEntryBot:
                 else:
                     exit_exec_price = exit_price
                     
-                # Apply slippage for market exits
                 if pos['side'] == 'LONG':
                     exit_exec_price = exit_exec_price * (1 - self.cfg.slippage_pct)
                 else:
                     exit_exec_price = exit_exec_price * (1 + self.cfg.slippage_pct)
 
-                # Calculate PnL
+                exit_exec_price = self._round_price(exit_exec_price)
+
                 if pos['side'] == 'LONG':
                     raw_pnl = pos['qty'] * (exit_exec_price - pos['entry_price'])
                 else:
                     raw_pnl = pos['qty'] * (pos['entry_price'] - exit_exec_price)
 
-                # Simplified fee calculation (like forward test)
                 fees = self.cfg.fee_rate * self.balance
                 net_pnl = raw_pnl - fees
 
-                # Update balance
                 self.balance += net_pnl
 
-                # Log trade
                 append_trade_excel(self.cfg.logfile, [
                     self.cfg.pair,
                     pos['entry_time'],
@@ -467,7 +452,7 @@ class ImprovedLiveDualEntryBot:
                     pos['vol_mult']
                 ])
 
-                print(f"[POSITION CLOSED] {pos['side']} exit={exit_exec_price:.6f} reason={exit_reason} pnl={net_pnl:.6f} fees={fees:.6f} balance={self.balance:.4f}")
+                print(f"[POSITION CLOSED] {pos['side']} exit={exit_exec_price:.3f} reason={exit_reason} pnl={net_pnl:.6f} fees={fees:.6f} balance={self.balance:.4f}")
                 self._current_position = None
             except Exception as e:
                 print("[ERROR] closing position:", e)
@@ -477,13 +462,14 @@ if __name__ == "__main__":
     cfg = BotConfig()
     cfg.api_key = os.getenv('BINANCE_API_KEY')
     cfg.api_secret = os.getenv('BINANCE_API_SECRET')
-    cfg.use_testnet = False  # Set to False for live trading
+    cfg.use_testnet = True
     
-    # Improved settings
-    cfg.use_limit_orders = True  # Use limit orders for better entry prices
-    cfg.require_confirmation = True  # Require candle close confirmation
-    cfg.adaptive_tp_sl = True  # Adjust TP/SL based on volatility
-    cfg.slippage_pct = 0.001  # 0.1% estimated slippage
+    cfg.use_limit_orders = True
+    cfg.require_confirmation = True
+    cfg.adaptive_tp_sl = True
+    cfg.slippage_pct = 0.001
+    cfg.qty_precision = 1
+    cfg.price_precision = 3
 
     init_excel(cfg.logfile)
     bot = ImprovedLiveDualEntryBot(cfg)
