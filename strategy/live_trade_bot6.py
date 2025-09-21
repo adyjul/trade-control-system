@@ -638,6 +638,7 @@ class ImprovedLiveDualEntryBot:
                 
                 exit_exec_price = 0.0
                 exit_qty = 0.0
+                self._current_position = None
                 if 'fills' in close_order and close_order['fills']:
                     for fill in close_order['fills']:
                         exit_qty += float(fill['qty'])
