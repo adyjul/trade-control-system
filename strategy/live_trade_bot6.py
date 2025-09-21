@@ -429,6 +429,17 @@ class ImprovedLiveDualEntryBot:
         risk_percentage = (risk_per_trade / self.balance) * 100
         print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
+        if len(self.pending_orders) >= 2:  # Maximum 2 pending orders
+            await self.manage_order_conflicts({
+                'side': side,
+                'entry_price': entry_price,
+                'tp_price': tp_price,
+                'sl_price': sl_price,
+                'atr': atr_value,
+                'vol_mult': vol_mult,
+                'qty': qty
+            })
+        
         try:
             # Place the order
             order = await self.client.futures_create_order(
