@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from binance import AsyncClient, BinanceSocketManager
 from openpyxl import Workbook, load_workbook
+from binance.exceptions import BinanceWebsocketException
+import aiohttp
 
 # ---------------- Config ----------------
 @dataclass
@@ -124,35 +126,66 @@ class LiveDualEntryBot:
         init_excel(self.cfg.logfile)
 
     async def start(self):
-        client = await AsyncClient.create()
-        bm = BinanceSocketManager(client)
-        async with bm.kline_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
-            print(f"[INFO] Live dual-entry forward-test for {self.cfg.pair}")
-            print(f"[INFO] Initial balance: {self.balance:.2f} USDT")
-            while True:
-                res = await stream.recv()
-                k = res.get('k', {})
-                is_closed = k.get('x', False)
-                ts = pd.to_datetime(k.get('t'), unit='ms', utc=True)
-                o, h, l, c, v = map(float, (k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')))
-                self._append_candle(ts, o, h, l, c, v)
-
-                if is_closed and len(self.candles) > self.cfg.atr_period:
-                    atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
-                    current_atr = atr_series.iat[-1] if len(atr_series) > 0 else np.nan
-
-                    # Check market conditions before creating watch
-                    volume_ratio = calculate_volume_ratio(self.candles)
-                    volatility = calculate_volatility(self.candles)
+        max_retries = 5
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                client = await AsyncClient.create()
+                bm = BinanceSocketManager(client)
+                
+                # Set timeout untuk mencegah hanging connection
+                async with bm.kline_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
+                    print(f"[INFO] Connected to WebSocket (Attempt {attempt + 1}/{max_retries})")
+                    print(f"[INFO] Live dual-entry forward-test for {self.cfg.pair}")
                     
-                    if (not np.isnan(current_atr) and 
-                        current_atr >= self.cfg.min_atr and
-                        volume_ratio >= self.cfg.min_volume_ratio and
-                        self._current_position is None):
-                        self._create_watch(current_atr, volume_ratio, volatility)
-
-                    self._process_watches()
-                    self._process_current_position()
+                    while True:
+                        try:
+                            # Tambahkan timeout untuk receive data
+                            res = await asyncio.wait_for(stream.recv(), timeout=30.0)
+                            k = res.get('k', {})
+                            
+                            # Pastikan data tidak None sebelum processing
+                            if not k:
+                                continue
+                                
+                            is_closed = k.get('x', False)
+                            ts = k.get('t')
+                            o, h, l, c, v = k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')
+                            
+                            # Validasi data sebelum processing
+                            if None in [ts, o, h, l, c, v]:
+                                print("[WARNING] Received incomplete candle data, skipping...")
+                                continue
+                                
+                            ts = pd.to_datetime(ts, unit='ms', utc=True)
+                            o, h, l, c, v = map(float, (o, h, l, c, v))
+                            
+                            self._append_candle(ts, o, h, l, c, v)
+                            
+                            if is_closed:
+                                print(f"Candle closed at {ts} - Processing strategies...")
+                                await self._process_strategies()
+                                
+                        except asyncio.TimeoutError:
+                            print("[WARNING] WebSocket timeout, reconnecting...")
+                            break
+                        except Exception as e:
+                            print(f"[ERROR] Processing error: {e}")
+                            continue
+                            
+            except (BinanceWebsocketException, aiohttp.ClientError, ConnectionError) as e:
+                print(f"[ERROR] Connection failed (Attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    print(f"Retrying in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    print("[CRITICAL] Max retries exceeded. Exiting...")
+                    break
+            except Exception as e:
+                print(f"[CRITICAL] Unexpected error: {e}")
+                break
 
     def _append_candle(self, ts, o, h, l, c, v):
         self.candles.loc[ts] = [o, h, l, c, v]
