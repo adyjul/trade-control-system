@@ -43,14 +43,16 @@ class BotConfig:
     # AVAX-specific precision settings
     qty_precision: int = 1  # 1 decimal for AVAX
     price_precision: int = 3  # 3 decimals for AVAX
-    atr_filter_period: int = 7        # ATR pendek (M1)
-    atr_filter_pct: float = 0.0015    # ATR minimal 0.15% dari harga
-    adx_period: int = 7               # ADX pendek (M1)
-    adx_threshold: float = 15.0       # Minimal trend strength
-    ema_fast: int = 20
-    ema_slow: int = 50
-    ema_gap_pct: float = 0.001        # Minimal gap 0.1% antara EMA20 & EMA50
-
+    # filter sideways
+    atr_filter_period = 7      # ATR pendek biar responsif
+    atr_min_pct = 0.0005       # min 0.05% candle range
+    atr_max_pct = 0.005        # max 0.5% candle range
+    adx_period = 7
+    adx_threshold = 10
+    ema_fast = 20
+    ema_slow = 50
+    ema_gap_pct = 0.0005       # 0.05% jarak
+    
 def compute_ema(series: pd.Series, period: int):
     return series.ewm(span=period, adjust=False).mean()
 
@@ -377,24 +379,29 @@ class ImprovedLiveDualEntryBot:
         last_close = self.candles['close'].iat[-1]
 
         # --- Filter ATR ---
-        atr_short = compute_atr_from_df(self.candles, self.cfg.atr_filter_period).iat[-1]
+        atr_short = compute_atr_from_df(self.candles, self.cfg.atr_filter_period).iloc[-1]
         atr_pct = atr_short / last_close if last_close > 0 else 0.0
-        if atr_pct < self.cfg.atr_filter_pct:
-            print(f"[FILTER] ATR kecil ({atr_pct:.5f}) => sideways")
+
+        if atr_pct < self.cfg.atr_min_pct:
+            print(f"[FILTER] ATR terlalu kecil ({atr_pct:.5f}) => market flat, skip")
+            return
+        if atr_pct > self.cfg.atr_max_pct:
+            print(f"[FILTER] ATR terlalu besar ({atr_pct:.5f}) => market terlalu volatile, skip")
             return
 
         # --- Filter ADX ---
-        adx = compute_adx(self.candles, self.cfg.adx_period).iat[-1]
+        adx = compute_adx(self.candles, self.cfg.adx_period).iloc[-1]
         if adx < self.cfg.adx_threshold:
-            print(f"[FILTER] ADX rendah ({adx:.2f}) => sideways")
+            print(f"[FILTER] ADX rendah ({adx:.2f}) => trend lemah, skip")
             return
 
         # --- Filter EMA gap ---
-        ema_fast = compute_ema(self.candles['close'], self.cfg.ema_fast).iat[-1]
-        ema_slow = compute_ema(self.candles['close'], self.cfg.ema_slow).iat[-1]
+        ema_fast = compute_ema(self.candles['close'], self.cfg.ema_fast).iloc[-1]
+        ema_slow = compute_ema(self.candles['close'], self.cfg.ema_slow).iloc[-1]
         ema_gap = abs(ema_fast - ema_slow) / last_close
+
         if ema_gap < self.cfg.ema_gap_pct:
-            print(f"[FILTER] EMA rapat ({ema_gap:.5f}) => sideways")
+            print(f"[FILTER] EMA rapat ({ema_gap:.5f}) => sideways berat, skip")
             return
 
         # ---- Kalau lolos semua filter, baru buat watch ----
