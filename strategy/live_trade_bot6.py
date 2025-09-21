@@ -255,16 +255,28 @@ class ImprovedLiveDualEntryBot:
 
     async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
         # Add small buffer for limit orders to improve fill rate
+        # if side == 'LONG':
+        #     order_price = entry_price * (1 - 0.0005)  # 0.05% below trigger
+        # else:
+        #     order_price = entry_price * (1 + 0.0005)  # 0.05% above trigger
+            
+        # raw_qty = compute_qty_by_risk(self.balance, self.cfg.risk_pct, entry_price, sl_price)
+        # qty = await round_qty_to_step(self.client, self.cfg.pair, raw_qty)
+        # if qty <= 0:
+        #     print("[ORDER SKIP] calculated qty <= 0 (minQty or too small).")
+        #     return
+
+        qty = 1  # 1 AVAX
+        # Calculate actual risk percentage untuk monitoring
+        risk_per_trade = abs(entry_price - sl_price) * qty
+        risk_percentage = (risk_per_trade / self.balance) * 100
+
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0005)  # 0.05% below trigger
         else:
             order_price = entry_price * (1 + 0.0005)  # 0.05% above trigger
-            
-        raw_qty = compute_qty_by_risk(self.balance, self.cfg.risk_pct, entry_price, sl_price)
-        qty = await round_qty_to_step(self.client, self.cfg.pair, raw_qty)
-        if qty <= 0:
-            print("[ORDER SKIP] calculated qty <= 0 (minQty or too small).")
-            return
+
+        print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
         try:
             # Place limit order
