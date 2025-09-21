@@ -442,9 +442,9 @@ class ImprovedLiveDualEntryBot:
         qty = self._round_qty(1.0)  # 1 AVAX
 
         if side == 'LONG':
-            order_price = entry_price * (1 - 0.0005)  # 0.05% below trigger
+            order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
         else:
-            order_price = entry_price * (1 + 0.0005)  # 0.05% above trigger
+            order_price = entry_price * (1 + 0.0002)  # 0.05% above trigger
 
         # Round prices
         order_price = self._round_price(order_price)
