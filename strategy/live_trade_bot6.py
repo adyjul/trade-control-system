@@ -20,20 +20,20 @@ class BotConfig:
     api_key: str = os.getenv('BINANCE_API_KEY')
     api_secret: str = os.getenv('BINANCE_API_SECRET')
     pair: str = "AVAXUSDT"
-    interval: str = "1m"
+    interval: str = "5m"
     initial_balance: float = 20.0
     leverage: float = 10.0
     fee_rate: float = 0.0004
     min_atr: float = 0.0005
     atr_period: int = 14
-    level_mult: float = 0.18
-    tp_atr_mult: float = 0.65
-    sl_atr_mult: float = 0.8
+    level_mult: float = 0.15
+    tp_atr_mult: float = 0.8
+    sl_atr_mult: float = 1.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
-    min_hold_sec: int = 60
+    min_hold_sec: int = 120
     logfile: str = "trades_log.xlsx"
-    risk_pct: float = 0.012
+    risk_pct: float = 0.008
     margin_type: str = "ISOLATED"
     use_testnet: bool = True
     use_limit_orders: bool = True
@@ -144,7 +144,7 @@ class ImprovedLiveDualEntryBot:
         self.volatility_ratio = 0.0
         self.pending_orders: List[Dict] = []  # Sudah ada
         self.active_orders: List[Dict] = []   # Order yang sudah aktif tapi belum ditutup
-        self.order_timeout = 90  # 5 menit timeout untuk pending orders
+        self.order_timeout = 600  # 5 menit timeout untuk pending orders
     
     async def check_order_timeouts(self):
         """Cancel orders that have been pending too long"""
@@ -442,9 +442,9 @@ class ImprovedLiveDualEntryBot:
         qty = self._round_qty(1.0)  # 1 AVAX
 
         if side == 'LONG':
-            order_price = entry_price * (1 - 0.0001)  # 0.05% below trigger
+            order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
         else:
-            order_price = entry_price * (1 + 0.0001)  # 0.05% above trigger
+            order_price = entry_price * (1 + 0.0002)  # 0.05% above trigger
 
         # Round prices
         order_price = self._round_price(order_price)
