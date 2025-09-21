@@ -597,7 +597,6 @@ class ImprovedLiveDualEntryBot:
                     print(f"[ERROR] cancel order {order['order_id']}:", e)
 
     async def _process_current_position(self):
-        print('[DEBUG] _process_current_position', self._current_position)
         if self._current_position is None:
             return
 
@@ -608,8 +607,7 @@ class ImprovedLiveDualEntryBot:
 
         exit_reason = None
         exit_price = None
-        print('[DEBUG] elapsed_sec:', elapsed_sec)
-        print('[DEBUG] min_hold_sec:', self.cfg.min_hold_sec)
+       
         # print('[DEBUG] pos[side]:', pos['side'])
         if elapsed_sec >= self.cfg.min_hold_sec:
             if pos['side'] == 'LONG':
