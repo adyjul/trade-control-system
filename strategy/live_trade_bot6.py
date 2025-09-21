@@ -462,7 +462,7 @@ if __name__ == "__main__":
     cfg = BotConfig()
     cfg.api_key = os.getenv('BINANCE_API_KEY')
     cfg.api_secret = os.getenv('BINANCE_API_SECRET')
-    cfg.use_testnet = True
+    cfg.use_testnet = False
     
     cfg.use_limit_orders = True
     cfg.require_confirmation = True
