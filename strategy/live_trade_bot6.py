@@ -43,6 +43,7 @@ class BotConfig:
     # AVAX-specific precision settings
     qty_precision: int = 1  # 1 decimal for AVAX
     price_precision: int = 3  # 3 decimals for AVAX
+    
 
 # ---------------- Excel Logger ----------------
 def init_excel(path: str):
@@ -87,6 +88,29 @@ def compute_qty_by_risk(balance: float, risk_pct: float, entry_price: float, sl_
     qty = risk_amount / risk_per_unit
     return qty
 
+
+def calculate_order_quality(self, order: Dict) -> float:
+    """Calculate a quality score for order prioritization"""
+    # Factors to consider:
+    # 1. Distance from current price (closer is better)
+    # 2. Volatility multiplier (higher volatility might be better for scalping)
+    # 3. Time since signal (newer signals might be better)
+    
+    current_price = self.candles['close'].iloc[-1] if not self.candles.empty else 0
+    price_distance = abs(order['entry_price'] - current_price) / current_price if current_price else 1
+    
+    # Lower distance = higher quality
+    distance_score = 1 - min(price_distance, 0.1) * 10  # Normalize to 0-1 range
+    
+    # Higher volatility multiplier = higher quality (for aggressive trading)
+    volatility_score = order.get('vol_mult', 1.0)
+    
+    # Newer orders are generally better
+    time_score = 1.0  # Can be based on order time if needed
+    
+    return distance_score * 0.5 + volatility_score * 0.3 + time_score * 0.2
+
+
 async def round_qty_to_step(client: AsyncClient, symbol: str, raw_qty: float):
     info = await client.futures_exchange_info()
     stepSize = None
@@ -118,6 +142,112 @@ class ImprovedLiveDualEntryBot:
         self.client: Optional[AsyncClient] = None
         self.bm: Optional[BinanceSocketManager] = None
         self.volatility_ratio = 0.0
+        self.pending_orders: List[Dict] = []  # Sudah ada
+        self.active_orders: List[Dict] = []   # Order yang sudah aktif tapi belum ditutup
+        self.order_timeout = 300  # 5 menit timeout untuk pending orders
+    
+    async def check_order_timeouts(self):
+        """Cancel orders that have been pending too long"""
+        now = datetime.now(timezone.utc)
+        for order in self.pending_orders[:]:
+            if (now - order['place_time']).total_seconds() > self.order_timeout:
+                try:
+                    await self.client.futures_cancel_order(
+                        symbol=self.cfg.pair,
+                        orderId=order['order_id']
+                    )
+                    self.pending_orders.remove(order)
+                    print(f"[ORDER CANCELED] Timeout - {order['order_id']}")
+                except Exception as e:
+                    print(f"[ERROR] canceling timed out order: {e}")
+
+    async def manage_order_conflicts(self, new_order: Dict):
+        """Handle multiple order requests based on priority"""
+        # Strategy 1: Cancel oldest order if new order has better potential
+        if len(self.pending_orders) >= 2:  # Max 2 pending orders
+            # Cancel the oldest order
+            oldest_order = min(self.pending_orders, key=lambda x: x['place_time'])
+            try:
+                await self.client.futures_cancel_order(
+                    symbol=self.cfg.pair,
+                    orderId=oldest_order['order_id']
+                )
+                self.pending_orders.remove(oldest_order)
+                print(f"[ORDER CANCELED] Conflict resolution - removed oldest order {oldest_order['order_id']}")
+            except Exception as e:
+                print(f"[ERROR] canceling order: {e}")
+        
+        # Strategy 2: Compare order quality and keep the best one
+        current_best = None
+        if self.pending_orders:
+            current_best = max(self.pending_orders, key=lambda x: x.get('quality_score', 0))
+        
+        new_order_quality = self.calculate_order_quality(new_order)
+        
+        if current_best and new_order_quality > current_best.get('quality_score', 0):
+            # New order is better, cancel the current one
+            try:
+                await self.client.futures_cancel_order(
+                    symbol=self.cfg.pair,
+                    orderId=current_best['order_id']
+                )
+                self.pending_orders.remove(current_best)
+                print(f"[ORDER CANCELED] Replaced with better order")
+            except Exception as e:
+                print(f"[ERROR] canceling order: {e}")
+
+    def calculate_order_quality(self, order: Dict) -> float:
+        """Calculate a quality score for order prioritization"""
+        # Factors to consider:
+        # 1. Distance from current price (closer is better)
+        # 2. Volatility multiplier (higher volatility might be better for scalping)
+        # 3. Time since signal (newer signals might be better)
+        
+        current_price = self.candles['close'].iloc[-1] if not self.candles.empty else 0
+        price_distance = abs(order['entry_price'] - current_price) / current_price if current_price else 1
+        
+        # Lower distance = higher quality
+        distance_score = 1 - min(price_distance, 0.1) * 10  # Normalize to 0-1 range
+        
+        # Higher volatility multiplier = higher quality (for aggressive trading)
+        volatility_score = order.get('vol_mult', 1.0)
+        
+        # Newer orders are generally better
+        time_score = 1.0  # Can be based on order time if needed
+        
+        return distance_score * 0.5 + volatility_score * 0.3 + time_score * 0.2
+    
+    async def check_order_status(self):
+        """Periodically check status of all pending orders"""
+        if not self.client:
+            return
+            
+        for order in self.pending_orders[:]:
+            try:
+                # Check order status from exchange
+                order_status = await self.client.futures_get_order(
+                    symbol=self.cfg.pair,
+                    orderId=order['order_id']
+                )
+                
+                if order_status['status'] == 'FILLED':
+                    # Order filled, move to active orders
+                    print(f"[ORDER FILLED] {order['side']} {order['qty']} @ {order_status['avgPrice']}")
+                    self.pending_orders.remove(order)
+                    self.active_orders.append({
+                        **order,
+                        'entry_price': float(order_status['avgPrice']),
+                        'entry_time': datetime.now(timezone.utc),
+                        'status': 'FILLED'
+                    })
+                    
+                elif order_status['status'] == 'CANCELED' or order_status['status'] == 'EXPIRED':
+                    # Order canceled or expired, remove from pending
+                    print(f"[ORDER {order_status['status']}] {order['order_id']}")
+                    self.pending_orders.remove(order)
+                    
+            except Exception as e:
+                print(f"[ERROR] checking order status: {e}")
 
     def _round_price(self, price: float) -> float:
         """Round price to configured precision"""
@@ -127,6 +257,16 @@ class ImprovedLiveDualEntryBot:
         """Round quantity to configured precision"""
         return round(qty, self.cfg.qty_precision)
 
+    async def periodic_order_checks(self):
+        """Run order checks periodically"""
+        while True:
+            try:
+                await asyncio.sleep(30)  # Check every 30 seconds
+                await self.check_order_status()
+                await self.check_order_timeouts()
+            except Exception as e:
+                print("[ERROR] in periodic order checks:", e)
+                
     async def start(self):
         self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
         try:
@@ -137,11 +277,14 @@ class ImprovedLiveDualEntryBot:
                 pass
         except Exception as e:
             print("[WARN] set leverage/margin:", e)
+        
+        
 
         self.bm = BinanceSocketManager(self.client)
         print(f"[INFO] Starting improved live-dual-entry bot for {self.cfg.pair} (testnet={self.cfg.use_testnet})")
         print(f"[CONFIG] Price precision: {self.cfg.price_precision}, Qty precision: {self.cfg.qty_precision}")
         
+        asyncio.create_task(self.periodic_order_checks())
         async with self.bm.kline_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
             while True:
                 try:
@@ -164,9 +307,13 @@ class ImprovedLiveDualEntryBot:
                         await self._process_watches()
                         await self._process_current_position()
                         await self._check_pending_orders()
+                        await self.check_order_status()
+                        await self.check_order_timeouts()
+
                 except Exception as e:
                     print("[ERROR] main loop:", e)
                     await asyncio.sleep(1)
+
 
     def _append_candle(self, ts, o, h, l, c, v):
         row = pd.DataFrame([[o, h, l, c, v]], index=[ts], columns=['open', 'high', 'low', 'close', 'volume'])
@@ -276,6 +423,7 @@ class ImprovedLiveDualEntryBot:
         print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
         try:
+            # Place the order
             order = await self.client.futures_create_order(
                 symbol=self.cfg.pair,
                 side=SIDE_BUY if side == 'LONG' else SIDE_SELL,
@@ -285,7 +433,8 @@ class ImprovedLiveDualEntryBot:
                 price=order_price
             )
             
-            self.pending_orders.append({
+            # Add to pending orders with additional metadata
+            order_data = {
                 "order_id": order['orderId'],
                 "side": side,
                 "entry_price": entry_price,
@@ -296,11 +445,45 @@ class ImprovedLiveDualEntryBot:
                 "atr": atr_value,
                 "vol_mult": vol_mult,
                 "place_time": datetime.now(timezone.utc),
-                "expiry_time": datetime.now(timezone.utc) + timedelta(minutes=5)
-            })
+                "expiry_time": datetime.now(timezone.utc) + timedelta(seconds=self.order_timeout),
+                "quality_score": self.calculate_order_quality({
+                    'entry_price': entry_price,
+                    'vol_mult': vol_mult
+                })
+            }
+            
+            self.pending_orders.append(order_data)
             print(f"[LIMIT ORDER PLACED] {side} {qty} @ {order_price:.3f} (orderId: {order['orderId']})")
+            
         except Exception as e:
             print("[ERROR] place limit order:", e)
+
+        # try:
+        #     order = await self.client.futures_create_order(
+        #         symbol=self.cfg.pair,
+        #         side=SIDE_BUY if side == 'LONG' else SIDE_SELL,
+        #         type=ORDER_TYPE_LIMIT,
+        #         timeInForce=TIME_IN_FORCE_GTC,
+        #         quantity=qty,
+        #         price=order_price
+        #     )
+            
+        #     self.pending_orders.append({
+        #         "order_id": order['orderId'],
+        #         "side": side,
+        #         "entry_price": entry_price,
+        #         "order_price": order_price,
+        #         "qty": qty,
+        #         "tp_price": tp_price,
+        #         "sl_price": sl_price,
+        #         "atr": atr_value,
+        #         "vol_mult": vol_mult,
+        #         "place_time": datetime.now(timezone.utc),
+        #         "expiry_time": datetime.now(timezone.utc) + timedelta(minutes=5)
+        #     })
+        #     print(f"[LIMIT ORDER PLACED] {side} {qty} @ {order_price:.3f} (orderId: {order['orderId']})")
+        # except Exception as e:
+        #     print("[ERROR] place limit order:", e)
 
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
         qty = self._round_qty(1.0)  # 1 AVAX
