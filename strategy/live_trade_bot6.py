@@ -457,7 +457,7 @@ if __name__ == "__main__":
     cfg = BotConfig()
     cfg.api_key = os.getenv('BINANCE_API_KEY')
     cfg.api_secret = os.getenv('BINANCE_API_SECRET')
-    cfg.use_testnet = True  # Set to False for live trading
+    cfg.use_testnet = False  # Set to False for live trading
     
     # Improved settings
     cfg.use_limit_orders = True  # Use limit orders for better entry prices
