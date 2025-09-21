@@ -31,7 +31,7 @@ class BotConfig:
     sl_atr_mult: float = 0.8
     monitor_candles: int = 3
     candles_buffer: int = 1000
-    min_hold_sec: int = 15
+    min_hold_sec: int = 60
     logfile: str = "trades_log.xlsx"
     risk_pct: float = 0.012
     margin_type: str = "ISOLATED"
