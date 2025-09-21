@@ -3,7 +3,7 @@ import asyncio
 import math
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 
 import numpy as np
@@ -296,11 +296,19 @@ class ImprovedLiveDualEntryBot:
             print("[ERROR] place limit order:", e)
 
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
-        raw_qty = compute_qty_by_risk(self.balance, self.cfg.risk_pct, entry_price, sl_price)
-        qty = await round_qty_to_step(self.client, self.cfg.pair, raw_qty)
-        if qty <= 0:
-            print("[OPEN SKIP] calculated qty <= 0 (minQty or too small).")
-            return
+
+        # raw_qty = compute_qty_by_risk(self.balance, self.cfg.risk_pct, entry_price, sl_price)
+        # qty = await round_qty_to_step(self.client, self.cfg.pair, raw_qty)
+        # if qty <= 0:
+        #     print("[OPEN SKIP] calculated qty <= 0 (minQty or too small).")
+        #     return
+
+        qty = 1.0  # 1 AVAX
+        # Calculate actual risk percentage untuk monitoring
+        risk_per_trade = abs(entry_price - sl_price) * qty
+        risk_percentage = (risk_per_trade / self.balance) * 100
+
+        print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
         try:
             # Apply slippage estimate for market orders
