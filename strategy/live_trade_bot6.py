@@ -52,7 +52,7 @@ class BotConfig:
     ema_fast = 20
     ema_slow = 50
     ema_gap_pct = 0.0005       # 0.05% jarak
-    
+
 def compute_ema(series: pd.Series, period: int):
     return series.ewm(span=period, adjust=False).mean()
 
@@ -369,40 +369,40 @@ class ImprovedLiveDualEntryBot:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
     
     def _create_watch(self, atr_value):
-        if self._current_position is not None:
-            return
+        # if self._current_position is not None:
+        #     return
 
-        # pastikan cukup candle
-        if len(self.candles) < max(self.cfg.atr_filter_period, self.cfg.adx_period, self.cfg.ema_slow) + 2:
-            return
+        # # pastikan cukup candle
+        # if len(self.candles) < max(self.cfg.atr_filter_period, self.cfg.adx_period, self.cfg.ema_slow) + 2:
+        #     return
 
-        last_close = self.candles['close'].iat[-1]
+        # last_close = self.candles['close'].iat[-1]
 
-        # --- Filter ATR ---
-        atr_short = compute_atr_from_df(self.candles, self.cfg.atr_filter_period).iloc[-1]
-        atr_pct = atr_short / last_close if last_close > 0 else 0.0
+        # # --- Filter ATR ---
+        # atr_short = compute_atr_from_df(self.candles, self.cfg.atr_filter_period).iloc[-1]
+        # atr_pct = atr_short / last_close if last_close > 0 else 0.0
 
-        if atr_pct < self.cfg.atr_min_pct:
-            print(f"[FILTER] ATR terlalu kecil ({atr_pct:.5f}) => market flat, skip")
-            return
-        if atr_pct > self.cfg.atr_max_pct:
-            print(f"[FILTER] ATR terlalu besar ({atr_pct:.5f}) => market terlalu volatile, skip")
-            return
+        # if atr_pct < self.cfg.atr_min_pct:
+        #     print(f"[FILTER] ATR terlalu kecil ({atr_pct:.5f}) => market flat, skip")
+        #     return
+        # if atr_pct > self.cfg.atr_max_pct:
+        #     print(f"[FILTER] ATR terlalu besar ({atr_pct:.5f}) => market terlalu volatile, skip")
+        #     return
 
-        # --- Filter ADX ---
-        adx = compute_adx(self.candles, self.cfg.adx_period).iloc[-1]
-        if adx < self.cfg.adx_threshold:
-            print(f"[FILTER] ADX rendah ({adx:.2f}) => trend lemah, skip")
-            return
+        # # --- Filter ADX ---
+        # adx = compute_adx(self.candles, self.cfg.adx_period).iloc[-1]
+        # if adx < self.cfg.adx_threshold:
+        #     print(f"[FILTER] ADX rendah ({adx:.2f}) => trend lemah, skip")
+        #     return
 
-        # --- Filter EMA gap ---
-        ema_fast = compute_ema(self.candles['close'], self.cfg.ema_fast).iloc[-1]
-        ema_slow = compute_ema(self.candles['close'], self.cfg.ema_slow).iloc[-1]
-        ema_gap = abs(ema_fast - ema_slow) / last_close
+        # # --- Filter EMA gap ---
+        # ema_fast = compute_ema(self.candles['close'], self.cfg.ema_fast).iloc[-1]
+        # ema_slow = compute_ema(self.candles['close'], self.cfg.ema_slow).iloc[-1]
+        # ema_gap = abs(ema_fast - ema_slow) / last_close
 
-        if ema_gap < self.cfg.ema_gap_pct:
-            print(f"[FILTER] EMA rapat ({ema_gap:.5f}) => sideways berat, skip")
-            return
+        # if ema_gap < self.cfg.ema_gap_pct:
+        #     print(f"[FILTER] EMA rapat ({ema_gap:.5f}) => sideways berat, skip")
+        #     return
 
         # ---- Kalau lolos semua filter, baru buat watch ----
         volatility_mult = 1.0
@@ -411,22 +411,21 @@ class ImprovedLiveDualEntryBot:
         elif self.cfg.adaptive_tp_sl and self.volatility_ratio < 0.002:
             volatility_mult = 0.8
 
-        last_close_price = self._round_price(last_close)
-        long_level = self._round_price(last_close + atr_value * self.cfg.level_mult * volatility_mult)
-        short_level = self._round_price(last_close - atr_value * self.cfg.level_mult * volatility_mult)
+        # last_close_price = self._round_price(last_close)
+        # long_level = self._round_price(last_close + atr_value * self.cfg.level_mult * volatility_mult)
+        # short_level = self._round_price(last_close - atr_value * self.cfg.level_mult * volatility_mult)
 
         watch = {
             "start_idx": len(self.candles) - 1,
             "expire_idx": len(self.candles) - 1 + self.cfg.monitor_candles,
-            "long_level": long_level,
-            "short_level": short_level,
+            # "long_level": long_level,
+            # "short_level": short_level,
             "atr": atr_value,
             "trigger_time": self.candles.index[-1],
             "volatility_mult": volatility_mult
         }
         self.watches.append(watch)
-        print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} "
-            f"long={long_level:.3f} short={short_level:.3f} "
+        print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.6f} short={watch['short_level']:.6f} "
             f"vol_mult={volatility_mult:.2f}")
         
     async def _process_watches(self):
