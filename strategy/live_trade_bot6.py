@@ -485,9 +485,10 @@ class ImprovedLiveDualEntryBot:
         print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.3f} short={watch['short_level']:.3f} vol_mult={volatility_mult:.2f}")
 
     async def _process_watches(self):
+        print("[INFO] Masuk Processing watches...")
         if self._current_position is not None:
             return
-
+        print("[INFO] Mulai Processing watches...")
         latest_idx = len(self.candles) - 1
         candle_high = self.candles['high'].iat[-1]
         candle_low = self.candles['low'].iat[-1]
