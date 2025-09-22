@@ -369,7 +369,7 @@ class ImprovedLiveDualEntryBot:
 
     
     async def _emergency_exit_check(self, price: float):
-        
+        print(f"[EMERGENCY EXIT CHECK] {price}")
         if self._current_position is None:
             return
 
@@ -432,7 +432,7 @@ class ImprovedLiveDualEntryBot:
 
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
                     last_price = float(k.get('p'))
-                    
+
                     await self._emergency_exit_check(last_price)
                     if is_closed:
                         atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
