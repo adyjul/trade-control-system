@@ -31,7 +31,7 @@ class BotConfig:
     sl_atr_mult: float = 1.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
-    min_hold_sec: int = 120
+    min_hold_sec: int = 900
     logfile: str = "trades_log.xlsx"
     risk_pct: float = 0.008
     margin_type: str = "ISOLATED"
@@ -405,6 +405,7 @@ class ImprovedLiveDualEntryBot:
                 await self._close_position("SHORT", price, reason="EMERGENCY")
                 self._current_position = None
                 # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
 
                 
     async def start(self):
@@ -729,6 +730,7 @@ class ImprovedLiveDualEntryBot:
                 elif latest_candle['low'] <= pos['sl_price']:
                     exit_price = pos['sl_price']
                     exit_reason = 'SL'
+                print('exit dari candle')
             else:
                 if latest_candle['low'] <= pos['tp_price']:
                     exit_price = pos['tp_price']
@@ -736,6 +738,7 @@ class ImprovedLiveDualEntryBot:
                 elif latest_candle['high'] >= pos['sl_price']:
                     exit_price = pos['sl_price']
                     exit_reason = 'SL'
+                print('exit dari candle')
 
         if exit_price is not None:
             try:
@@ -751,7 +754,7 @@ class ImprovedLiveDualEntryBot:
                 exit_exec_price = 0.0
                 exit_qty = 0.0
                 self._current_position = None
-                self.watches.clear()
+                # self.watches.clear()
                 if 'fills' in close_order and close_order['fills']:
                     for fill in close_order['fills']:
                         exit_qty += float(fill['qty'])
