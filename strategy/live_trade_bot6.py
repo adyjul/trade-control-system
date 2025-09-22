@@ -420,6 +420,7 @@ class ImprovedLiveDualEntryBot:
         print(f"[CONFIG] Price precision: {self.cfg.price_precision}, Qty precision: {self.cfg.qty_precision}")
         
         asyncio.create_task(self.periodic_order_checks())
+        asyncio.create_task(self._realtime_price_monitor())
         async with self.bm.kline_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
             while True:
                 try:
@@ -431,9 +432,7 @@ class ImprovedLiveDualEntryBot:
                     self._append_candle(ts, o, h, l, c, v)
 
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
-                    last_price = k
-                    print(f"[INFO] Current price: {last_price}")
-                    await self._emergency_exit_check(last_price)
+               
                     if is_closed:
                         atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
                         current_atr = atr_series.iat[-1] if len(atr_series) >= self.cfg.atr_period else np.nan
@@ -451,6 +450,17 @@ class ImprovedLiveDualEntryBot:
                     print("[ERROR] main loop:", e)
                     await asyncio.sleep(1)
 
+    async def _realtime_price_monitor(self):
+        async with self.bm.symbol_ticker_socket(self.cfg.pair) as ticker_stream:
+            while True:
+                try:
+                    msg = await ticker_stream.recv()
+                    last_price = float(msg['c'])  # 'c' = last price
+                    print(f"[MINI-TICKER] {last_price}")
+                    await self._emergency_exit_check(last_price)
+                except Exception as e:
+                    print("[ERROR] Mini-ticker:", e)
+                    await asyncio.sleep(0.5)
 
     def _append_candle(self, ts, o, h, l, c, v):
         row = pd.DataFrame([[o, h, l, c, v]], index=[ts], columns=['open', 'high', 'low', 'close', 'volume'])
