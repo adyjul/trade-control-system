@@ -342,7 +342,7 @@ class ImprovedLiveDualEntryBot:
             self.balance += net_pnl
 
             self._current_position = None
-            self.watches.clear()
+            # self.watches.clear()
 
             # Log ke Excel
             append_trade_excel(self.cfg.logfile, [
@@ -386,12 +386,12 @@ class ImprovedLiveDualEntryBot:
                 print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
                 self._current_position = None
-                self.watches.clear()
+                # self.watches.clear()
             elif price >= tp:
                 print(f"[EMERGENCY EXIT] LONG TP hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
                 self._current_position = None
-                self.watches.clear()
+                # self.watches.clear()
 
         # SHORT position
         elif side == "SHORT":
@@ -399,12 +399,12 @@ class ImprovedLiveDualEntryBot:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
                 self._current_position = None
-                self.watches.clear()
+                # self.watches.clear()
             elif price <= tp:
                 print(f"[EMERGENCY EXIT] SHORT TP hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
                 self._current_position = None
-                self.watches.clear()
+                # self.watches.clear()
 
                 
     async def start(self):
@@ -546,6 +546,7 @@ class ImprovedLiveDualEntryBot:
             else:
                 if latest_idx < w['expire_idx']:
                     new_watches.append(w)
+        
 
         self.watches = new_watches
 
@@ -796,7 +797,8 @@ class ImprovedLiveDualEntryBot:
 
                 print(f"[POSITION CLOSED] {pos['side']} exit={exit_exec_price:.3f} reason={exit_reason} pnl={net_pnl:.6f} fees={fees:.6f} balance={self.balance:.4f}")
                 self._current_position = None
-                self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+                
             except Exception as e:
                 print("[ERROR] closing position:", e)
 
