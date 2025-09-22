@@ -342,6 +342,7 @@ class ImprovedLiveDualEntryBot:
             self.balance += net_pnl
 
             self._current_position = None
+            self.watches.clear()
 
             # Log ke Excel
             append_trade_excel(self.cfg.logfile, [
@@ -385,10 +386,12 @@ class ImprovedLiveDualEntryBot:
                 print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
                 self._current_position = None
+                self.watches.clear()
             elif price >= tp:
                 print(f"[EMERGENCY EXIT] LONG TP hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
                 self._current_position = None
+                self.watches.clear()
 
         # SHORT position
         elif side == "SHORT":
@@ -396,10 +399,12 @@ class ImprovedLiveDualEntryBot:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
                 self._current_position = None
+                self.watches.clear()
             elif price <= tp:
                 print(f"[EMERGENCY EXIT] SHORT TP hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
                 self._current_position = None
+                self.watches.clear()
 
                 
     async def start(self):
@@ -513,6 +518,8 @@ class ImprovedLiveDualEntryBot:
                 long_condition = candle_high >= w['long_level']
                 short_condition = candle_low <= w['short_level']
 
+            print(f"long_condition: {long_condition}, short_condition: {short_condition}")
+
             if long_condition:
                 triggered = True
                 side = 'LONG'
@@ -539,8 +546,6 @@ class ImprovedLiveDualEntryBot:
             else:
                 if latest_idx < w['expire_idx']:
                     new_watches.append(w)
-
-            
 
         self.watches = new_watches
 
@@ -745,6 +750,7 @@ class ImprovedLiveDualEntryBot:
                 exit_exec_price = 0.0
                 exit_qty = 0.0
                 self._current_position = None
+                self.watches.clear()
                 if 'fills' in close_order and close_order['fills']:
                     for fill in close_order['fills']:
                         exit_qty += float(fill['qty'])
@@ -790,6 +796,7 @@ class ImprovedLiveDualEntryBot:
 
                 print(f"[POSITION CLOSED] {pos['side']} exit={exit_exec_price:.3f} reason={exit_reason} pnl={net_pnl:.6f} fees={fees:.6f} balance={self.balance:.4f}")
                 self._current_position = None
+                self.watches.clear()
             except Exception as e:
                 print("[ERROR] closing position:", e)
 
