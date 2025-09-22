@@ -431,7 +431,7 @@ class ImprovedLiveDualEntryBot:
                     self._append_candle(ts, o, h, l, c, v)
 
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
-                    last_price = float(k)
+                    last_price = k
                     print(f"[INFO] Current price: {last_price}")
                     await self._emergency_exit_check(last_price)
                     if is_closed:
