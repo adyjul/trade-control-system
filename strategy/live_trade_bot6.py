@@ -376,8 +376,8 @@ class ImprovedLiveDualEntryBot:
         pos = self._current_position
         side = pos['side']
         entry_price = pos['entry_price']
-        tp = pos['take_profit']
-        sl = pos['stop_loss']
+        tp = pos['tp_price']
+        sl = pos['sl_price']
 
         # LONG position
         if side == "LONG":
@@ -432,7 +432,7 @@ class ImprovedLiveDualEntryBot:
 
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
                     last_price = float(k.get('c', 0))
-                    print(f"[INFO] Current price: {last_price}")
+
                     await self._emergency_exit_check(last_price)
                     if is_closed:
                         atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
