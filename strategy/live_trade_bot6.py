@@ -369,7 +369,7 @@ class ImprovedLiveDualEntryBot:
 
     
     async def _emergency_exit_check(self, price: float):
-        print(f"[EMERGENCY EXIT CHECK] ", price)
+
         if self._current_position is None:
             return
 
