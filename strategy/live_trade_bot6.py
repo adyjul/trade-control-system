@@ -19,7 +19,7 @@ load_dotenv()
 class BotConfig:
     api_key: str = os.getenv('BINANCE_API_KEY')
     api_secret: str = os.getenv('BINANCE_API_SECRET')
-    pair: str = "SOLUSDT"
+    pair: str = "AVAXUSDT"
     interval: str = "5m"
     initial_balance: float = 20.0
     leverage: float = 10.0
