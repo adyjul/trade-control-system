@@ -451,7 +451,7 @@ class ImprovedLiveDualEntryBot:
                     await asyncio.sleep(1)
 
     async def _realtime_price_monitor(self):
-        async with self.bm.symbol_ticker_socket(self.cfg.pair) as ticker_stream:
+        async with self.bm.kline_futures_socket(self.cfg.pair) as ticker_stream:
             while True:
                 try:
                     msg = await ticker_stream.recv()
