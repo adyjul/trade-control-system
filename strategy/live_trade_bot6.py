@@ -342,6 +342,7 @@ class ImprovedLiveDualEntryBot:
             self.balance += net_pnl
 
             self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
             # self.watches.clear()
 
             # Log ke Excel
@@ -387,11 +388,13 @@ class ImprovedLiveDualEntryBot:
                 await self._close_position("LONG", price, reason="EMERGENCY")
                 self._current_position = None
                 # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
             elif price >= tp:
                 print(f"[EMERGENCY EXIT] LONG TP hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
                 self._current_position = None
                 # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
 
         # SHORT position
         elif side == "SHORT":
@@ -400,6 +403,7 @@ class ImprovedLiveDualEntryBot:
                 await self._close_position("SHORT", price, reason="EMERGENCY")
                 self._current_position = None
                 # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
             elif price <= tp:
                 print(f"[EMERGENCY EXIT] SHORT TP hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
