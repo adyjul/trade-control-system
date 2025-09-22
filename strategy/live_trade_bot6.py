@@ -300,6 +300,107 @@ class ImprovedLiveDualEntryBot:
                 await self.check_order_timeouts()
             except Exception as e:
                 print("[ERROR] in periodic order checks:", e)
+    
+    async def _close_position(self, side: str, exit_price: float, reason: str = "EMERGENCY"):
+        if self._current_position is None:
+            return
+        
+        pos = self._current_position
+        try:
+            # market close order
+            close_order = await self.client.futures_create_order(
+                symbol=self.cfg.pair,
+                side=SIDE_SELL if side == 'LONG' else SIDE_BUY,
+                type=ORDER_TYPE_MARKET,
+                reduceOnly=True,
+                quantity=pos['qty']
+            )
+
+            # Hitung harga rata-rata eksekusi
+            exit_exec_price = 0.0
+            exit_qty = 0.0
+            if 'fills' in close_order and close_order['fills']:
+                for fill in close_order['fills']:
+                    exit_qty += float(fill['qty'])
+                    exit_exec_price += float(fill['price']) * float(fill['qty'])
+                exit_exec_price = exit_exec_price / exit_qty if exit_qty > 0 else exit_price
+            else:
+                exit_exec_price = exit_price
+
+            # Sesuaikan slippage
+            if pos['side'] == 'LONG':
+                exit_exec_price *= 1 - self.cfg.slippage_pct
+            else:
+                exit_exec_price *= 1 + self.cfg.slippage_pct
+
+            exit_exec_price = self._round_price(exit_exec_price)
+
+            # Hitung PnL
+            raw_pnl = pos['qty'] * ((exit_exec_price - pos['entry_price']) if pos['side'] == 'LONG' else (pos['entry_price'] - exit_exec_price))
+            fees = self.cfg.fee_rate * self.balance
+            net_pnl = raw_pnl - fees
+            self.balance += net_pnl
+
+            self._current_position = None
+
+            # Log ke Excel
+            append_trade_excel(self.cfg.logfile, [
+                self.cfg.pair,
+                pos['entry_time'],
+                pos['side'],
+                pos['entry_price'],
+                pos['qty'],
+                pos['tp_price'],
+                pos['sl_price'],
+                datetime.now(timezone.utc),
+                exit_exec_price,
+                net_pnl,
+                fees,
+                reason,
+                self.balance,
+                pos['atr'],
+                pos['vol_mult']
+            ])
+
+            print(f"[POSITION CLOSED] {pos['side']} exit={exit_exec_price:.3f} reason={reason} pnl={net_pnl:.6f} balance={self.balance:.4f}")
+            
+        except Exception as e:
+            print("[ERROR] closing position:", e)
+
+    
+    async def _emergency_exit_check(self, price: float):
+        
+        if self._current_position is None:
+            return
+
+        pos = self._current_position
+        side = pos['side']
+        entry_price = pos['entry_price']
+        tp = pos['take_profit']
+        sl = pos['stop_loss']
+
+        # LONG position
+        if side == "LONG":
+            if price <= sl:
+                print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
+                await self._close_position("LONG", price, reason="EMERGENCY")
+                self._current_position = None
+            elif price >= tp:
+                print(f"[EMERGENCY EXIT] LONG TP hit @ {price}")
+                await self._close_position("LONG", price, reason="EMERGENCY")
+                self._current_position = None
+
+        # SHORT position
+        elif side == "SHORT":
+            if price >= sl:
+                print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
+                await self._close_position("SHORT", price, reason="EMERGENCY")
+                self._current_position = None
+            elif price <= tp:
+                print(f"[EMERGENCY EXIT] SHORT TP hit @ {price}")
+                await self._close_position("SHORT", price, reason="EMERGENCY")
+                self._current_position = None
+
                 
     async def start(self):
         self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
@@ -330,7 +431,9 @@ class ImprovedLiveDualEntryBot:
                     self._append_candle(ts, o, h, l, c, v)
 
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
-
+                    last_price = float(k.get('p'))
+                    
+                    await self._emergency_exit_check(last_price)
                     if is_closed:
                         atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
                         current_atr = atr_series.iat[-1] if len(atr_series) >= self.cfg.atr_period else np.nan
