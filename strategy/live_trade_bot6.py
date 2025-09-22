@@ -455,7 +455,7 @@ class ImprovedLiveDualEntryBot:
             while True:
                 try:
                     msg = await ticker_stream.recv()
-                    last_price = float(msg['c'])  # 'c' = last price
+                    last_price = msg  # 'c' = last price
                     print(f"[MINI-TICKER] {last_price}")
                     await self._emergency_exit_check(last_price)
                 except Exception as e:
