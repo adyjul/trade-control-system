@@ -384,7 +384,7 @@ class ImprovedLiveDualEntryBot:
 
         # LONG position
         if side == "LONG":
-            print('persiapan close long')
+            print('persiapan close long price {price} tp {tp} sl {sl}')
             if price <= sl:
                 print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
@@ -400,7 +400,8 @@ class ImprovedLiveDualEntryBot:
 
         # SHORT position
         elif side == "SHORT":
-            print('persiapan close short')
+            print('persiapan close short price {price} tp {tp} sl {sl}')
+            
             if price >= sl:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
