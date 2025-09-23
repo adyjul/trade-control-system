@@ -734,6 +734,7 @@ class ImprovedLiveDualEntryBot:
        
         # print('[DEBUG] pos[side]:', pos['side'])
         if elapsed_sec >= self.cfg.min_hold_sec:
+            print('elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}')
             if pos['side'] == 'LONG':
                 if latest_candle['high'] >= pos['tp_price']:
                     exit_price = pos['tp_price']
