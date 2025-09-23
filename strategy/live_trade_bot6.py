@@ -157,6 +157,7 @@ class ImprovedLiveDualEntryBot:
                         orderId=order['order_id']
                     )
                     self.pending_orders.remove(order)
+                    # self.watches = [w for w in self.watches if w.get('order_id') != order['order_id']]
                     print(f"[ORDER CANCELED] Timeout - {order['order_id']}")
                 except Exception as e:
                     print(f"[ERROR] canceling timed out order: {e}")
@@ -617,6 +618,7 @@ class ImprovedLiveDualEntryBot:
             }
             
             self.pending_orders.append(order_data)
+            # self.watch['order_id'] = order['orderId']
             print(f"[LIMIT ORDER PLACED] {side} {qty} @ {order_price:.3f} (orderId: {order['orderId']})")
             
         except Exception as e:
