@@ -401,7 +401,6 @@ class ImprovedLiveDualEntryBot:
         # SHORT position
         elif side == "SHORT":
             print(f"persiapan close short price {price} tp {tp} sl {sl}")
-            
             if price >= sl:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
