@@ -144,7 +144,7 @@ class ImprovedLiveDualEntryBot:
         self.volatility_ratio = 0.0
         self.pending_orders: List[Dict] = []  # Sudah ada
         self.active_orders: List[Dict] = []   # Order yang sudah aktif tapi belum ditutup
-        self.order_timeout = 300  # 5 menit timeout untuk pending orders
+        self.order_timeout = 600  # 5 menit timeout untuk pending orders
     
     async def check_order_timeouts(self):
         """Cancel orders that have been pending too long"""
