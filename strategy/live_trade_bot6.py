@@ -384,6 +384,7 @@ class ImprovedLiveDualEntryBot:
 
         # LONG position
         if side == "LONG":
+            print('persiapan close long')
             if price <= sl:
                 print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
@@ -399,6 +400,7 @@ class ImprovedLiveDualEntryBot:
 
         # SHORT position
         elif side == "SHORT":
+            print('persiapan close short')
             if price >= sl:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
@@ -812,6 +814,8 @@ class ImprovedLiveDualEntryBot:
                 
             except Exception as e:
                 print("[ERROR] closing position:", e)
+                self._current_position = None
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
 
 # ---------------- Run ----------------
 if __name__ == "__main__":
