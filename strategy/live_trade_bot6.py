@@ -506,8 +506,9 @@ class ImprovedLiveDualEntryBot:
 
         new_watches = []
         for w in self.watches:
-            print(f"start_idx: {w['start_idx']}, expire_idx: {w['expire_idx']}")
-            if latest_idx <= w['start_idx']:
+
+            # print(f"start_idx: {w['start_idx']}, expire_idx: {w['expire_idx']}")
+            if latest_idx < w['start_idx']:
                 new_watches.append(w)
                 continue
 
