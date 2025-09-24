@@ -38,7 +38,7 @@ def clamp_tp_sl(entry_price: float, tp_price: float, sl_price: float,
 
 
 # contoh pemakaian
-entry = 34,209
+entry = 34.209
 
 
 
