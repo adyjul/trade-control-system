@@ -760,29 +760,29 @@ class ImprovedLiveDualEntryBot:
             )
             print(f"Profit% (Binance style): {calc_profit_percent*100:.2f}%")
 
-            if pos['side'] == 'LONG':
-                if latest_candle['high'] >= pos['tp_price']:
-                    exit_price = pos['tp_price']
-                    exit_reason = 'TP'
-                elif latest_candle['low'] <= pos['sl_price']:
-                    exit_price = pos['sl_price']
-                    exit_reason = 'SL'
-                elif calc_profit_percent >= self.cfg.profit_pct_close_tp:
-                    exit_price = latest_candle['close']
-                    exit_reason = f"Profit {calc_profit_percent*100:.2f}%"
-                print('exit dari candle')
+            if calc_profit_percent >= 0.04:  # +4% atau lebih
+                exit_price = latest_candle['close']
+                exit_reason = f"Quick TP {calc_profit_percent*100:.2f}%"
+            elif calc_profit_percent <= -0.04:  # -4% atau lebih rugi
+                exit_price = latest_candle['close']
+                exit_reason = f"Quick SL {calc_profit_percent*100:.2f}%"
 
-            else: 
-                if latest_candle['low'] <= pos['tp_price']:
-                    exit_price = pos['tp_price']
-                    exit_reason = 'TP'
-                elif latest_candle['high'] >= pos['sl_price']:
-                    exit_price = pos['sl_price']
-                    exit_reason = 'SL'
-                elif calc_profit_percent >= self.cfg.profit_pct_close_tp:
-                    exit_price = latest_candle['close']
-                    exit_reason = f"Profit {calc_profit_percent*100:.2f}%"
-                print('exit dari candle')
+            # Kalau gak kena quick exit, baru cek TP/SL candle-based
+            if exit_price is None:
+                if pos['side'] == 'LONG':
+                    if latest_candle['high'] >= pos['tp_price']:
+                        exit_price = pos['tp_price']
+                        exit_reason = 'TP'
+                    elif latest_candle['low'] <= pos['sl_price']:
+                        exit_price = pos['sl_price']
+                        exit_reason = 'SL'
+                else:
+                    if latest_candle['low'] <= pos['tp_price']:
+                        exit_price = pos['tp_price']
+                        exit_reason = 'TP'
+                    elif latest_candle['high'] >= pos['sl_price']:
+                        exit_price = pos['sl_price']
+                        exit_reason = 'SL'
 
         if exit_price is not None:
             try:
