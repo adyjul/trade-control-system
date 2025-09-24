@@ -12,7 +12,7 @@ def clamp_tp_sl(entry_price: float, tp_price: float, sl_price: float,
         # hitung % perubahan
         tp_percent = (tp_price - entry_price) / entry_price
         sl_percent = (entry_price - sl_price) / entry_price
-        print(tp_percent, sl_percent)
+        print(f"tp_percent: {tp_percent:.2%}, sl_percent: {sl_percent:.2%}")
         # clamp
         tp_percent = max(tp_min, min(tp_percent, tp_max))
         sl_percent = max(sl_min, min(sl_percent, sl_max))
@@ -46,6 +46,6 @@ print(f"LONG → TP: {tp}, SL: {sl}")
 # hasil → TP: 108.0, SL: 90.0
 
 # SHORT contoh (raw 18% tp, 20% sl)
-tp, sl = clamp_tp_sl(entry, 82, 120, side="SHORT")
-print(f"SHORT → TP: {tp}, SL: {sl}")
+# tp, sl = clamp_tp_sl(entry, 82, 120, side="SHORT")
+# print(f"SHORT → TP: {tp}, SL: {sl}")
 # hasil → TP: 92.0, SL: 110.0
