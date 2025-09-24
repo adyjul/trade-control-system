@@ -16,9 +16,8 @@ def calc_profit_percent(entry_price: float, side: str, latest_price: float) -> f
     
     return raw * 10
 
-entry = 34.209
-
+entry = 34.664
 
 # Long contoh
-print(calc_profit_percent(entry, "SHORT", 34.104))   # +0.05 (5%)
-print(calc_profit_percent(entry, "SHORT",  34.324))   # -0.05 (-5%)
+print(calc_profit_percent(entry, "LONG", 35.15))   # +0.05 (5%)
+print(calc_profit_percent(entry, "LONG",  34.072))   # -0.05 (-5%)
