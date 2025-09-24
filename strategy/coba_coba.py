@@ -20,5 +20,5 @@ entry = 34.209
 
 
 # Long contoh
-print(calc_profit_percent(entry, "LONG", 34.104))   # +0.05 (5%)
-print(calc_profit_percent(entry, "LONG",  34.324))   # -0.05 (-5%)
+print(calc_profit_percent(entry, "SHORT", 34.104))   # +0.05 (5%)
+print(calc_profit_percent(entry, "SHORT",  34.324))   # -0.05 (-5%)
