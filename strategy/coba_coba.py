@@ -38,10 +38,11 @@ def clamp_tp_sl(entry_price: float, tp_price: float, sl_price: float,
 
 
 # contoh pemakaian
-entry = 34.844
+entry = 34.664
+
 
 # LONG contoh (raw 18% tp, 20% sl)
-tp, sl = clamp_tp_sl(entry, 34.302, 33.045, side="LONG")
+tp, sl = clamp_tp_sl(entry, 35.15, 34.072, side="LONG")
 print(f"LONG → TP: {tp}, SL: {sl}")
 # hasil → TP: 108.0, SL: 90.0
 
