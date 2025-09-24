@@ -15,12 +15,8 @@ def calc_profit_percent(entry_price: float, side: str, latest_price: float) -> f
         raise ValueError("side harus 'LONG' atau 'SHORT'")
     
 
-entry = 100
+entry = 34.209
 
 # Long contoh
-print(calc_profit_percent(entry, "LONG", 105))   # +0.05 (5%)
-print(calc_profit_percent(entry, "LONG",  95))   # -0.05 (-5%)
-
-# Short contoh
-print(calc_profit_percent(entry, "SHORT",  95))  # +0.05 (5%)
-print(calc_profit_percent(entry, "SHORT", 105))  # -0.05 (-5%)
+print(calc_profit_percent(entry, "SHORT", 34.104))   # +0.05 (5%)
+print(calc_profit_percent(entry, "SHORT",  34,324))   # -0.05 (-5%)
