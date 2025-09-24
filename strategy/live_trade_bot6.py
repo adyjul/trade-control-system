@@ -43,6 +43,7 @@ class BotConfig:
     # AVAX-specific precision settings
     qty_precision: int = 1  # 1 decimal for AVAX
     price_precision: int = 3  # 3 decimals for AVAX
+    profit_pct_close_tp: float = 0.05
     
 
 # ---------------- Excel Logger ----------------
@@ -384,7 +385,7 @@ class ImprovedLiveDualEntryBot:
 
         # LONG position
         if side == "LONG":
-            print(f"persiapan close short price {price} tp {tp} sl {sl}")
+
             if price <= sl:
                 print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
                 await self._close_position("LONG", price, reason="EMERGENCY")
@@ -400,7 +401,7 @@ class ImprovedLiveDualEntryBot:
 
         # SHORT position
         elif side == "SHORT":
-            print(f"persiapan close short price {price} tp {tp} sl {sl}")
+
             if price >= sl:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
                 await self._close_position("SHORT", price, reason="EMERGENCY")
@@ -464,6 +465,23 @@ class ImprovedLiveDualEntryBot:
                     print("[ERROR] main loop:", e)
                     await asyncio.sleep(1)
 
+    def calc_profit_percent(self,entry_price: float, side: str, latest_price: float,leverage = 1) -> float:
+        """
+        Hitung profit % posisi berdasarkan entry dan harga terakhir.
+        - entry_price: harga entry posisi
+        - side: "LONG" atau "SHORT"
+        - latest_price: harga terakhir (close / bid / ask sesuai kebutuhan)
+
+        Return: profit dalam bentuk desimal (contoh 0.05 = +5%, -0.03 = -3%)
+        """
+        if side.upper() == "LONG":
+            raw =  (latest_price - entry_price) / entry_price
+        elif side.upper() == "SHORT":
+            raw = (entry_price - latest_price) / entry_price
+        else:
+            raise ValueError("side harus 'LONG' atau 'SHORT'")
+        
+        return raw * leverage
 
     def _append_candle(self, ts, o, h, l, c, v):
         row = pd.DataFrame([[o, h, l, c, v]], index=[ts], columns=['open', 'high', 'low', 'close', 'volume'])
@@ -734,7 +752,14 @@ class ImprovedLiveDualEntryBot:
         # print('[DEBUG] pos[side]:', pos['side'])
         print(f"elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}")
         if elapsed_sec >= self.cfg.min_hold_sec:
-            print('aku masuk sini')
+            calc_profit_percent = self.calc_profit_percent(
+                pos['entry_price'],
+                pos['side'],
+                latest_candle['close'],
+                self.cfg.leverage
+            )
+            print(f"Profit% (Binance style): {calc_profit_percent*100:.2f}%")
+
             if pos['side'] == 'LONG':
                 if latest_candle['high'] >= pos['tp_price']:
                     exit_price = pos['tp_price']
@@ -742,14 +767,21 @@ class ImprovedLiveDualEntryBot:
                 elif latest_candle['low'] <= pos['sl_price']:
                     exit_price = pos['sl_price']
                     exit_reason = 'SL'
+                elif calc_profit_percent >= self.cfg.profit_pct_close_tp:
+                    exit_price = latest_candle['close']
+                    exit_reason = f"Profit {calc_profit_percent*100:.2f}%"
                 print('exit dari candle')
-            else:
+
+            else: 
                 if latest_candle['low'] <= pos['tp_price']:
                     exit_price = pos['tp_price']
                     exit_reason = 'TP'
                 elif latest_candle['high'] >= pos['sl_price']:
                     exit_price = pos['sl_price']
                     exit_reason = 'SL'
+                elif calc_profit_percent >= self.cfg.profit_pct_close_tp:
+                    exit_price = latest_candle['close']
+                    exit_reason = f"Profit {calc_profit_percent*100:.2f}%"
                 print('exit dari candle')
 
         if exit_price is not None:
