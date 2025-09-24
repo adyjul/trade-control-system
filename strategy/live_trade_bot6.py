@@ -31,7 +31,7 @@ class BotConfig:
     sl_atr_mult: float = 1.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
-    min_hold_sec: int = 900
+    min_hold_sec: int = 600
     logfile: str = "trades_log.xlsx"
     risk_pct: float = 0.008
     margin_type: str = "ISOLATED"
@@ -732,7 +732,7 @@ class ImprovedLiveDualEntryBot:
         exit_price = None
        
         # print('[DEBUG] pos[side]:', pos['side'])
-        print('elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}')
+        print(f"elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}")
         if elapsed_sec >= self.cfg.min_hold_sec:
             print('aku masuk sini')
             if pos['side'] == 'LONG':
