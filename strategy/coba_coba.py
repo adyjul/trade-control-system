@@ -8,12 +8,13 @@ def calc_profit_percent(entry_price: float, side: str, latest_price: float) -> f
     Return: profit dalam bentuk desimal (contoh 0.05 = +5%, -0.03 = -3%)
     """
     if side.upper() == "LONG":
-        return (latest_price - entry_price) / entry_price
+        raw =  (latest_price - entry_price) / entry_price
     elif side.upper() == "SHORT":
-        return (entry_price - latest_price) / entry_price
+        raw = (entry_price - latest_price) / entry_price
     else:
         raise ValueError("side harus 'LONG' atau 'SHORT'")
     
+    return raw * 10
 
 entry = 34.664
 
