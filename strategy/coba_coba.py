@@ -24,7 +24,7 @@ def clamp_tp_sl(entry_price: float, tp_price: float, sl_price: float,
     elif side.upper() == "SHORT":
         tp_percent = (entry_price - tp_price) / entry_price
         sl_percent = (sl_price - entry_price) / entry_price
-
+        print(f"tp_percent: {tp_percent:.2%}, sl_percent: {sl_percent:.2%}")
         tp_percent = max(tp_min, min(tp_percent, tp_max))
         sl_percent = max(sl_min, min(sl_percent, sl_max))
 
