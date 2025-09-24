@@ -12,7 +12,7 @@ def clamp_tp_sl(entry_price: float, tp_price: float, sl_price: float,
         # hitung % perubahan
         tp_percent = (tp_price - entry_price) / entry_price
         sl_percent = (entry_price - sl_price) / entry_price
-
+        print(tp_percent, sl_percent)
         # clamp
         tp_percent = max(tp_min, min(tp_percent, tp_max))
         sl_percent = max(sl_min, min(sl_percent, sl_max))
