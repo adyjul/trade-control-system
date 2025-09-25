@@ -276,6 +276,15 @@ class ImprovedLiveDualEntryBot:
                         'entry_time': datetime.now(timezone.utc),
                         'status': 'FILLED'
                     }
+                    
+                    try:
+                        open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
+                        for o in open_orders:
+                            if o["orderId"] != order_status["orderId"]:  # jangan cancel order yg barusan filled
+                                await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
+                                print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")
+                    except Exception as e:
+                        print("[ERROR] Cancel open orders failed:", e)
 
                 elif order_status['status'] == 'CANCELED' or order_status['status'] == 'EXPIRED':
                     # Order canceled or expired, remove from pending
@@ -750,7 +759,7 @@ class ImprovedLiveDualEntryBot:
         exit_price = None
        
         # print('[DEBUG] pos[side]:', pos['side'])
-        print(f"elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}")
+        # print(f"elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}")
         if elapsed_sec >= self.cfg.min_hold_sec:
             calc_profit_percent = self.calc_profit_percent(
                 pos['entry_price'],
@@ -760,10 +769,10 @@ class ImprovedLiveDualEntryBot:
             )
             print(f"Profit% (Binance style): {calc_profit_percent*100:.2f}%")
 
-            if calc_profit_percent >= 0.04:  # +4% atau lebih
+            if calc_profit_percent >= 0.038:  # +4% atau lebih
                 exit_price = latest_candle['close']
                 exit_reason = f"Quick TP {calc_profit_percent*100:.2f}%"
-            elif calc_profit_percent <= -0.04:  # -4% atau lebih rugi
+            elif calc_profit_percent <= -0.038:  # -4% atau lebih rugi
                 exit_price = latest_candle['close']
                 exit_reason = f"Quick SL {calc_profit_percent*100:.2f}%"
 
