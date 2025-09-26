@@ -537,10 +537,10 @@ class ImprovedLiveDualEntryBot:
         print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.3f} short={watch['short_level']:.3f} vol_mult={volatility_mult:.2f}")
 
     async def _process_watches(self):
-        print("[INFO] Masuk Processing watches...")
+
         if self._current_position is not None:
             return
-        print("[INFO] Mulai Processing watches...")
+
         latest_idx = len(self.candles) - 1
         candle_high = self.candles['high'].iat[-1]
         candle_low = self.candles['low'].iat[-1]
@@ -567,7 +567,6 @@ class ImprovedLiveDualEntryBot:
                 long_condition = candle_high >= w['long_level']
                 short_condition = candle_low <= w['short_level']
 
-            print(f"long_condition: {long_condition}, short_condition: {short_condition}")
 
             if long_condition:
                 triggered = True
@@ -627,7 +626,7 @@ class ImprovedLiveDualEntryBot:
                 'vol_mult': vol_mult,
                 'qty': qty
             })
-        
+            await asyncio.sleep(0.2)
         try:
             # Place the order
             order = await self.client.futures_create_order(
