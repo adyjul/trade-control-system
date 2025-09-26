@@ -44,7 +44,8 @@ class BotConfig:
     qty_precision: int = 1  # 1 decimal for AVAX
     price_precision: int = 3  # 3 decimals for AVAX
     profit_pct_close_tp: float = 0.05
-    
+    max_hold_guard_sec = 600        # 10 menit
+    guard_profit_trigger = 0.04 
 
 # ---------------- Excel Logger ----------------
 def init_excel(path: str):
@@ -391,6 +392,17 @@ class ImprovedLiveDualEntryBot:
         entry_price = pos['entry_price']
         tp = pos['tp_price']
         sl = pos['sl_price']
+        entry_time = pos['entry_time']
+
+        elapsed_sec = (self.candles.index[-1].to_pydatetime() - entry_time).total_seconds()
+        profit_pct = self.calc_profit_percent(entry_price, side, price, leverage=self.cfg.leverage)
+
+        if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
+            print(f"[GUARD EXIT] {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
 
         # LONG position
         if side == "LONG":
