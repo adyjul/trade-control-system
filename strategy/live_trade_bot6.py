@@ -27,7 +27,7 @@ class BotConfig:
     min_atr: float = 0.0005
     atr_period: int = 14
     level_mult: float = 0.15
-    tp_atr_mult: float = 0.8
+    tp_atr_mult: float = 0.9
     sl_atr_mult: float = 1.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
