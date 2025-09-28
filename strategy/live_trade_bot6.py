@@ -618,6 +618,31 @@ class ImprovedLiveDualEntryBot:
         risk_percentage = (risk_per_trade / self.balance) * 100
         print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
 
+        for po in list(self.pending_orders):
+            if po['side'] == side:
+                try:
+                    # Ambil detail order dari exchange untuk cek filled quantity
+                    order_info = await self.client.futures_get_order(
+                        symbol=self.cfg.pair,
+                        orderId=po['order_id']
+                    )
+                    filled = float(order_info.get("executedQty", 0))
+
+                    if filled == 0:
+                        # Aman untuk cancel
+                        await self.client.futures_cancel_order(
+                            symbol=self.cfg.pair,
+                            orderId=po['order_id']
+                        )
+                        print(f"[REPLACE] Cancel order lama {side} @ {po['order_price']}")
+                        self.pending_orders.remove(po)
+                    else:
+                        # Sudah terisi sebagian → jangan di-cancel
+                        print(f"[SKIP] Order lama {side} @ {po['order_price']} "
+                            f"sudah terisi sebagian ({filled} filled). Tidak di-cancel.")
+                except Exception as e:
+                    print(f"[WARN] Gagal cek/cancel order {po['order_id']}: {e}")
+
         if len(self.pending_orders) >= 2:  # Maximum 2 pending orders
             await self.manage_order_conflicts({
                 'side': side,
@@ -704,6 +729,7 @@ class ImprovedLiveDualEntryBot:
         risk_per_trade = abs(entry_price - sl_price) * qty
         risk_percentage = (risk_per_trade / self.balance) * 100
         print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
+        
 
         try:
             if side == 'LONG':
