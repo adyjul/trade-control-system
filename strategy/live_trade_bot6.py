@@ -40,12 +40,27 @@ class BotConfig:
     slippage_pct: float = 0.001
     require_confirmation: bool = True
     adaptive_tp_sl: bool = True
+
     # AVAX-specific precision settings
     qty_precision: int = 1  # 1 decimal for AVAX
     price_precision: int = 3  # 3 decimals for AVAX
     profit_pct_close_tp: float = 0.05
+
+    # Guard settings tp 1
     max_hold_guard_sec = 600        # 10 menit
     guard_profit_trigger = 0.04 
+
+    # Guard settings tp 2
+    max_hold_guard_sec2 = 1200        # 20 menit
+    guard_profit_trigger2 = 0.02 
+
+    # Guard settings tp 3
+    max_hold_guard_sec3 = 1800        # 30 menit
+    guard_profit_trigger3 = 0.01
+
+    # Guard settings sl
+    max_hold_guard_sl_sec = 1800     # 30 menit
+    guard_loss_trigger = -0.04
 
 # ---------------- Excel Logger ----------------
 def init_excel(path: str):
@@ -398,10 +413,35 @@ class ImprovedLiveDualEntryBot:
 
         elapsed_sec = (self.candles.index[-1].to_pydatetime() - entry_time).total_seconds()
         profit_pct = self.calc_profit_percent(entry_price, side, price, leverage=self.cfg.leverage)
-
+        
+        # exit tp 10 menit
         if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
-            print(f"[GUARD EXIT] {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
             await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+
+        # exit tp 20 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sec2 and profit_pct >= self.cfg.guard_profit_trigger2:
+            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+        
+        # exit tp 30 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sec3 and profit_pct >= self.cfg.guard_profit_trigger3:
+            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+
+        # exit sl 30 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sl_sec and profit_pct <= self.cfg.guard_loss_trigger:
+            print(f"[GUARD EXIT] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_STOP_LOST")
             self._current_position = None
             self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
             return
