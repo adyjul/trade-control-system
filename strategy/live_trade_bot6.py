@@ -451,13 +451,13 @@ class ImprovedLiveDualEntryBot:
 
             if price <= sl:
                 print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
-                await self._close_position("LONG", price, reason="EMERGENCY")
+                await self._close_position("LONG", price, reason="EMERGENCY SL")
                 self._current_position = None
                 # self.watches.clear()
                 self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
             elif price >= tp:
                 print(f"[EMERGENCY EXIT] LONG TP hit @ {price}")
-                await self._close_position("LONG", price, reason="EMERGENCY")
+                await self._close_position("LONG", price, reason="EMERGENCY TP")
                 self._current_position = None
                 # self.watches.clear()
                 self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
@@ -467,13 +467,13 @@ class ImprovedLiveDualEntryBot:
 
             if price >= sl:
                 print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
-                await self._close_position("SHORT", price, reason="EMERGENCY")
+                await self._close_position("SHORT", price, reason="EMERGENCY SL")
                 self._current_position = None
                 # self.watches.clear()
                 self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
             elif price <= tp:
                 print(f"[EMERGENCY EXIT] SHORT TP hit @ {price}")
-                await self._close_position("SHORT", price, reason="EMERGENCY")
+                await self._close_position("SHORT", price, reason="EMERGENCY TP")
                 self._current_position = None
                 # self.watches.clear()
                 self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
