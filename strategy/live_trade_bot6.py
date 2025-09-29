@@ -60,7 +60,7 @@ class BotConfig:
 
     # Guard settings sl
     max_hold_guard_sl_sec = 1800     # 30 menit
-    guard_loss_trigger = -0.04
+    guard_loss_trigger = -0.03
 
 # ---------------- Excel Logger ----------------
 def init_excel(path: str):
