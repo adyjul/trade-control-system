@@ -56,7 +56,7 @@ class BotConfig:
 
     # Guard settings tp 3
     max_hold_guard_sec3 = 1800        # 30 menit
-    guard_profit_trigger3 = 0.03
+    guard_profit_trigger3 = 0.02
 
     # Guard settings sl
     max_hold_guard_sl_sec = 1800     # 30 menit
