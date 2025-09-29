@@ -162,6 +162,7 @@ class ImprovedLiveDualEntryBot:
         self.pending_orders: List[Dict] = []  # Sudah ada
         self.active_orders: List[Dict] = []   # Order yang sudah aktif tapi belum ditutup
         self.order_timeout = 600  # 5 menit timeout untuk pending orders
+        self._current_signal_side = None
     
     async def check_order_timeouts(self):
         """Cancel orders that have been pending too long"""
@@ -398,6 +399,27 @@ class ImprovedLiveDualEntryBot:
         except Exception as e:
             print("[ERROR] closing position:", e)
 
+    async def _cancel_misaligned_orders(self):
+        """
+        Membatalkan limit order yang arah-nya sudah tidak sama dengan sinyal aktif terakhir.
+        """
+        if self._current_signal_side is None:
+            return
+
+        try:
+            open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
+            for od in open_orders:
+                side = od.get('side')  # 'BUY' atau 'SELL'
+                order_side = 'LONG' if side == 'BUY' else 'SHORT'
+
+                if order_side != self._current_signal_side:
+                    await self.client.futures_cancel_order(
+                        symbol=self.cfg.pair,
+                        orderId=od['orderId']
+                    )
+                    print(f"[CANCEL] {order_side} limit dibatalkan karena sinyal berubah → {self._current_signal_side}")
+        except Exception as e:
+            print(f"[ERROR] gagal cancel misaligned orders: {e}")
     
     async def _emergency_exit_check(self, price: float):
 
@@ -520,6 +542,7 @@ class ImprovedLiveDualEntryBot:
 
                         await self._process_watches()
                         await self._process_current_position()
+                        await self._cancel_misaligned_orders()
                         await self._check_pending_orders()
                         await self.check_order_status()
                         await self.check_order_timeouts()
@@ -601,6 +624,7 @@ class ImprovedLiveDualEntryBot:
             entry_price = None
             tp_price = None
             sl_price = None
+            self._current_signal_side = None
 
             if self.cfg.require_confirmation:
                 long_condition = candle_close >= w['long_level']
@@ -613,6 +637,7 @@ class ImprovedLiveDualEntryBot:
             if long_condition:
                 triggered = True
                 side = 'LONG'
+                self._current_signal_side = 'LONG'
                 entry_price = w['long_level']
                 tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
                 sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
@@ -621,6 +646,7 @@ class ImprovedLiveDualEntryBot:
             elif short_condition:
                 triggered = True
                 side = 'SHORT'
+                self._current_signal_side = 'SHORT'
                 entry_price = w['short_level']
                 tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
                 sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
