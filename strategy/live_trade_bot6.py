@@ -294,13 +294,13 @@ class ImprovedLiveDualEntryBot:
                     }
                     
                     try:
-                        await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
-                        print("[CANCEL] Semua pending order limit/stop dibatalkan.")
-                        # open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
-                        # for o in open_orders:
-                        #     if o["orderId"] != order_status["orderId"]:  # jangan cancel order yg barusan filled
-                        #         await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
-                        #         print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")
+                        # await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
+                        # print("[CANCEL] Semua pending order limit/stop dibatalkan.")
+                        open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
+                        for o in open_orders:
+                            if o["orderId"] != order_status["orderId"]:  # jangan cancel order yg barusan filled
+                                await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
+                                print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")
                     except Exception as e:
                         print("[ERROR] Cancel open orders failed:", e)
 
