@@ -268,8 +268,8 @@ class ImprovedLiveDualEntryBot:
                 (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
             )
 
-            # print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
-                # f"(Equity: {current_equity:.2f} USDT)")
+            print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
+                f"(Equity: {current_equity:.2f} USDT)")
         else:
             print("[WARN] USDT balance tidak ditemukan")
     async def _force_close_all(self):
