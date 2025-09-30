@@ -407,6 +407,7 @@ class ImprovedLiveDualEntryBot:
             return
 
         try:
+            print('masuk cancel limit')
             open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
             for od in open_orders:
                 side = od.get('side')  # 'BUY' atau 'SELL'
