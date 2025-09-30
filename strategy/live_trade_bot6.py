@@ -452,7 +452,7 @@ class ImprovedLiveDualEntryBot:
         """
         Membatalkan limit order yang arah-nya sudah tidak sama dengan sinyal aktif terakhir.
         """
-        print('masuk cancel misaligned orders')
+        # print('masuk cancel misaligned orders')
         if self._current_signal_side is None:
             return
 
