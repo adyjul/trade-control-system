@@ -553,14 +553,22 @@ class ImprovedLiveDualEntryBot:
     
     async def _check_daily_reset(self):
         now = datetime.now().hour
-    
+        print(now)
         if now == self.cfg.daily_reset_hour and self.trade_locked:
             print('hai cek daily reset')
+
             info = await self.client.futures_account_balance()
-            self.daily_start_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
-            self.daily_realized_pct = 0
-            self.trade_locked = False
-            print("[RESET] Daily profit lock reset for new trading day.")
+            # ambil balance USDT
+            usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
+
+            if usdt_row:
+                self.daily_start_equity = float(usdt_row['balance'])
+                self.daily_realized_pct = 0
+                self.trade_locked = False
+                print(f"[RESET] Daily profit lock reset for new trading day. "
+                    f"Start equity = {self.daily_start_equity:.2f} USDT")
+            else:
+                print("[WARN] USDT balance tidak ditemukan saat reset!")
 
                 
     async def start(self):
