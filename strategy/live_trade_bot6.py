@@ -553,22 +553,23 @@ class ImprovedLiveDualEntryBot:
     
     async def _check_daily_reset(self):
         now = datetime.now().hour
-        print(self.cfg.daily_reset_hour)
-        if now == self.cfg.daily_reset_hour and self.trade_locked:
-            print('hai cek daily reset')
 
-            info = await self.client.futures_account_balance()
-            # ambil balance USDT
-            usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
+        if now == self.cfg.daily_reset_hour:         # selalu cek jam reset
+            # Hindari reset berulang di jam yang sama
+            if getattr(self, "_last_reset_day", None) != datetime.now().day:
+                info = await self.client.futures_account_balance()
+                usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
 
-            if usdt_row:
-                self.daily_start_equity = float(usdt_row['balance'])
-                self.daily_realized_pct = 0
-                self.trade_locked = False
-                print(f"[RESET] Daily profit lock reset for new trading day. "
-                    f"Start equity = {self.daily_start_equity:.2f} USDT")
-            else:
-                print("[WARN] USDT balance tidak ditemukan saat reset!")
+                if usdt_row:
+                    self.daily_start_equity = float(usdt_row['balance'])
+                    self.daily_realized_pct = 0
+                    self.trade_locked = False         # buka kunci untuk hari baru
+                    self._last_reset_day = datetime.now().day
+
+                    print(f"[RESET] Daily profit lock reset for new trading day. "
+                        f"Start equity = {self.daily_start_equity:.2f} USDT")
+                else:
+                    print("[WARN] USDT balance tidak ditemukan saat reset!")
 
                 
     async def start(self):
