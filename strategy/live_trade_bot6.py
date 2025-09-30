@@ -251,43 +251,27 @@ class ImprovedLiveDualEntryBot:
             except Exception as e:
                 print(f"[ERROR] canceling order: {e}")
 
-    async def get_realized_pnl_today(self):
-
-        today_local_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_utc_ms = int(today_local_midnight.astimezone(timezone.utc).timestamp() * 1000)
-
-        params = {
-            "incomeType": "REALIZED_PNL",
-            "startTime": today_utc_ms
-        }
-
-        # Panggil endpoint futures income
-        data = await self.client._request_futures_api('get', 'income', data=params)
-        # beberapa library juga punya nama: futures_income_history / futures_get_income
-        return data
-
     async def _update_daily_profit(self):
-        try:
-            income = await self.get_realized_pnl_today()
-            realized_today = sum(float(x['income']) for x in income)
+        info = await self.client.futures_account_balance()
+        
+        # cari row untuk USDT
+        usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
 
+        if usdt_row:
+            current_equity = float(usdt_row['availableBalance'])
+
+            # Jika belum di-set, anggap equity awal = equity sekarang
             if self.daily_start_equity is None:
-                bal = await self.client.futures_account_balance()
-                usdt_row = next((x for x in bal if x['asset'] == 'USDT'), None)
-                if usdt_row:
-                    self.daily_start_equity = float(usdt_row['availableBalance'])
+                self.daily_start_equity = current_equity
 
-            if self.daily_start_equity:
-                self.daily_realized_pct = realized_today / self.daily_start_equity * 100
-            else:
-                self.daily_realized_pct = 0
+            self.daily_realized_pct = (
+                (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
+            )
 
-            print(f"[INFO] Profit harian (closed PnL): {self.daily_realized_pct:.2f}% "
-                f"(PnL hari ini: {realized_today:.4f} USDT)")
-
-        except Exception as e:
-            print("[ERROR] update_daily_profit:", e)
-
+            print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
+                f"(Equity: {current_equity:.2f} USDT)")
+        else:
+            print("[WARN] USDT balance tidak ditemukan")
     async def _force_close_all(self):
         print("[LOCK] Closing all open positions...")
         positions = await self.client.futures_position_information()
