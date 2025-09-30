@@ -253,6 +253,7 @@ class ImprovedLiveDualEntryBot:
 
     async def _update_daily_profit(self):
         # ambil balance USDT terkini
+        print('cek update daily')
         info = await self.client.futures_account_balance()
         current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
 
@@ -541,7 +542,9 @@ class ImprovedLiveDualEntryBot:
     
     async def _check_daily_reset(self):
         now = datetime.now().hour
+    
         if now == self.cfg.daily_reset_hour and self.trade_locked:
+            print('hai cek daily reset')
             info = await self.client.futures_account_balance()
             self.daily_start_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
             self.daily_realized_pct = 0
