@@ -255,11 +255,12 @@ class ImprovedLiveDualEntryBot:
         # ambil balance USDT terkini
         print('cek update daily')
         info = await self.client.futures_account_balance()
-        current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
+        print(info)
+        # current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
 
-        self.daily_realized_pct = (
-            (current_equity - self.daily_start_equity) / self.daily_start_equity
-        ) * 100
+        # self.daily_realized_pct = (
+        #     (current_equity - self.daily_start_equity) / self.daily_start_equity
+        # ) * 100
 
     async def _force_close_all(self):
         print("[LOCK] Closing all open positions...")
