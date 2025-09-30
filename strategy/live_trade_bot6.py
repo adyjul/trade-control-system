@@ -625,7 +625,7 @@ class ImprovedLiveDualEntryBot:
             entry_price = None
             tp_price = None
             sl_price = None
-            self._current_signal_side = None
+            
 
             if self.cfg.require_confirmation:
                 long_condition = candle_close >= w['long_level']
@@ -661,6 +661,7 @@ class ImprovedLiveDualEntryBot:
                 else:
                     await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
             else:
+                self._current_signal_side = None
                 if latest_idx < w['expire_idx']:
                     new_watches.append(w)
         
