@@ -553,7 +553,7 @@ class ImprovedLiveDualEntryBot:
     
     async def _check_daily_reset(self):
         now = datetime.now().hour
-        print(now)
+        print(self.cfg.daily_reset_hour)
         if now == self.cfg.daily_reset_hour and self.trade_locked:
             print('hai cek daily reset')
 
