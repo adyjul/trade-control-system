@@ -252,23 +252,39 @@ class ImprovedLiveDualEntryBot:
                 print(f"[ERROR] canceling order: {e}")
 
     async def _update_daily_profit(self):
-        info = await self.client.futures_account_balance()
-        btc_row = next((x for x in info if x['asset'] == 'USDT'), None)
+        # Waktu mulai hari (00:00 Waktu lokal/WIB) → convert ke UTC ms untuk Binance
+        today_local_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # pastikan convert ke UTC
+        today_utc_ms = int(today_local_midnight.astimezone(timezone.utc).timestamp() * 1000)
 
-        if btc_row:
-            current_equity = float(btc_row['availableBalance'])
-
-            # Jika belum di-set, anggap equity awal = equity sekarang
-            if self.daily_start_equity is None:
-                self.daily_start_equity = current_equity
-
-            self.daily_realized_pct = (
-                (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
+        try:
+            # Ambil semua REALIZED_PNL hari ini
+            income = await self.client.futures_income(
+                incomeType="REALIZED_PNL",
+                startTime=today_utc_ms
             )
-            print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
-                f"(Equity: {current_equity:.8f} USDT)")
-        else:
-            print("[WARN] BTC balance tidak ditemukan")
+
+            realized_today = sum(float(x['income']) for x in income)
+
+            # daily_start_equity bisa diset ke equity awal hari untuk hitung persentase
+            if self.daily_start_equity is None:
+                # fallback: ambil dari USDT / BTC sesuai aset dasar
+                bal = await self.client.futures_account_balance()
+                usdt_row = next((x for x in bal if x['asset'] == 'USDT'), None)
+                if usdt_row:
+                    self.daily_start_equity = float(usdt_row['availableBalance'])
+
+            # hitung persentase profit dari PnL tertutup
+            if self.daily_start_equity:
+                self.daily_realized_pct = realized_today / self.daily_start_equity * 100
+            else:
+                self.daily_realized_pct = 0
+
+            print(f"[INFO] Profit harian (closed PnL): {self.daily_realized_pct:.2f}% "
+                f"(PnL hari ini: {realized_today:.4f} USDT)")
+
+        except Exception as e:
+            print("[ERROR] update_daily_profit:", e)
 
     async def _force_close_all(self):
         print("[LOCK] Closing all open positions...")
