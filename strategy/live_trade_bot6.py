@@ -251,30 +251,32 @@ class ImprovedLiveDualEntryBot:
             except Exception as e:
                 print(f"[ERROR] canceling order: {e}")
 
-    async def _update_daily_profit(self):
-        # Waktu mulai hari (00:00 Waktu lokal/WIB) → convert ke UTC ms untuk Binance
+    async def get_realized_pnl_today(self):
+
         today_local_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        # pastikan convert ke UTC
         today_utc_ms = int(today_local_midnight.astimezone(timezone.utc).timestamp() * 1000)
 
-        try:
-            # Ambil semua REALIZED_PNL hari ini
-            income = await self.client.futures_income(
-                incomeType="REALIZED_PNL",
-                startTime=today_utc_ms
-            )
+        params = {
+            "incomeType": "REALIZED_PNL",
+            "startTime": today_utc_ms
+        }
 
+        # Panggil endpoint futures income
+        data = await self.client._request_futures_api('get', 'income', data=params)
+        # beberapa library juga punya nama: futures_income_history / futures_get_income
+        return data
+
+    async def _update_daily_profit(self):
+        try:
+            income = await self.get_realized_pnl_today()
             realized_today = sum(float(x['income']) for x in income)
 
-            # daily_start_equity bisa diset ke equity awal hari untuk hitung persentase
             if self.daily_start_equity is None:
-                # fallback: ambil dari USDT / BTC sesuai aset dasar
                 bal = await self.client.futures_account_balance()
                 usdt_row = next((x for x in bal if x['asset'] == 'USDT'), None)
                 if usdt_row:
                     self.daily_start_equity = float(usdt_row['availableBalance'])
 
-            # hitung persentase profit dari PnL tertutup
             if self.daily_start_equity:
                 self.daily_realized_pct = realized_today / self.daily_start_equity * 100
             else:
