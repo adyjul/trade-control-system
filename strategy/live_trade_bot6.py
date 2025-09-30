@@ -62,6 +62,10 @@ class BotConfig:
     max_hold_guard_sl_sec = 1800     # 30 menit
     guard_loss_trigger = -0.03
 
+    daily_profit_lock_pct = 1.0      # misal 1%
+    daily_reset_hour = 0 
+
+
 # ---------------- Excel Logger ----------------
 def init_excel(path: str):
     if not os.path.exists(path):
@@ -81,6 +85,7 @@ def append_trade_excel(path: str, row: List):
     clean_row = [v.replace(tzinfo=None) if isinstance(v, datetime) else v for v in row]
     ws.append(clean_row)
     wb.save(path)
+
 
 # ---------------- Technical helpers ----------------
 def compute_atr_from_df(df: pd.DataFrame, period: int):
@@ -163,6 +168,10 @@ class ImprovedLiveDualEntryBot:
         self.active_orders: List[Dict] = []   # Order yang sudah aktif tapi belum ditutup
         self.order_timeout = 600  # 5 menit timeout untuk pending orders
         self._current_signal_side = None
+        self.daily_start_equity = None
+        self.daily_realized_pct = 0.0
+        self.trade_locked = False
+        
     
     async def check_order_timeouts(self):
         """Cancel orders that have been pending too long"""
@@ -241,6 +250,34 @@ class ImprovedLiveDualEntryBot:
                 print(f"[ORDER CANCELED] Replaced with better order")
             except Exception as e:
                 print(f"[ERROR] canceling order: {e}")
+
+    async def _update_daily_profit(self):
+        # ambil balance USDT terkini
+        info = await self.client.futures_account_balance()
+        current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
+
+        self.daily_realized_pct = (
+            (current_equity - self.daily_start_equity) / self.daily_start_equity
+        ) * 100
+
+    async def _force_close_all(self):
+        print("[LOCK] Closing all open positions...")
+        positions = await self.client.futures_position_information()
+        for pos in positions:
+            qty = float(pos['positionAmt'])
+            symbol = pos['symbol']
+            if qty != 0:
+                side = 'SELL' if qty > 0 else 'BUY'
+                await self.client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type='MARKET',
+                    quantity=abs(qty)
+                )
+                print(f"[FORCE CLOSE] {symbol} {side} {abs(qty)} closed.")
+
+        print("[LOCK] Canceling all pending orders...")
+        await self.client.futures_cancel_all_open_orders()
 
     def calculate_order_quality(self, order: Dict) -> float:
         """Calculate a quality score for order prioritization"""
@@ -501,6 +538,15 @@ class ImprovedLiveDualEntryBot:
                 self._current_position = None
                 # self.watches.clear()
                 self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+    
+    async def _check_daily_reset(self):
+        now = datetime.now().hour
+        if now == self.cfg.daily_reset_hour and self.trade_locked:
+            info = await self.client.futures_account_balance()
+            self.daily_start_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
+            self.daily_realized_pct = 0
+            self.trade_locked = False
+            print("[RESET] Daily profit lock reset for new trading day.")
 
                 
     async def start(self):
@@ -533,6 +579,18 @@ class ImprovedLiveDualEntryBot:
 
                     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
                     last_price = float(k.get('c', 0))
+
+                    await self._check_daily_reset()
+                    await self._update_daily_profit()
+
+                    if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
+                        print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
+                        await self._force_close_all()
+                        self.trade_locked = True
+
+                    if self.trade_locked:
+                        print("[LOCK] Trading locked for the rest of the day.")
+                        return  # skip proses entry
 
                     await self._emergency_exit_check(last_price)
                     if is_closed:
@@ -995,6 +1053,7 @@ if __name__ == "__main__":
     cfg.slippage_pct = 0.001
     cfg.qty_precision = 1
     cfg.price_precision = 3
+
 
     init_excel(cfg.logfile)
     bot = ImprovedLiveDualEntryBot(cfg)
