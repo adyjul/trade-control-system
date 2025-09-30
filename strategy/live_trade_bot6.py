@@ -252,15 +252,18 @@ class ImprovedLiveDualEntryBot:
                 print(f"[ERROR] canceling order: {e}")
 
     async def _update_daily_profit(self):
-        # ambil balance USDT terkini
-        print('cek update daily')
         info = await self.client.futures_account_balance()
-        # current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
-        print(next((x for x in info if x['asset'] == 'BTC'), None))
+        btc_row = next((x for x in info if x['asset'] == 'BTC'), None)
 
-        # self.daily_realized_pct = (
-        #     (current_equity - self.daily_start_equity) / self.daily_start_equity
-        # ) * 100
+        if btc_row:
+            current_equity = float(btc_row['availableBalance'])
+            self.daily_realized_pct = (
+                (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
+            )
+            print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
+                f"(Equity: {current_equity:.8f} BTC)")
+        else:
+            print("[WARN] BTC balance tidak ditemukan")
 
     async def _force_close_all(self):
         print("[LOCK] Closing all open positions...")
