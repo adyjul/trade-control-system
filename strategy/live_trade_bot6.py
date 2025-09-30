@@ -255,8 +255,8 @@ class ImprovedLiveDualEntryBot:
         # ambil balance USDT terkini
         print('cek update daily')
         info = await self.client.futures_account_balance()
-        print(info)
-        # current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
+        current_equity = float([x for x in info if x['asset'] == 'BTCUSDT'][0]['balance'])
+        print(next((x for x in info if x['asset'] == 'BTC'), None))
 
         # self.daily_realized_pct = (
         #     (current_equity - self.daily_start_equity) / self.daily_start_equity
