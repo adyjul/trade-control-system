@@ -257,6 +257,11 @@ class ImprovedLiveDualEntryBot:
 
         if btc_row:
             current_equity = float(btc_row['availableBalance'])
+
+            # Jika belum di-set, anggap equity awal = equity sekarang
+            if self.daily_start_equity is None:
+                self.daily_start_equity = current_equity
+
             self.daily_realized_pct = (
                 (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
             )
