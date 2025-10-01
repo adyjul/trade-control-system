@@ -12,6 +12,7 @@ from openpyxl import Workbook, load_workbook
 from binance import AsyncClient, BinanceSocketManager
 from binance.enums import SIDE_BUY, SIDE_SELL, ORDER_TYPE_MARKET, ORDER_TYPE_LIMIT, TIME_IN_FORCE_GTC
 from dotenv import load_dotenv
+import talib  # pastikan talib sudah terinstall
 load_dotenv()
 
 # ---------------- Config ----------------
@@ -571,6 +572,34 @@ class ImprovedLiveDualEntryBot:
                         f"Start equity = {self.daily_start_equity:.2f} USDT")
                 else:
                     print("[WARN] USDT balance tidak ditemukan saat reset!")
+    
+    def _detect_trend_mode(self):
+        """
+        Deteksi apakah market sedang trending atau sideways
+        return: "trend" atau "sideways"
+        """
+        close = self.candles['close'].values
+        atr = talib.ATR(
+            self.candles['high'].values,
+            self.candles['low'].values,
+            close,
+            timeperiod=14
+        )[-1]
+
+        adx = talib.ADX(
+            self.candles['high'].values,
+            self.candles['low'].values,
+            close,
+            timeperiod=14
+        )[-1]
+
+        # aturan sederhana: trend kalau ADX > 25 dan jarak harga dari MA50 > ATR*1.5
+        ma50 = talib.SMA(close, timeperiod=50)[-1]
+        dist = abs(close[-1] - ma50)
+
+        if adx > 25 and dist > 1.5 * atr:
+            return "trend"
+        return "sideways"
 
                 
     async def start(self):
@@ -617,7 +646,9 @@ class ImprovedLiveDualEntryBot:
                         return  # skip proses entry
 
                     await self._emergency_exit_check(last_price)
+                    
                     if is_closed:
+                       
                         atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
                         current_atr = atr_series.iat[-1] if len(atr_series) >= self.cfg.atr_period else np.nan
 
@@ -695,6 +726,9 @@ class ImprovedLiveDualEntryBot:
         candle_low = self.candles['low'].iat[-1]
         candle_close = self.candles['close'].iat[-1]
 
+        mode = self._detect_trend_mode()
+        print(f"[MODE] Market mode: {mode}")
+
         new_watches = []
         for w in self.watches:
 
@@ -738,11 +772,34 @@ class ImprovedLiveDualEntryBot:
                 sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
 
             if triggered:
-                print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
-                if self.cfg.use_limit_orders:
-                    await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+                # print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
+                # if self.cfg.use_limit_orders:
+                #     await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+                # else:
+                #     await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+
+                if mode == "trend":
+                    # reverse side
+                    side = "LONG" if side == "SHORT" else "SHORT"
+                    print(f"[TREND MODE] Reversed signal → {side}")
+
+                    await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
+                    print("[CANCEL] Semua limit order dibatalkan sebelum market entry.")
+                    
+                    # langsung gunakan market order, abaikan limit
+                    await self._open_market_position(
+                        side, entry_price, tp_price, sl_price,
+                        w['atr'], w['volatility_mult']
+                    )
+
                 else:
-                    await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+                    # mode sideways → tetap seperti biasa
+                    print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
+                    if self.cfg.use_limit_orders:
+                        await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+                    else:
+                        await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+
             else:
                 # self._current_signal_side = None
                 if latest_idx < w['expire_idx']:
