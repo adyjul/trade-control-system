@@ -330,6 +330,7 @@ class ImprovedLiveDualEntryBot:
                     # Order filled, move to active orders
                     print(f"[ORDER FILLED] {order['side']} {order['qty']} @ {order_status['avgPrice']}")
                     self.pending_orders.remove(order)
+                    
                     self.active_orders.append({
                         **order,
                         'entry_price': float(order_status['avgPrice']),
@@ -966,16 +967,19 @@ class ImprovedLiveDualEntryBot:
             avg_price = self._round_price(avg_price)
             print(f"[POSITION OPENED] {side} {exec_qty} @ {avg_price:.3f}")
 
+            self.active_orders.append({
+                        **order,
+                        'entry_price': float(avg_price),
+                        'entry_time': datetime.now(timezone.utc),
+                        'status': 'FILLED'
+                    })
             self._current_position = {
-                "side": side,
-                "entry_price": avg_price,
-                "qty": float(exec_qty),
-                "tp_price": tp_price,
-                "sl_price": sl_price,
-                "entry_time": datetime.now(timezone.utc),
-                "atr": atr_value,
-                "vol_mult": vol_mult
-            }
+                        **order,
+                        "entry_price": avg_price,
+                        "entry_time": datetime.now(timezone.utc),
+                        'status': 'FILLED'
+                    }
+        
         except Exception as e:
             print("[ERROR] open position:", e)
 
