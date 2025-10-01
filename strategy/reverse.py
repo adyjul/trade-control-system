@@ -1,6 +1,6 @@
 import pandas as pd
 
-LOG_FILE = "trade_log.xlsx"   # ganti ke file log kamu
+LOG_FILE = "/root/trade-control-system/trades_log.xlsx"   # ganti ke file log kamu
 
 def load_trades():
     try:
