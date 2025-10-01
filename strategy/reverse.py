@@ -2,11 +2,11 @@
 import pandas as pd
 
 LOG_FILE = "/root/trade-control-system/trades_log.xlsx"  # sesuaikan dengan nama log botmu
-SHEET = "Sheet1"             # atau ganti sesuai sheet log
+# SHEET = "Sheet1"             # atau ganti sesuai sheet log
 
 def load_trades():
     # Baca log trade hasil live_trade_bot6
-    df = pd.read_excel(LOG_FILE, sheet_name=SHEET)
+    df = pd.read_excel(LOG_FILE)
     # Pastikan kolom berikut tersedia: 'side','entry_price','exit_price','qty','pnl','sl','tp','timestamp'
     return df
 
