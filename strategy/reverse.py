@@ -16,10 +16,10 @@ def reverse_backtest(df: pd.DataFrame, fee_rate=0.0004):
     for _, row in df.iterrows():
         original_side = row['side'].lower()
         # Balik arah
-        if original_side == 'long':
-            new_side = 'short'
-        elif original_side == 'short':
-            new_side = 'long'
+        if original_side == 'LONG':
+            new_side = 'SHORT'
+        elif original_side == 'SHORT':
+            new_side = 'LONG'
         else:
             continue
 
@@ -28,7 +28,7 @@ def reverse_backtest(df: pd.DataFrame, fee_rate=0.0004):
         qty = row['qty']
 
         # Hitung PnL seolah-olah dibalik
-        if new_side == 'long':
+        if new_side == 'LONG':
             pnl = (exit_ - entry) * qty
         else:  # short
             pnl = (entry - exit_) * qty
