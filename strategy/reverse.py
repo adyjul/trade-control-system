@@ -1,7 +1,7 @@
 # backtest_reverse.py
 import pandas as pd
 
-LOG_FILE = "/root/trade-control-system/trade_log.xlsx"  # sesuaikan dengan nama log botmu
+LOG_FILE = "/root/trade-control-system/trades_log.xlsx"  # sesuaikan dengan nama log botmu
 SHEET = "Sheet1"             # atau ganti sesuai sheet log
 
 def load_trades():
