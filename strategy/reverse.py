@@ -1,67 +1,71 @@
-# backtest_reverse.py
 import pandas as pd
 
-LOG_FILE = "/root/trade-control-system/trades_log.xlsx"  # sesuaikan dengan nama log botmu
-# SHEET = "Sheet1"             # atau ganti sesuai sheet log
+LOG_FILE = "trade_log.xlsx"   # ganti ke file log kamu
 
 def load_trades():
-    # Baca log trade hasil live_trade_bot6
-    df = pd.read_excel(LOG_FILE)
-    # Pastikan kolom berikut tersedia: 'side','entry_price','exit_price','qty','pnl','sl','tp','timestamp'
+    try:
+        df = pd.read_csv(LOG_FILE)
+    except:
+        df = pd.read_excel(LOG_FILE)
+
+    # ubah koma ke titik supaya bisa dihitung
+    for col in ['entry_price', 'exit_price', 'pnl', 'fees', 'qty']:
+        df[col] = df[col].astype(str).str.replace(',', '.').astype(float)
+
     return df
 
 def reverse_backtest(df: pd.DataFrame, fee_rate=0.0004):
-    reversed_results = []
+    results = []
 
     for _, row in df.iterrows():
-        original_side = row['side'].lower()
-        # Balik arah
-        if original_side == 'LONG':
-            new_side = 'SHORT'
-        elif original_side == 'SHORT':
-            new_side = 'LONG'
-        else:
-            continue
-
+        side = row['side'].upper().strip()
         entry = row['entry_price']
         exit_ = row['exit_price']
         qty = row['qty']
 
-        # Hitung PnL seolah-olah dibalik
-        if new_side == 'LONG':
-            pnl = (exit_ - entry) * qty
-        else:  # short
-            pnl = (entry - exit_) * qty
+        if side == "LONG":
+            new_side = "SHORT"
+            pnl_rev = (entry - exit_) * qty
+        elif side == "SHORT":
+            new_side = "LONG"
+            pnl_rev = (exit_ - entry) * qty
+        else:
+            print("Lewat baris tanpa side:", side)
+            continue
 
-        # Potong biaya (fee entry+exit)
-        pnl -= (entry + exit_) * qty * fee_rate
+        # hitung fee
+        pnl_rev -= (entry + exit_) * qty * fee_rate
 
-        reversed_results.append({
-            'timestamp': row['timestamp'],
-            'original_side': original_side,
-            'reversed_side': new_side,
-            'entry': entry,
-            'exit': exit_,
-            'pnl_reversed': pnl
+        results.append({
+            "entry_time": row['entry_time'],
+            "original_side": side,
+            "reversed_side": new_side,
+            "entry_price": entry,
+            "exit_price": exit_,
+            "pnl_reversed": pnl_rev
         })
 
-    return pd.DataFrame(reversed_results)
+    return pd.DataFrame(results)
 
 def main():
     df = load_trades()
     rev_df = reverse_backtest(df)
+
+    if rev_df.empty:
+        print("❌ Tidak ada trade yang bisa dibalik. Cek kolom 'side' di log.")
+        return
 
     total_pnl = rev_df['pnl_reversed'].sum()
     win_trades = (rev_df['pnl_reversed'] > 0).sum()
     lose_trades = (rev_df['pnl_reversed'] <= 0).sum()
 
     print("=== Hasil Backtest Reverse ===")
-    print(f"Total PnL: {total_pnl:.2f} USDT")
+    print(f"Total PnL: {total_pnl:.4f} USDT")
     print(f"Win trades: {win_trades} | Lose trades: {lose_trades}")
     print(f"Winrate: {win_trades / len(rev_df) * 100:.2f}%")
-    
+
     rev_df.to_excel("reverse_results.xlsx", index=False)
-    print("Hasil lengkap disimpan ke reverse_results.xlsx")
+    print("Hasil lengkap disimpan di reverse_results.xlsx")
 
 if __name__ == "__main__":
     main()
