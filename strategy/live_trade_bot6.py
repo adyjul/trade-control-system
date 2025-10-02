@@ -656,7 +656,7 @@ class ImprovedLiveDualEntryBot:
                         if not np.isnan(current_atr) and current_atr >= self.cfg.min_atr:
                             self._create_watch(current_atr)
 
-                        await self._process_watches()
+                        await self._process_watches(True)
                         await self._process_current_position()
                         await self._cancel_misaligned_orders()
                         await self._check_pending_orders()
@@ -717,7 +717,7 @@ class ImprovedLiveDualEntryBot:
         self.watches.append(watch)
         print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.3f} short={watch['short_level']:.3f} vol_mult={volatility_mult:.2f}")
 
-    async def _process_watches(self):
+    async def _process_watches(self,reverse=False):
 
         if self._current_position is not None:
             return
@@ -796,6 +796,15 @@ class ImprovedLiveDualEntryBot:
                 else:
                     # mode sideways → tetap seperti biasa
                     print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
+
+                    if reverse :
+                        if side == "LONG":
+                            tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
+                            sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
+                        else: 
+                            tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
+                            sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
+
                     if self.cfg.use_limit_orders:
                         await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'],True)
                     else:
