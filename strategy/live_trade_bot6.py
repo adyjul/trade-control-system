@@ -61,7 +61,7 @@ class BotConfig:
 
     # Guard settings sl
     max_hold_guard_sl_sec = 1800     # 30 menit
-    guard_loss_trigger = -0.03
+    guard_loss_trigger = -0.04
 
     daily_profit_lock_pct = 1.0      # misal 1%
     daily_reset_hour = 0 
@@ -809,8 +809,14 @@ class ImprovedLiveDualEntryBot:
 
         self.watches = new_watches
 
-    async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
+    async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float,reverse: bool = False):
         qty = self._round_qty(1.0)  # 1 AVAX
+
+        # --- SWAP SIDE ---
+        orig_side = side.upper()
+        if reverse:
+            side = 'LONG' if orig_side == 'SHORT' else 'SHORT'
+            print(f"[REVERSE] Swap {orig_side} -> {side}")
 
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
