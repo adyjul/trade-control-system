@@ -797,7 +797,7 @@ class ImprovedLiveDualEntryBot:
                     # mode sideways → tetap seperti biasa
                     print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
                     if self.cfg.use_limit_orders:
-                        await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+                        await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'],True)
                     else:
                         await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
 
