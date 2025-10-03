@@ -817,6 +817,8 @@ class ImprovedLiveDualEntryBot:
                         else:
                             tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
                             sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
+                        
+                        print(f"[SIDEWAYS REVERSE] {orig_side} → {side}" f"entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
 
                     if self.cfg.use_limit_orders:
                         await self._place_limit_order(
