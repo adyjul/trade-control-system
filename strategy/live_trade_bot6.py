@@ -717,8 +717,7 @@ class ImprovedLiveDualEntryBot:
         self.watches.append(watch)
         print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.3f} short={watch['short_level']:.3f} vol_mult={volatility_mult:.2f}")
 
-    async def _process_watches(self,reverse=False):
-
+    async def _process_watches(self, reverse=False):
         if self._current_position is not None:
             return
 
@@ -732,8 +731,6 @@ class ImprovedLiveDualEntryBot:
 
         new_watches = []
         for w in self.watches:
-
-            # print(f"start_idx: {w['start_idx']}, expire_idx: {w['expire_idx']}")
             if latest_idx < w['start_idx']:
                 new_watches.append(w)
                 continue
@@ -743,8 +740,8 @@ class ImprovedLiveDualEntryBot:
             entry_price = None
             tp_price = None
             sl_price = None
-            
 
+            # --- DETEKSI KONDISI ENTRY ---
             if self.cfg.require_confirmation:
                 long_condition = candle_close >= w['long_level']
                 short_condition = candle_close <= w['short_level']
@@ -752,7 +749,7 @@ class ImprovedLiveDualEntryBot:
                 long_condition = candle_high >= w['long_level']
                 short_condition = candle_low <= w['short_level']
 
-
+            # --- HITUNG TP/SL AWAL ---
             if long_condition:
                 triggered = True
                 side = 'LONG'
@@ -762,6 +759,7 @@ class ImprovedLiveDualEntryBot:
                 sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
                 tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
                 sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
+
             elif short_condition:
                 triggered = True
                 side = 'SHORT'
@@ -772,60 +770,74 @@ class ImprovedLiveDualEntryBot:
                 tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
                 sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
 
+            # =====================
+            #      JIKA TRIGGER
+            # =====================
             if triggered:
-                # print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
-                # if self.cfg.use_limit_orders:
-                #     await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
-                # else:
-                #     await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
 
+                # === MODE TREND → REVERSE ENTRY ===
                 if mode == "trend":
-                    # reverse side
+                    orig_side = side
                     side = "LONG" if side == "SHORT" else "SHORT"
-                    print(f"[TREND MODE] Reversed signal → {side}")
+                    print(f"[TREND MODE] Reversed signal → {orig_side} → {side}")
 
+                    # Re-hitung TP/SL sesuai side BARU
+                    if side == "LONG":
+                        tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
+                        sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
+                    else:
+                        tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
+                        sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
+
+                    # Cancel semua limit order lama sebelum market entry
                     await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
                     print("[CANCEL] Semua limit order dibatalkan sebelum market entry.")
-                    
-                    # langsung gunakan market order, abaikan limit
+
+                    # Gunakan market order langsung
                     await self._open_market_position(
                         side, entry_price, tp_price, sl_price,
                         w['atr'], w['volatility_mult']
                     )
 
                 else:
-                    # mode sideways → tetap seperti biasa
-                    print(f"[TRIGGER] {w['trigger_time']} side={side} entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
+                    # === MODE SIDEWAYS → NORMAL ===
+                    print(f"[TRIGGER] {w['trigger_time']} side={side} "
+                        f"entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
 
-                    if reverse :
+                    if reverse:
+                        # Jika dipaksa reverse manual untuk sideways
+                        orig_side = side
+                        side = "LONG" if side == "SHORT" else "SHORT"
+                        print(f"[SIDEWAYS REVERSE] {orig_side} → {side}")
+
+                        # Hitung ulang TP/SL
                         if side == "LONG":
                             tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
                             sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
-                        else: 
+                        else:
                             tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
                             sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
 
                     if self.cfg.use_limit_orders:
-                        await self._place_limit_order(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'],True)
+                        await self._place_limit_order(
+                            side, entry_price, tp_price, sl_price,
+                            w['atr'], w['volatility_mult']
+                        )
                     else:
-                        await self._open_market_position(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'])
+                        await self._open_market_position(
+                            side, entry_price, tp_price, sl_price,
+                            w['atr'], w['volatility_mult']
+                        )
 
             else:
-                # self._current_signal_side = None
+                # Masih menunggu expire
                 if latest_idx < w['expire_idx']:
                     new_watches.append(w)
-        
 
         self.watches = new_watches
 
-    async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float,reverse: bool = False):
+    async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
         qty = self._round_qty(1.0)  # 1 AVAX
-
-        # --- SWAP SIDE ---
-        orig_side = side.upper()
-        if reverse:
-            side = 'LONG' if orig_side == 'SHORT' else 'SHORT'
-            print(f"[REVERSE] Swap {orig_side} -> {side}")
 
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
