@@ -292,6 +292,35 @@ class ImprovedLiveDualEntryBot:
         print("[LOCK] Canceling all pending orders...")
         await self.client.futures_cancel_all_open_orders()
 
+    async def _force_close_all2(self):
+        print("[LOCK] Closing all open positions...")
+        
+        positions = await self.client.futures_position_information()
+        symbols = set()  # untuk kumpulkan simbol
+
+        for pos in positions:
+            qty = float(pos['positionAmt'])
+            symbol = pos['symbol']
+            symbols.add(symbol)
+
+            if qty != 0:
+                side = 'SELL' if qty > 0 else 'BUY'
+                await self.client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type='MARKET',
+                    quantity=abs(qty)
+                )
+                print(f"[FORCE CLOSE] {symbol} {side} {abs(qty)} closed.")
+
+        print("[LOCK] Canceling all pending orders...")
+        for sym in symbols:
+            try:
+                await self.client.futures_cancel_all_open_orders(symbol=sym)
+                print(f"[LOCK] All pending orders for {sym} canceled.")
+            except Exception as e:
+                print(f"[LOCK][WARN] Gagal cancel {sym}: {e}")
+
     def calculate_order_quality(self, order: Dict) -> float:
         """Calculate a quality score for order prioritization"""
         # Factors to consider:
@@ -637,9 +666,16 @@ class ImprovedLiveDualEntryBot:
                     await self._check_daily_reset()
                     await self._update_daily_profit()
 
-                    if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
+                    # if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
+                    #     print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
+                    #     # await self._force_close_all2()
+                    #     await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
+                    #     self.trade_locked = True
+
+                    if True:
                         print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
-                        await self._force_close_all()
+                        # await self._force_close_all2()
+                        await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
                         self.trade_locked = True
 
                     if self.trade_locked:
