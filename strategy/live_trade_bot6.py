@@ -479,28 +479,29 @@ class ImprovedLiveDualEntryBot:
         except Exception as e:
             print("[ERROR] closing position:", e)
 
-    async def _cancel_misaligned_orders(self):
+    async def _cancel_misaligned_orders(self,reverse=False):
         """
         Membatalkan limit order yang arah-nya sudah tidak sama dengan sinyal aktif terakhir.
         """
-        print(self._current_signal_side)
-        # print('masuk cancel misaligned orders')
-        if self._current_signal_side is None:
+        signal_side = self._current_signal_side
+        if reverse :
+            signal_side = "LONG" if side == "SHORT" else "SHORT"
+
+        if side is None:
             return
 
         try:
-            print('masuk cancel limit')
             open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
             for od in open_orders:
                 side = od.get('side')  # 'BUY' atau 'SELL'
                 order_side = 'LONG' if side == 'BUY' else 'SHORT'
 
-                if order_side != self._current_signal_side:
+                if order_side != side:
                     await self.client.futures_cancel_order(
                         symbol=self.cfg.pair,
                         orderId=od['orderId']
                     )
-                    print(f"[CANCEL] {order_side} limit dibatalkan karena sinyal berubah → {self._current_signal_side}")
+                    print(f"[CANCEL] {order_side} limit dibatalkan karena sinyal berubah → {signal_side}")
         except Exception as e:
             print(f"[ERROR] gagal cancel misaligned orders: {e}")
     
