@@ -628,7 +628,7 @@ class ImprovedLiveDualEntryBot:
         ma50 = talib.SMA(close, timeperiod=50)[-1]
         dist = abs(close[-1] - ma50)
 
-        if adx > 25 and dist > 1.5 * atr:
+        if adx > 20 and dist > 1.2 * atr:
             return "trend"
         return "sideways"
 
