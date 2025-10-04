@@ -667,17 +667,17 @@ class ImprovedLiveDualEntryBot:
                     await self._check_daily_reset()
                     await self._update_daily_profit()
 
-                    # if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
-                    #     print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
-                    #     # await self._force_close_all2()
-                    #     await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
-                    #     self.trade_locked = True
-
-                    if True:
+                    if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
                         print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
                         # await self._force_close_all2()
                         await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
                         self.trade_locked = True
+
+                    # if True:
+                    #     print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
+                    #     # await self._force_close_all2()
+                    #     await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
+                    #     self.trade_locked = True
 
                     if self.trade_locked:
                         print("[LOCK] Trading locked for the rest of the day.")
