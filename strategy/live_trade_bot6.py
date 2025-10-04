@@ -487,7 +487,7 @@ class ImprovedLiveDualEntryBot:
         if reverse :
             signal_side = "LONG" if side == "SHORT" else "SHORT"
 
-        if side is None:
+        if signal_side is None:
             return
 
         try:
