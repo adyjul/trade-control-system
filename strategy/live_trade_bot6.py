@@ -64,7 +64,7 @@ class BotConfig:
     guard_loss_trigger = -0.04
 
     daily_profit_lock_pct = 1.0      # misal 1%
-    daily_reset_hour = 0 
+    daily_reset_hour = 7 
 
 
 # ---------------- Excel Logger ----------------
