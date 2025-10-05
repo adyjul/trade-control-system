@@ -32,7 +32,7 @@ ADX_SIDEWAYS_THRESHOLD = 20
 BB_WIDTH_LOW  = 0.06
 BB_WIDTH_HIGH = 0.10
 
-client = Client(API_KEY, API_SECRET, testnet=USE_TESTNET)
+client = Client(API_KEY, API_SECRET)
 
 
 # ================= UTIL ===================
