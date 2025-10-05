@@ -918,7 +918,7 @@ class ImprovedLiveDualEntryBot:
                     print("[CANCEL] Semua limit order dibatalkan sebelum market entry.")
                     await self._open_market_position(
                         side, entry_price, tp_price, sl_price,
-                        w['atr'], w['volatility_mult']
+                        w['atr'], w['volatility_mult'],size_multiplier
                     )
 
                 elif regime == "SIDEWAYS" and confidence > 0.6:
