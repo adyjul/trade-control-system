@@ -13,10 +13,13 @@ from binance.client import Client
 from binance.streams import BinanceSocketManager
 import ta   # pip install ta
 import openpyxl
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # ================= CONFIG =================
-API_KEY     = "ISI_API_KEY_MU"
-API_SECRET  = "ISI_SECRET_KEY_MU"
+API_KEY     = os.getenv('BINANCE_API_KEY')
+API_SECRET  = os.getenv('BINANCE_API_KEY')
 SYMBOL      = "AVAXUSDT"
 TIMEFRAME   = "5m"          # timeframe untuk indikator
 TP_PCT      = 0.005         # TP 0.5%
