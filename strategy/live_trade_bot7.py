@@ -455,7 +455,7 @@ class ImprovedLiveDualEntryBot:
     # MODIFIED: Enhanced Start Method dengan Tick Stream
     async def start(self):
         self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
-        await self._load_symbol_precision()
+        # await self._load_symbol_precision()
         await self.test_precision()
         try:
             await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=int(self.cfg.leverage))
