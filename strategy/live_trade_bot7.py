@@ -465,30 +465,31 @@ class ImprovedLiveDualEntryBot:
             print("[WARN] set leverage/margin:", e)
 
         print("[INIT] Loading historical candle data...")
-        try:
-            # Load 100 candle historis (8+ jam data 5m)
-            historical_candles = await self.client.futures_klines(
-                symbol=self.cfg.pair,
-                interval=self.cfg.interval,
-                limit=100
-            )
-            
-            # Process dan simpan candle historis
-            for candle in historical_candles:
-                ts = pd.to_datetime(candle[0], unit='ms', utc=True)
-                o, h, l, c = map(float, candle[1:5])
-                v = float(candle[5])
-                self._append_candle(ts, o, h, l, c, v)
-            
-            print(f"[INIT] Successfully loaded {len(self.candles)} historical candles")
-            print(f"[INIT] Latest candle time: {self.candles.index[-1]}")
 
-            # Hitung indikator teknikal berdasarkan data historis
-        self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
-        print(f"[INIT] Initial volatility ratio: {self.volatility_ratio:.4f}")
-        
-    except Exception as e:
-        print(f"[ERROR] Failed to load historical data: {e}")
+        # try:
+        #     # Load 100 candle historis (8+ jam data 5m)
+        #     historical_candles = await self.client.futures_klines(
+        #         symbol=self.cfg.pair,
+        #         interval=self.cfg.interval,
+        #         limit=100
+        #     )
+            
+        #     # Process dan simpan candle historis
+        #     for candle in historical_candles:
+        #         ts = pd.to_datetime(candle[0], unit='ms', utc=True)
+        #         o, h, l, c = map(float, candle[1:5])
+        #         v = float(candle[5])
+        #         self._append_candle(ts, o, h, l, c, v)
+            
+        #     print(f"[INIT] Successfully loaded {len(self.candles)} historical candles")
+        #     print(f"[INIT] Latest candle time: {self.candles.index[-1]}")
+
+        #     # Hitung indikator teknikal berdasarkan data historis
+        #     self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
+        #     print(f"[INIT] Initial volatility ratio: {self.volatility_ratio:.4f}")
+            
+        # except Exception as e:
+        #     print(f"[ERROR] Failed to load historical data: {e}")
         
         self.bm = BinanceSocketManager(self.client)
         print(f"[INFO] Starting enhanced live-dual-entry bot for {self.cfg.pair}")
