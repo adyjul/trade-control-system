@@ -10,11 +10,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from binance.client import Client
-from binance import BinanceSocketManager
+from binance import BinanceSocketManager,AsyncClient
 import ta   # pip install ta
 import openpyxl
 import os
 from dotenv import load_dotenv
+import asyncClient
 load_dotenv()
 
 # ================= CONFIG =================
@@ -32,7 +33,7 @@ ADX_SIDEWAYS_THRESHOLD = 20
 BB_WIDTH_LOW  = 0.06
 BB_WIDTH_HIGH = 0.10
 
-client = Client(API_KEY, API_SECRET)
+# client = Client(API_KEY, API_SECRET)
 
 
 # ================= UTIL ===================
@@ -92,7 +93,9 @@ def log_trade(entry_time, regime, order_type, entry_price, exit_price, result, p
 # ================= CORE ====================
 async def forward_test():
     print("🚀 Forward-test Tick Mode started …")
+    client = await AsyncClient.create(API_KEY, API_SECRET, testnet=USE_TESTNET)
     bm = BinanceSocketManager(client)
+    
     ts = bm.trade_socket(SYMBOL.lower())
 
     current_trade = None
