@@ -1308,6 +1308,7 @@ class ImprovedLiveDualEntryBot:
             print(f"[SKIP] Quantity too small: {qty}")
             return
 
+        print(f"qty {qty}")
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
         else:
