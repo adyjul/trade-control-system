@@ -87,7 +87,6 @@ async def forward_test():
     print("🚀 Forward-test Tick Mode started …")
     client = await AsyncClient.create(API_KEY, API_SECRET, testnet=USE_TESTNET)
     bm = BinanceSocketManager(client)
-    ts = bm.trade_socket(SYMBOL.lower())
 
     # update regime awal
     candles = await get_candles(client)
@@ -96,12 +95,13 @@ async def forward_test():
 
     current_trade = None
 
-    async with ts as stream:
-        async for msg in stream:
+    async with bm.trade_socket(SYMBOL.lower()) as stream:
+        while True:
+            msg = await stream.recv()                 # <─ pakai recv()
             price = float(msg['p'])
             now   = datetime.utcnow()
 
-            # perbarui regime tiap candle close
+            # update regime tiap candle close
             if now.minute % 5 == 0 and now.second < 3:
                 candles = await get_candles(client)
                 regime, adx, atr, bbw = detect_regime(candles)
@@ -120,7 +120,7 @@ async def forward_test():
                 }
                 print(f"ENTRY [{regime}] ({order_type}) @ {price:.4f}")
 
-            # cek TP/SL
+            # cek TP / SL
             if current_trade:
                 if price >= current_trade["tp"]:
                     log_trade(current_trade["entry_time"], current_trade["regime"],
