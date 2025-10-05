@@ -455,8 +455,8 @@ class ImprovedLiveDualEntryBot:
     # MODIFIED: Enhanced Start Method dengan Tick Stream
     async def start(self):
         self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
-        # await self._load_symbol_precision()
-        await self.test_precision()
+        await self._load_symbol_precision()
+        # await self.test_precision()
         try:
             await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=int(self.cfg.leverage))
             try:
@@ -1415,7 +1415,7 @@ class ImprovedLiveDualEntryBot:
                                 self.cfg.qty_precision = 2
                             elif step_size == 0.001:
                                 self.cfg.qty_precision = 3
-                            print(f"[PRECISION] Step size: {step_size}, Qty precision: {self.cfg.qty_precision}")
+                            # print(f"[PRECISION] Step size: {step_size}, Qty precision: {self.cfg.qty_precision}")
                         
                         if f['filterType'] == 'PRICE_FILTER':
                             tick_size = float(f['tickSize'])
@@ -1428,9 +1428,9 @@ class ImprovedLiveDualEntryBot:
                                 self.cfg.price_precision = 2
                             elif tick_size == 0.001:
                                 self.cfg.price_precision = 3
-                            print(f"[PRECISION] Tick size: {tick_size}, Price precision: {self.cfg.price_precision}")
+                            # print(f"[PRECISION] Tick size: {tick_size}, Price precision: {self.cfg.price_precision}")
                     
-                    print(f"[PRECISION] Final - Qty: {self.cfg.qty_precision}, Price: {self.cfg.price_precision}")
+                    # print(f"[PRECISION] Final - Qty: {self.cfg.qty_precision}, Price: {self.cfg.price_precision}")
                     break
         except Exception as e:
             print(f"[ERROR] Loading symbol precision: {e}")
