@@ -952,29 +952,6 @@ class ImprovedLiveDualEntryBot:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
     
     
-    # def analyze_mixed_market_conditions(self):
-    #     """Analyze specific conditions dalam mixed market"""
-    #     close = self.candles['close'].values
-    #     high = self.candles['high'].values
-    #     low = self.candles['low'].values
-        
-    #     # Volatility analysis
-    #     atr = talib.ATR(high, low, close, 14)[-1]
-    #     atr_percent = (atr / close[-1]) * 100
-        
-    #     # Volume analysis
-    #     volume_trend = self.analyze_volume_trend()
-        
-    #     # Price compression
-    #     bollinger_width = (talib.BBANDS(close, 20, 2, 2)[2][-1] - talib.BBANDS(close, 20, 2, 2)[0][-1]) / close[-1]
-        
-    #     if atr_percent > 0.8 and volume_trend == "expanding":
-    #         return "VOLATILE_BREAKOUT"
-    #     elif bollinger_width < 0.03 and atr_percent < 0.5:
-    #         return "RANGING"
-    #     else:
-    #         return "UNCLEAR"
-
     def _create_watch(self, atr_value):
         if self._current_position is not None:
             return
