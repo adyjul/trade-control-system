@@ -1,78 +1,62 @@
 """
-forward_test_regime_bot.py
-Bot forward-test untuk deteksi regime (TREND / SIDEWAYS)
-Menggunakan ADX + ATR + Bollinger Band Width
-Mencatat hasil ke Excel untuk analisis performa
+forward_test_regime_bot_tick.py
+Forward-test untuk deteksi regime + TP/SL dengan tick mode
+Regime: ADX + ATR + Bollinger Band Width
+Hanya simulasikan trade (tidak eksekusi real order)
 """
 
 import asyncio
 import pandas as pd
-import ta   # pip install ta
 import numpy as np
 from datetime import datetime
 from binance.client import Client
-from binance.enums import *
-from dotenv import load_dotenv
-import os
+from binance.streams import BinanceSocketManager
+import ta   # pip install ta
+import openpyxl
 
-load_dotenv()
+# ================= CONFIG =================
+API_KEY     = "ISI_API_KEY_MU"
+API_SECRET  = "ISI_SECRET_KEY_MU"
+SYMBOL      = "AVAXUSDT"
+TIMEFRAME   = "5m"          # timeframe untuk indikator
+TP_PCT      = 0.005         # TP 0.5%
+SL_PCT      = 0.003         # SL 0.3%
+LOG_FILE    = "forward_test_tick.xlsx"
+USE_TESTNET = True
 
-# ========== CONFIG ==========
-API_KEY = os.getenv('BINANCE_API_KEY')
-API_SECRET = os.getenv('BINANCE_API_SECRET')
-SYMBOL = "AVAXUSDT"
-TIMEFRAME = "5m"            # timeframe forward-test
-TRADE_QTY = 0.05            # contoh: 0.05 AVAX
-USE_TESTNET = True          # set True untuk testnet
-FORWARD_LOGFILE = "forward_test_log.xlsx"
-
-# Threshold regime detection
 ADX_TREND_THRESHOLD = 25
 ADX_SIDEWAYS_THRESHOLD = 20
-BB_WIDTH_LOW = 0.06         # band sempit → sideways
-BB_WIDTH_HIGH = 0.10        # band lebar → trend
-ATR_PERIOD = 14
+BB_WIDTH_LOW  = 0.06
+BB_WIDTH_HIGH = 0.10
 
 client = Client(API_KEY, API_SECRET, testnet=USE_TESTNET)
 
-# ========== UTIL ==========
-
-def get_candles(symbol=SYMBOL, interval=TIMEFRAME, limit=200):
-    klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
-    df = pd.DataFrame(klines, columns=[
+# ================= UTIL ===================
+def get_candles(limit=200):
+    """Ambil candle historis untuk indikator"""
+    kl = client.get_klines(symbol=SYMBOL, interval=TIMEFRAME, limit=limit)
+    df = pd.DataFrame(kl, columns=[
         'timestamp','open','high','low','close','volume','close_time',
-        'qav','num_trades','taker_base','taker_quote','ignore'])
-    
-    # konversi timestamp ke datetime
+        'qav','num_trades','taker_base','taker_quote','ignore'
+    ])
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    
-    # pilih kolom yang diperlukan
     df = df[['timestamp','open','high','low','close','volume']].copy()
-    
-    # ubah hanya kolom angka ke float
     cols = ['open','high','low','close','volume']
     df[cols] = df[cols].astype(float)
-    
     return df
 
-
 def detect_regime(df):
-    # Hitung indikator
+    """Deteksi trend / sideways"""
     close = df['close']
-    high = df['high']
-    low = df['low']
+    high  = df['high']
+    low   = df['low']
 
-    # ADX
     adx = ta.trend.adx(high, low, close, window=14).iloc[-1]
+    atr = ta.volatility.average_true_range(high, low, close, window=14).iloc[-1]
 
-    # ATR
-    atr = ta.volatility.average_true_range(high, low, close, window=ATR_PERIOD).iloc[-1]
-
-    # Bollinger Band Width
     bb = ta.volatility.BollingerBands(close, window=20, window_dev=2)
     bb_width = ((bb.bollinger_hband() - bb.bollinger_lband()) / bb.bollinger_mavg()).iloc[-1]
 
-    regime = "SIDEWAYS"
     if adx >= ADX_TREND_THRESHOLD or bb_width >= BB_WIDTH_HIGH:
         regime = "TREND"
     elif adx < ADX_SIDEWAYS_THRESHOLD and bb_width < BB_WIDTH_LOW:
@@ -82,54 +66,78 @@ def detect_regime(df):
 
     return regime, adx, atr, bb_width
 
-def log_trade(regime, order_type, entry_price, exit_price, pnl):
+def log_trade(entry_time, regime, order_type, entry_price, exit_price, result, pnl):
     data = {
-        "timestamp": [datetime.utcnow()],
-        "regime": [regime],
-        "order_type": [order_type],
+        "timestamp":   [entry_time],
+        "regime":      [regime],
+        "order_type":  [order_type],
         "entry_price": [entry_price],
-        "exit_price": [exit_price],
-        "pnl_pct": [pnl]
+        "exit_price":  [exit_price],
+        "result":      [result],     # TP / SL
+        "pnl_pct":     [pnl]
     }
-
     df = pd.DataFrame(data)
     try:
-        old = pd.read_excel(FORWARD_LOGFILE)
-        df = pd.concat([old, df], ignore_index=True)
+        old = pd.read_excel(LOG_FILE)
+        df  = pd.concat([old, df], ignore_index=True)
     except FileNotFoundError:
         pass
+    df.to_excel(LOG_FILE, index=False)
+    print(f"LOGGED: {result} | PnL: {pnl*100:.2f}%")
 
-    df.to_excel(FORWARD_LOGFILE, index=False)
+# ================= CORE ====================
+async def forward_test():
+    print("🚀 Forward-test Tick Mode started …")
+    bm = BinanceSocketManager(client)
+    ts = bm.trade_socket(SYMBOL.lower())
 
-# ========== SIMULASI FORWARD TEST (DUMMY ORDER) ==========
-# Bot ini hanya untuk forward test regime dan log
-# Belum mengirim order ke exchange (aman untuk testing)
+    current_trade = None
 
-async def run_forward_test():
-    print("🚀 Forward-test regime bot started.")
-    last_regime = None
-    while True:
-        try:
-            df = get_candles()
-            regime, adx, atr, bb_width = detect_regime(df)
+    # Regime update awal
+    candles = get_candles()
+    regime, adx, atr, bbw = detect_regime(candles)
+    print(f"[INIT] Regime: {regime}, ADX:{adx:.2f}, BBW:{bbw:.4f}")
 
-            if regime != last_regime:
-                print(f"[{datetime.utcnow()}] Regime changed: {regime} | ADX:{adx:.2f} | BBW:{bb_width:.4f}")
-                last_regime = regime
+    async with ts as stream:
+        async for msg in stream:
+            price = float(msg['p'])  # tick price
+            now   = datetime.utcnow()
 
-            # === Simulasi sinyal ===
-            close_price = df['close'].iloc[-1]
-            # Dummy P/L
-            pnl = np.random.uniform(-0.003, 0.005)  # -0.3% s/d +0.5% untuk testing log
-            order_type = "LIMIT" if regime == "SIDEWAYS" else "MARKET"
+            # update regime tiap close candle baru (setiap 5m)
+            if now.minute % 5 == 0 and now.second < 3:
+                candles = get_candles()
+                regime, adx, atr, bbw = detect_regime(candles)
+                print(f"[{now}] Regime: {regime} ADX:{adx:.1f} BBW:{bbw:.3f}")
 
-            # Simpan log setiap loop
-            log_trade(regime, order_type, close_price, close_price*(1+pnl), pnl*100)
+            # jika tidak ada trade aktif → buka simulasi posisi
+            if current_trade is None and regime in ["TREND","SIDEWAYS"]:
+                order_type = "MARKET" if regime == "TREND" else "LIMIT"
+                current_trade = {
+                    "entry_time": now,
+                    "entry_price": price,
+                    "regime": regime,
+                    "order_type": order_type,
+                    "tp": price * (1 + TP_PCT),
+                    "sl": price * (1 - SL_PCT)
+                }
+                print(f"ENTRY [{regime}] ({order_type}) @ {price:.4f}")
 
-            await asyncio.sleep(300)  # tunggu 5 menit sesuai timeframe
-        except Exception as e:
-            print(f"Error: {e}")
-            await asyncio.sleep(60)
+            # jika ada trade → cek TP/SL
+            if current_trade:
+                if price >= current_trade["tp"]:
+                    log_trade(current_trade["entry_time"], current_trade["regime"],
+                              current_trade["order_type"],
+                              current_trade["entry_price"], price, "TP", TP_PCT)
+                    current_trade = None
 
+                elif price <= current_trade["sl"]:
+                    log_trade(current_trade["entry_time"], current_trade["regime"],
+                              current_trade["order_type"],
+                              current_trade["entry_price"], price, "SL", -SL_PCT)
+                    current_trade = None
+
+            await asyncio.sleep(0.1)  # small delay to avoid busy loop
+
+# ===========================================
 if __name__ == "__main__":
-    asyncio.run(run_forward_test())
+    asyncio.run(forward_test())
