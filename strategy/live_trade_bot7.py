@@ -560,7 +560,7 @@ class ImprovedLiveDualEntryBot:
 
                         await self._process_watches()
                         await self._process_current_position()
-                        await self._cancel_misaligned_orders()
+                        # await self._cancel_misaligned_orders()
                         await self._check_pending_orders()
 
                 except Exception as e:
