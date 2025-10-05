@@ -254,10 +254,10 @@ class ImprovedLiveDualEntryBot:
 
     async def _update_daily_profit(self):
         info = await self.client.futures_account_balance()
-        print(info)
+        # print(info)
         # cari row untuk USDT
         usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
-
+        print(usdt_row)
         if usdt_row:
             current_equity = float(usdt_row['availableBalance'])
 
