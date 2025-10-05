@@ -429,59 +429,214 @@ class ImprovedLiveDualEntryBot:
             
         raw_qty = risk_amount / price_risk
         return self._round_qty(raw_qty)
+
+    async def long_strategy(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, market_regime: str):
+        """Master long strategy berdasarkan market regime"""
+        
+        if market_regime == "STRONG_UPTREND":
+            # 🚀 TREND-FOLLOWING LONG
+            print("🚀 UPTREND - Trend-following long dengan market order")
+            await self._open_market_position(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, size_multiplier=1.0
+            )
+            
+        elif market_regime == "SIDEWAYS":
+            # 🔄 MEAN-REVERSION LONG  
+            print("🔄 SIDEWAYS - Mean-reversion long dengan limit order")
+            reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
+            await self._place_limit_order(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, reduced_qty
+            )
+            
+        elif market_regime == "MIXED":
+            # ⚠️ CAUTIOUS LONG
+            print("⚠️  MIXED - Cautious long dengan reduced size")
+            reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
+            await self._place_limit_order(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, reduced_qty
+            )
+    
+    async def short_strategy(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, market_regime: str):
+        """Master short strategy berdasarkan market regime"""
+        
+        if market_regime == "STRONG_DOWNTREND":
+            # 🚀 TREND-FOLLOWING SHORT
+            print("🚀 DOWNTREND - Trend-following short dengan market order")
+            await self._open_market_position(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, size_multiplier=1.0
+            )
+            
+        elif market_regime == "SIDEWAYS":
+            # 🔄 MEAN-REVERSION SHORT
+            print("🔄 SIDEWAYS - Mean-reversion short dengan limit order") 
+            reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
+            await self._place_limit_order(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, reduced_qty
+            )
+            
+        elif market_regime == "MIXED":
+            # ⚠️ CAUTIOUS SHORT
+            print("⚠️  MIXED - Cautious short dengan reduced size")
+            reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
+            await self._place_limit_order(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, reduced_qty
+            )
+    
+    def calculate_directional_indicators(self):
+        """Hitung Plus DI dan Minus DI menggunakan TA-Lib"""
+        if len(self.candles) < 15:
+            return 0, 0, 0
+        
+        high = self.candles['high'].values
+        low = self.candles['low'].values  
+        close = self.candles['close'].values
+        
+        # Calculate DI+ dan DI-
+        plus_di = talib.PLUS_DI(high, low, close, timeperiod=14)
+        minus_di = talib.MINUS_DI(high, low, close, timeperiod=14)
+        adx = talib.ADX(high, low, close, timeperiod=14)
+        
+        # Ambil nilai terakhir
+        current_plus_di = plus_di[-1] if len(plus_di) > 0 else 0
+        current_minus_di = minus_di[-1] if len(minus_di) > 0 else 0
+        current_adx = adx[-1] if len(adx) > 0 else 0
+        
+        return current_plus_di, current_minus_di, current_adx
+    
+    def calculate_ema_indicators(self):
+        """Hitung EMA Fast (20) dan EMA Slow (50)"""
+        if len(self.candles) < 50:
+            return 0, 0
+        
+        close = self.candles['close'].values
+        
+        # EMA Fast (20 periode) - untuk short-term trend
+        ema_fast = talib.EMA(close, timeperiod=20)
+        
+        # EMA Slow (50 periode) - untuk medium-term trend  
+        ema_slow = talib.EMA(close, timeperiod=50)
+        
+        # EMA Long (200 periode) - untuk long-term trend (optional)
+        ema_long = talib.EMA(close, timeperiod=200)
+        
+        current_ema_fast = ema_fast[-1] if len(ema_fast) > 0 else 0
+        current_ema_slow = ema_slow[-1] if len(ema_slow) > 0 else 0
+        current_ema_long = ema_long[-1] if len(ema_long) > 0 else 0
+        
+        return current_ema_fast, current_ema_slow, current_ema_long
     
     def enhanced_trend_detection(self) -> Dict:
-        """Enhanced trend detection dengan confidence score"""
+        """Enhanced trend detection dengan DI dan EMA"""
         if len(self.candles) < 50:
-            return {"regime": "MIXED", "confidence": 0.5}
+            return {"regime": "MIXED", "confidence": 0.5, "trend_direction": "NEUTRAL"}
         
         close = self.candles['close'].values
         high = self.candles['high'].values
         low = self.candles['low'].values
-        volume = self.candles['volume'].values
         
-        # Multiple indicators
-        adx = talib.ADX(high, low, close, timeperiod=14)[-1]
+        # Dapatkan semua indikator
+        plus_di, minus_di, adx = self.calculate_directional_indicators()
+        ema_fast, ema_slow, ema_long = self.calculate_ema_indicators()
         rsi = talib.RSI(close, timeperiod=14)[-1]
-        
-        # EMA Alignment check
-        ema_20 = talib.EMA(close, timeperiod=20)[-1]
-        ema_50 = talib.EMA(close, timeperiod=50)[-1]
-        ema_200 = talib.EMA(close, timeperiod=200)[-1]
         
         # Price structure analysis
         recent_highs = high[-20:]
         recent_lows = low[-20:]
         
-        # Scoring system
+        # Scoring system yang lebih detail
         trend_score = 0
+        max_score = 10
         
-        # ADX Strength
-        if adx > 25: trend_score += 2
-        elif adx > 20: trend_score += 1
+        # 1. ADX Strength (2 points)
+        if adx > 25: 
+            trend_score += 2
+        elif adx > 20: 
+            trend_score += 1
         
-        # EMA Alignment
-        if ema_20 > ema_50 > ema_200: trend_score += 1  # Uptrend alignment
-        elif ema_20 < ema_50 < ema_200: trend_score += 1  # Downtrend alignment
+        # 2. EMA Alignment (3 points)
+        if ema_fast > ema_slow > ema_long:
+            trend_score += 3  # Strong uptrend
+        elif ema_fast < ema_slow < ema_long:
+            trend_score += 3  # Strong downtrend  
+        elif ema_fast > ema_slow:
+            trend_score += 1  # Weak uptrend
+        elif ema_fast < ema_slow:
+            trend_score += 1  # Weak downtrend
         
-        # RSI Momentum
-        if rsi > 70 or rsi < 30: trend_score += 1
+        # 3. DI Alignment (2 points)
+        if plus_di > minus_di and plus_di > 25:
+            trend_score += 2  # Strong bullish
+        elif minus_di > plus_di and minus_di > 25:
+            trend_score += 2  # Strong bearish
+        elif plus_di > minus_di:
+            trend_score += 1  # Weak bullish
+        elif minus_di > plus_di:
+            trend_score += 1  # Weak bearish
         
-        # Price structure (simplified)
+        # 4. RSI Momentum (1 point)
+        if rsi > 70 or rsi < 30:
+            trend_score += 1
+        
+        # 5. Price Structure (2 points)
         if (recent_highs[-1] > recent_highs[-5] and recent_lows[-1] > recent_lows[-5]):
-            trend_score += 1  # Higher highs & higher lows
+            trend_score += 2  # Higher highs & higher lows
         elif (recent_highs[-1] < recent_highs[-5] and recent_lows[-1] < recent_lows[-5]):
-            trend_score += 1  # Lower highs & lower lows
+            trend_score += 2  # Lower highs & lower lows
         
-        total_possible = 5
-        confidence = trend_score / total_possible
+        confidence = trend_score / max_score
         
-        if trend_score >= 4 and confidence > 0.7:
-            return {"regime": "STRONG_TREND", "confidence": confidence}
-        elif trend_score <= 2 and confidence < 0.4:
-            return {"regime": "SIDEWAYS", "confidence": confidence}
+        # Tentukan regime dan trend direction
+        if trend_score >= 7 and confidence > 0.7:
+            if plus_di > minus_di:
+                return {"regime": "STRONG_TREND", "confidence": confidence, "trend_direction": "UP"}
+            else:
+                return {"regime": "STRONG_TREND", "confidence": confidence, "trend_direction": "DOWN"}
+        elif trend_score <= 3 and confidence < 0.4:
+            return {"regime": "SIDEWAYS", "confidence": confidence, "trend_direction": "NEUTRAL"}
         else:
-            return {"regime": "MIXED", "confidence": confidence}
+            return {"regime": "MIXED", "confidence": confidence, "trend_direction": "NEUTRAL"}
+    
+
+    def enhanced_sideways_detection(self) -> bool:
+        """Enhanced sideways detection dengan multiple confirmation"""
+        if len(self.candles) < 20:
+            return False
+        
+        close = self.candles['close'].values
+        high = self.candles['high'].values
+        low = self.candles['low'].values
+        
+        # 1. ADX rendah (di bawah 20)
+        plus_di, minus_di, adx = self.calculate_directional_indicators()
+        if adx > 20:
+            return False
+        
+        # 2. EMA mendatar atau berdekatan
+        ema_fast, ema_slow, _ = self.calculate_ema_indicators()
+        ema_diff_pct = abs(ema_fast - ema_slow) / close[-1]
+        if ema_diff_pct > 0.01:  # EMA terpisah lebih dari 1%
+            return False
+        
+        # 3. Price range sempit (menggunakan ATR)
+        atr = talib.ATR(high, low, close, timeperiod=14)[-1]
+        atr_pct = atr / close[-1]
+        if atr_pct > 0.005:  # ATR lebih dari 0.5%
+            return False
+        
+        # 4. Bollinger Bands squeeze
+        bb_upper = talib.BBANDS(close, timeperiod=20, nbdevup=2)[0][-1]
+        bb_lower = talib.BBANDS(close, timeperiod=20, nbdevdn=2)[2][-1]
+        bb_width = (bb_upper - bb_lower) / close[-1]
+        if bb_width > 0.03:  # Bollinger bandwidth lebih dari 3%
+            return False
+        
+        return True
     
     def get_daily_size_multiplier(self) -> float:
         """Reduce position size as we approach daily target"""
@@ -850,7 +1005,8 @@ class ImprovedLiveDualEntryBot:
         market_analysis = self.enhanced_trend_detection()
         regime = market_analysis['regime']
         confidence = market_analysis['confidence']
-        print(f"[MARKET] Regime: {regime} (Confidence: {confidence:.2f})")
+        trend_direction = market_analysis['trend_direction']
+        print(f"[MARKET] Regime: {regime}, Direction: {trend_direction}, Confidence: {confidence:.2f}")
 
         size_multiplier = self.get_daily_size_multiplier()
         if size_multiplier == 0:
@@ -911,55 +1067,26 @@ class ImprovedLiveDualEntryBot:
             # =====================
             if triggered:
 
-                # MODIFY TREND MODE DECISION BASED ON CONFIDENCE
-                if regime == "STRONG_TREND" and confidence > 0.7:
-                    
-                    print("🎯 STRONG TREND DETECTED - Using trend-following strategy")
-                    await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
-                    print("[CANCEL] Semua limit order dibatalkan sebelum market entry.")
-                    await self._open_market_position(
-                        side, entry_price, tp_price, sl_price,
-                        w['atr'], w['volatility_mult'],size_multiplier
-                    )
-
-                elif regime == "SIDEWAYS" and confidence > 0.6:
-                   
-                    print("🔄 SIDEWAYS DETECTED - Using limit order strategy")
-                    await self._place_limit_order(
-                            side, entry_price, tp_price, sl_price,
-                            w['atr'], w['volatility_mult']
-                        )
-                else:
-                    # Mixed/Low confidence market
-                    print("⚠️  MIXED MARKET - Using adaptive cautious strategy")
-                    
-                    # Dapatkan kondisi spesifik market
-                    market_condition = self.analyze_mixed_market_conditions()
-                    confidence = market_analysis['confidence']
-                    
-                    # Tentukan strategy berdasarkan kondisi
-                    if market_condition == "VOLATILE_BREAKOUT" and confidence > 0.4:
-                        # Untuk volatile mixed market, gunakan market order dengan size kecil
-                        print("   ↳ Volatile conditions - using small market order")
-                        reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.4
-                        await self._open_market_position(
-                            side, entry_price, tp_price, sl_price,
-                            w['atr'], w['volatility_mult'], reduced_qty
-                        )
-                        
-                    elif market_condition == "RANGING" and confidence > 0.3:
-                        # Untuk ranging mixed market, gunakan limit order
-                        print("   ↳ Ranging conditions - using reduced limit order")
-                        reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.6
-                        await self._place_limit_order(
-                            side, entry_price, tp_price, sl_price,
-                            w['atr'], w['volatility_mult'], reduced_qty
-                        )
-                    
+                # Tentukan strategi berdasarkan regime dan trend direction
+                if regime == "STRONG_TREND":
+                    if trend_direction == "UP" and side == "LONG":
+                        await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "STRONG_UPTREND")
+                    elif trend_direction == "DOWN" and side == "SHORT":  
+                        await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "STRONG_DOWNTREND")
                     else:
-                        # Kondisi terlalu unclear - skip trade
-                        print("   ↳ Conditions too unclear - skipping trade")
-                        return
+                        print(f"🚫 Trend direction {trend_direction} tidak match dengan signal {side}")
+                        
+                elif regime == "SIDEWAYS":
+                    if side == "LONG":
+                        await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "SIDEWAYS")
+                    else:
+                        await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "SIDEWAYS")
+                        
+                else:  # MIXED
+                    if side == "LONG":
+                        await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
+                    else:
+                        await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
 
             else:
                 # Masih menunggu expire
