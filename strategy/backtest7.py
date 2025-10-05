@@ -42,9 +42,19 @@ def get_candles(symbol=SYMBOL, interval=TIMEFRAME, limit=200):
     df = pd.DataFrame(klines, columns=[
         'timestamp','open','high','low','close','volume','close_time',
         'qav','num_trades','taker_base','taker_quote','ignore'])
+    
+    # konversi timestamp ke datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df = df[['timestamp','open','high','low','close','volume']].astype(float)
+    
+    # pilih kolom yang diperlukan
+    df = df[['timestamp','open','high','low','close','volume']].copy()
+    
+    # ubah hanya kolom angka ke float
+    cols = ['open','high','low','close','volume']
+    df[cols] = df[cols].astype(float)
+    
     return df
+
 
 def detect_regime(df):
     # Hitung indikator
