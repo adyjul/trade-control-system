@@ -455,6 +455,8 @@ class ImprovedLiveDualEntryBot:
     # MODIFIED: Enhanced Start Method dengan Tick Stream
     async def start(self):
         self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
+        await self._load_symbol_precision()
+        await self.test_precision()
         try:
             await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=int(self.cfg.leverage))
             try:
@@ -1393,6 +1395,48 @@ class ImprovedLiveDualEntryBot:
             
         except Exception as e:
             print("[ERROR] place limit order:", e)
+
+    async def _load_symbol_precision(self):
+        """Load precision rules from Binance for AVAXUSDT"""
+        try:
+            exchange_info = await self.client.futures_exchange_info()
+            for symbol_info in exchange_info['symbols']:
+                if symbol_info['symbol'] == self.cfg.pair:
+                    # Get LOT_SIZE filter for quantity
+                    for f in symbol_info['filters']:
+                        if f['filterType'] == 'LOT_SIZE':
+                            step_size = float(f['stepSize'])
+                            # Determine quantity precision from stepSize
+                            if step_size == 1.0:
+                                self.cfg.qty_precision = 0
+                            elif step_size == 0.1:
+                                self.cfg.qty_precision = 1
+                            elif step_size == 0.01:
+                                self.cfg.qty_precision = 2
+                            elif step_size == 0.001:
+                                self.cfg.qty_precision = 3
+                            print(f"[PRECISION] Step size: {step_size}, Qty precision: {self.cfg.qty_precision}")
+                        
+                        if f['filterType'] == 'PRICE_FILTER':
+                            tick_size = float(f['tickSize'])
+                            # Determine price precision from tickSize
+                            if tick_size == 1.0:
+                                self.cfg.price_precision = 0
+                            elif tick_size == 0.1:
+                                self.cfg.price_precision = 1
+                            elif tick_size == 0.01:
+                                self.cfg.price_precision = 2
+                            elif tick_size == 0.001:
+                                self.cfg.price_precision = 3
+                            print(f"[PRECISION] Tick size: {tick_size}, Price precision: {self.cfg.price_precision}")
+                    
+                    print(f"[PRECISION] Final - Qty: {self.cfg.qty_precision}, Price: {self.cfg.price_precision}")
+                    break
+        except Exception as e:
+            print(f"[ERROR] Loading symbol precision: {e}")
+            # Fallback to default precision for AVAX
+            self.cfg.qty_precision = 1
+            self.cfg.price_precision = 3
     
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
         # qty = self._round_qty(1.0)  # 1 AVAX
@@ -1585,6 +1629,16 @@ class ImprovedLiveDualEntryBot:
                     print(f"[ORDER CANCELED] Timeout - {order['order_id']}")
                 except Exception as e:
                     print(f"[ERROR] canceling timed out order: {e}")
+    
+    async def test_precision(self):
+        test_price = 30.225123
+        test_qty = 1.234567
+        
+        rounded_price = self._round_price(test_price)
+        rounded_qty = self._round_qty(test_qty)
+        
+        print(f"[PRECISION TEST] Price: {test_price} -> {rounded_price}")
+        print(f"[PRECISION TEST] Qty: {test_qty} -> {rounded_qty}")
 
 # ---------------- Run ----------------  
 if __name__ == "__main__":
