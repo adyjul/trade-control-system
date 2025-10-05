@@ -269,6 +269,13 @@ class ImprovedLiveDualEntryBot:
                 (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
             )
 
+        daily_loss_limit = -1.0  # 0.5% max daily loss
+        if self.daily_realized_pct <= daily_loss_limit:
+            print(f"🚨 DAILY LOSS LIMIT REACHED: {self.daily_realized_pct:.2f}%")
+            print(f"🚨 STOPPING ALL TRADING FOR TODAY")
+            self.trade_locked = True
+            await self._force_close_all2()
+
             # print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
             #     f"(Equity: {current_equity:.2f} USDT)")
         else:
@@ -410,6 +417,81 @@ class ImprovedLiveDualEntryBot:
                 await self.check_order_timeouts()
             except Exception as e:
                 print("[ERROR] in periodic order checks:", e)
+
+    def calculate_proper_position_size(self, entry_price: float, sl_price: float) -> float:
+        """Calculate position size based on risk percentage"""
+        risk_amount = self.balance * self.cfg.risk_pct  # 0.8% risk per trade
+        price_risk = abs(entry_price - sl_price)
+        
+        if price_risk == 0:
+            return 0
+            
+        raw_qty = risk_amount / price_risk
+        return self._round_qty(raw_qty)
+    
+    def enhanced_trend_detection(self) -> Dict:
+        """Enhanced trend detection dengan confidence score"""
+        if len(self.candles) < 50:
+            return {"regime": "MIXED", "confidence": 0.5}
+        
+        close = self.candles['close'].values
+        high = self.candles['high'].values
+        low = self.candles['low'].values
+        volume = self.candles['volume'].values
+        
+        # Multiple indicators
+        adx = talib.ADX(high, low, close, timeperiod=14)[-1]
+        rsi = talib.RSI(close, timeperiod=14)[-1]
+        
+        # EMA Alignment check
+        ema_20 = talib.EMA(close, timeperiod=20)[-1]
+        ema_50 = talib.EMA(close, timeperiod=50)[-1]
+        ema_200 = talib.EMA(close, timeperiod=200)[-1]
+        
+        # Price structure analysis
+        recent_highs = high[-20:]
+        recent_lows = low[-20:]
+        
+        # Scoring system
+        trend_score = 0
+        
+        # ADX Strength
+        if adx > 25: trend_score += 2
+        elif adx > 20: trend_score += 1
+        
+        # EMA Alignment
+        if ema_20 > ema_50 > ema_200: trend_score += 1  # Uptrend alignment
+        elif ema_20 < ema_50 < ema_200: trend_score += 1  # Downtrend alignment
+        
+        # RSI Momentum
+        if rsi > 70 or rsi < 30: trend_score += 1
+        
+        # Price structure (simplified)
+        if (recent_highs[-1] > recent_highs[-5] and recent_lows[-1] > recent_lows[-5]):
+            trend_score += 1  # Higher highs & higher lows
+        elif (recent_highs[-1] < recent_highs[-5] and recent_lows[-1] < recent_lows[-5]):
+            trend_score += 1  # Lower highs & lower lows
+        
+        total_possible = 5
+        confidence = trend_score / total_possible
+        
+        if trend_score >= 4 and confidence > 0.7:
+            return {"regime": "STRONG_TREND", "confidence": confidence}
+        elif trend_score <= 2 and confidence < 0.4:
+            return {"regime": "SIDEWAYS", "confidence": confidence}
+        else:
+            return {"regime": "MIXED", "confidence": confidence}
+    
+    def get_daily_size_multiplier(self) -> float:
+        """Reduce position size as we approach daily target"""
+        if self.daily_realized_pct >= 1.0:
+            return 0.0  # Stop at 1%
+        elif self.daily_realized_pct >= 0.8:
+            return 0.3  # 30% size near target
+        elif self.daily_realized_pct >= 0.5:
+            return 0.6  # 60% size at halfway
+        else:
+            return 1.0  # Full size
     
     async def _close_position(self, side: str, exit_price: float, reason: str = "EMERGENCY"):
         if self._current_position is None:
@@ -669,12 +751,6 @@ class ImprovedLiveDualEntryBot:
                         await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
                         self.trade_locked = True
 
-                    # if True:
-                    #     print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
-                    #     # await self._force_close_all2()
-                    #     await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
-                    #     self.trade_locked = True
-
                     if self.trade_locked:
                         print("[LOCK] Trading locked for the rest of the day.")
                         return  # skip proses entry
@@ -701,14 +777,6 @@ class ImprovedLiveDualEntryBot:
                     await asyncio.sleep(1)
 
     def calc_profit_percent(self,entry_price: float, side: str, latest_price: float,leverage = 1) -> float:
-        """
-        Hitung profit % posisi berdasarkan entry dan harga terakhir.
-        - entry_price: harga entry posisi
-        - side: "LONG" atau "SHORT"
-        - latest_price: harga terakhir (close / bid / ask sesuai kebutuhan)
-
-        Return: profit dalam bentuk desimal (contoh 0.05 = +5%, -0.03 = -3%)
-        """
         if side.upper() == "LONG":
             raw =  (latest_price - entry_price) / entry_price
         elif side.upper() == "SHORT":
@@ -726,6 +794,29 @@ class ImprovedLiveDualEntryBot:
             self.candles = pd.concat([self.candles, row])
         if len(self.candles) > self.cfg.candles_buffer:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
+    
+    def analyze_mixed_market_conditions(self):
+        """Analyze specific conditions dalam mixed market"""
+        close = self.candles['close'].values
+        high = self.candles['high'].values
+        low = self.candles['low'].values
+        
+        # Volatility analysis
+        atr = talib.ATR(high, low, close, 14)[-1]
+        atr_percent = (atr / close[-1]) * 100
+        
+        # Volume analysis
+        volume_trend = self.analyze_volume_trend()
+        
+        # Price compression
+        bollinger_width = (talib.BBANDS(close, 20, 2, 2)[2][-1] - talib.BBANDS(close, 20, 2, 2)[0][-1]) / close[-1]
+        
+        if atr_percent > 0.8 and volume_trend == "expanding":
+            return "VOLATILE_BREAKOUT"
+        elif bollinger_width < 0.03 and atr_percent < 0.5:
+            return "RANGING"
+        else:
+            return "UNCLEAR"
 
     def _create_watch(self, atr_value):
         if self._current_position is not None:
@@ -752,6 +843,17 @@ class ImprovedLiveDualEntryBot:
 
     async def _process_watches(self, reverse=False):
         if self._current_position is not None:
+            return
+        
+        # ENHANCED MARKET DETECTION
+        market_analysis = self.enhanced_trend_detection()
+        regime = market_analysis['regime']
+        confidence = market_analysis['confidence']
+        print(f"[MARKET] Regime: {regime} (Confidence: {confidence:.2f})")
+
+        size_multiplier = self.get_daily_size_multiplier()
+        if size_multiplier == 0:
+            print("🎯 Daily target reached - skipping new entries")
             return
 
         latest_idx = len(self.candles) - 1
@@ -808,61 +910,55 @@ class ImprovedLiveDualEntryBot:
             # =====================
             if triggered:
 
-                # === MODE TREND → REVERSE ENTRY ===
-                if mode == "trend":
-                    orig_side = side
-                    side = "LONG" if side == "SHORT" else "SHORT"
-                    print(f"[TREND MODE] Reversed signal → {orig_side} → {side}")
-
-                    # Re-hitung TP/SL sesuai side BARU
-                    if side == "LONG":
-                        tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
-                        sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
-                    else:
-                        tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
-                        sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
-
-                    # Cancel semua limit order lama sebelum market entry
+                # MODIFY TREND MODE DECISION BASED ON CONFIDENCE
+                if regime == "STRONG_TREND" and confidence > 0.7:
+                    
+                    print("🎯 STRONG TREND DETECTED - Using trend-following strategy")
                     await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
                     print("[CANCEL] Semua limit order dibatalkan sebelum market entry.")
-
-                    # Gunakan market order langsung
                     await self._open_market_position(
                         side, entry_price, tp_price, sl_price,
                         w['atr'], w['volatility_mult']
                     )
 
-                else:
-                    # === MODE SIDEWAYS → NORMAL ===
-                    print(f"[TRIGGER] {w['trigger_time']} side={side} "
-                        f"entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
-
-                    if reverse:
-                        # Jika dipaksa reverse manual untuk sideways
-                        orig_side = side
-                        side = "LONG" if side == "SHORT" else "SHORT"
-                        print(f"[SIDEWAYS REVERSE] {orig_side} → {side}")
-
-                        # Hitung ulang TP/SL
-                        if side == "LONG":
-                            tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
-                            sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
-                        else:
-                            tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
-                            sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
-                        
-                        print(f"[SIDEWAYS REVERSE] {orig_side} → {side}" f"entry={entry_price:.3f} tp={tp_price:.3f} sl={sl_price:.3f}")
-
-                    if self.cfg.use_limit_orders:
-                        await self._place_limit_order(
+                elif regime == "SIDEWAYS" and confidence > 0.6:
+                   
+                    print("🔄 SIDEWAYS DETECTED - Using limit order strategy")
+                    await self._place_limit_order(
                             side, entry_price, tp_price, sl_price,
                             w['atr'], w['volatility_mult']
                         )
-                    else:
+                else:
+                    # Mixed/Low confidence market
+                    print("⚠️  MIXED MARKET - Using adaptive cautious strategy")
+                    
+                    # Dapatkan kondisi spesifik market
+                    market_condition = self.analyze_mixed_market_conditions()
+                    confidence = market_analysis['confidence']
+                    
+                    # Tentukan strategy berdasarkan kondisi
+                    if market_condition == "VOLATILE_BREAKOUT" and confidence > 0.4:
+                        # Untuk volatile mixed market, gunakan market order dengan size kecil
+                        print("   ↳ Volatile conditions - using small market order")
+                        reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.4
                         await self._open_market_position(
                             side, entry_price, tp_price, sl_price,
-                            w['atr'], w['volatility_mult']
+                            w['atr'], w['volatility_mult'], reduced_qty
                         )
+                        
+                    elif market_condition == "RANGING" and confidence > 0.3:
+                        # Untuk ranging mixed market, gunakan limit order
+                        print("   ↳ Ranging conditions - using reduced limit order")
+                        reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.6
+                        await self._place_limit_order(
+                            side, entry_price, tp_price, sl_price,
+                            w['atr'], w['volatility_mult'], reduced_qty
+                        )
+                    
+                    else:
+                        # Kondisi terlalu unclear - skip trade
+                        print("   ↳ Conditions too unclear - skipping trade")
+                        return
 
             else:
                 # Masih menunggu expire
@@ -872,7 +968,11 @@ class ImprovedLiveDualEntryBot:
         self.watches = new_watches
 
     async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
-        qty = self._round_qty(1.0)  # 1 AVAX
+        # qty = self._round_qty(1.0)  # 1 AVAX
+        qty = self.calculate_proper_position_size(entry_price, sl_price)
+        if qty <= 0:
+            print(f"[SKIP] Quantity too small: {qty}")
+            return
 
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
@@ -962,36 +1062,13 @@ class ImprovedLiveDualEntryBot:
         except Exception as e:
             print("[ERROR] place limit order:", e)
 
-        # try:
-        #     order = await self.client.futures_create_order(
-        #         symbol=self.cfg.pair,
-        #         side=SIDE_BUY if side == 'LONG' else SIDE_SELL,
-        #         type=ORDER_TYPE_LIMIT,
-        #         timeInForce=TIME_IN_FORCE_GTC,
-        #         quantity=qty,
-        #         price=order_price
-        #     )
-            
-        #     self.pending_orders.append({
-        #         "order_id": order['orderId'],
-        #         "side": side,
-        #         "entry_price": entry_price,
-        #         "order_price": order_price,
-        #         "qty": qty,
-        #         "tp_price": tp_price,
-        #         "sl_price": sl_price,
-        #         "atr": atr_value,
-        #         "vol_mult": vol_mult,
-        #         "place_time": datetime.now(timezone.utc),
-        #         "expiry_time": datetime.now(timezone.utc) + timedelta(minutes=5)
-        #     })
-        #     print(f"[LIMIT ORDER PLACED] {side} {qty} @ {order_price:.3f} (orderId: {order['orderId']})")
-        # except Exception as e:
-        #     print("[ERROR] place limit order:", e)
-
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
-        qty = self._round_qty(1.0)  # 1 AVAX
+        # qty = self._round_qty(1.0)  # 1 AVAX
+        qty = self.calculate_proper_position_size(entry_price, sl_price)
 
+        if qty <= 0:
+            print(f"[SKIP] Quantity too small: {qty}")
+            return
         # Round prices
         entry_price = self._round_price(entry_price)
         tp_price = self._round_price(tp_price)
