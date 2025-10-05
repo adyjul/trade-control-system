@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from binance.client import Client
-from binance.streams import BinanceSocketManager
+from binance import BinanceSocketManager
 import ta   # pip install ta
 import openpyxl
 import os
@@ -25,7 +25,7 @@ TIMEFRAME   = "5m"          # timeframe untuk indikator
 TP_PCT      = 0.005         # TP 0.5%
 SL_PCT      = 0.003         # SL 0.3%
 LOG_FILE    = "forward_test_tick.xlsx"
-USE_TESTNET = True
+USE_TESTNET = False
 
 ADX_TREND_THRESHOLD = 25
 ADX_SIDEWAYS_THRESHOLD = 20
@@ -33,6 +33,7 @@ BB_WIDTH_LOW  = 0.06
 BB_WIDTH_HIGH = 0.10
 
 client = Client(API_KEY, API_SECRET, testnet=USE_TESTNET)
+
 
 # ================= UTIL ===================
 def get_candles(limit=200):
