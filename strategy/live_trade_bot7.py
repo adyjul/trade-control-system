@@ -463,6 +463,32 @@ class ImprovedLiveDualEntryBot:
                 pass
         except Exception as e:
             print("[WARN] set leverage/margin:", e)
+
+        print("[INIT] Loading historical candle data...")
+        try:
+            # Load 100 candle historis (8+ jam data 5m)
+            historical_candles = await self.client.futures_klines(
+                symbol=self.cfg.pair,
+                interval=self.cfg.interval,
+                limit=100
+            )
+            
+            # Process dan simpan candle historis
+            for candle in historical_candles:
+                ts = pd.to_datetime(candle[0], unit='ms', utc=True)
+                o, h, l, c = map(float, candle[1:5])
+                v = float(candle[5])
+                self._append_candle(ts, o, h, l, c, v)
+            
+            print(f"[INIT] Successfully loaded {len(self.candles)} historical candles")
+            print(f"[INIT] Latest candle time: {self.candles.index[-1]}")
+
+            # Hitung indikator teknikal berdasarkan data historis
+        self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
+        print(f"[INIT] Initial volatility ratio: {self.volatility_ratio:.4f}")
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to load historical data: {e}")
         
         self.bm = BinanceSocketManager(self.client)
         print(f"[INFO] Starting enhanced live-dual-entry bot for {self.cfg.pair}")
@@ -908,107 +934,131 @@ class ImprovedLiveDualEntryBot:
         return current_ema_fast, current_ema_slow, current_ema_long
 
     def enhanced_trend_detection(self) -> Dict:
-        """Enhanced trend detection dengan DI dan EMA"""
-        if len(self.candles) < 50:
-            return {"regime": "MIXED", "confidence": 0.5, "trend_direction": "NEUTRAL"}
+        """Enhanced trend detection yang lebih akurat dan konsisten"""
+        if len(self.candles) < 30:  # Reduced from 50 to 30
+            return {"regime": "MIXED", "confidence": 0.3, "trend_direction": "NEUTRAL"}
         
         close = self.candles['close'].values
         high = self.candles['high'].values
         low = self.candles['low'].values
         
-        # Dapatkan semua indikator
-        plus_di, minus_di, adx = self.calculate_directional_indicators()
-        ema_fast, ema_slow, ema_long = self.calculate_ema_indicators()
-        rsi = talib.RSI(close, timeperiod=14)[-1]
+        # Dapatkan indikator dengan error handling
+        try:
+            plus_di, minus_di, adx = self.calculate_directional_indicators()
+            ema_fast, ema_slow, ema_long = self.calculate_ema_indicators()
+            rsi = talib.RSI(close, timeperiod=14)[-1] if len(close) >= 14 else 50
+        except Exception as e:
+            print(f"[WARN] Indicator calculation error: {e}")
+            return {"regime": "MIXED", "confidence": 0.3, "trend_direction": "NEUTRAL"}
         
-        # Price structure analysis
-        recent_highs = high[-20:]
-        recent_lows = low[-20:]
+        # Price structure analysis - lebih robust
+        if len(high) >= 10 and len(low) >= 10:
+            recent_highs = high[-10:]  # Reduced from 20 to 10
+            recent_lows = low[-10:]
+            higher_highs = all(recent_highs[i] > recent_highs[i-1] for i in range(1, len(recent_highs)))
+            lower_lows = all(recent_lows[i] < recent_lows[i-1] for i in range(1, len(recent_lows)))
+        else:
+            higher_highs = lower_lows = False
         
-        # Scoring system yang lebih detail
+        # Scoring system yang lebih realistis
         trend_score = 0
-        max_score = 10
+        max_score = 8  # Reduced from 10
         
         # 1. ADX Strength (2 points)
         if adx > 25: 
             trend_score += 2
-        elif adx > 20: 
+        elif adx > 18:  # Reduced threshold
             trend_score += 1
         
-        # 2. EMA Alignment (3 points)
-        if ema_fast > ema_slow > ema_long:
-            trend_score += 3  # Strong uptrend
-        elif ema_fast < ema_slow < ema_long:
-            trend_score += 3  # Strong downtrend  
-        elif ema_fast > ema_slow:
-            trend_score += 1  # Weak uptrend
-        elif ema_fast < ema_slow:
-            trend_score += 1  # Weak downtrend
+        # 2. EMA Alignment (2 points) - simplified
+        if ema_fast > ema_slow and ema_slow > ema_long:
+            trend_score += 2  # Strong uptrend
+        elif ema_fast < ema_slow and ema_slow < ema_long:
+            trend_score += 2  # Strong downtrend
+        elif (ema_fast > ema_slow) != (ema_slow > ema_long):  # Mixed alignment
+            trend_score += 0  # No points for mixed
         
         # 3. DI Alignment (2 points)
-        if plus_di > minus_di and plus_di > 25:
-            trend_score += 2  # Strong bullish
-        elif minus_di > plus_di and minus_di > 25:
-            trend_score += 2  # Strong bearish
-        elif plus_di > minus_di:
-            trend_score += 1  # Weak bullish
-        elif minus_di > plus_di:
-            trend_score += 1  # Weak bearish
-        
-        # 4. RSI Momentum (1 point)
-        if rsi > 70 or rsi < 30:
+        di_diff = plus_di - minus_di
+        if abs(di_diff) > 15:  # Significant DI difference
+            trend_score += 2
+        elif abs(di_diff) > 8:  # Moderate DI difference
             trend_score += 1
         
-        # 5. Price Structure (2 points)
-        if (recent_highs[-1] > recent_highs[-5] and recent_lows[-1] > recent_lows[-5]):
-            trend_score += 2  # Higher highs & higher lows
-        elif (recent_highs[-1] < recent_highs[-5] and recent_lows[-1] < recent_lows[-5]):
-            trend_score += 2  # Lower highs & lower lows
+        # 4. Price Structure (2 points)
+        if higher_highs and not lower_lows:
+            trend_score += 2  # Uptrend structure
+        elif lower_lows and not higher_highs:
+            trend_score += 2  # Downtrend structure
         
         confidence = trend_score / max_score
         
-        # Tentukan regime dan trend direction
-        if trend_score >= 7 and confidence > 0.7:
+        # Tentukan regime dengan threshold yang lebih reasonable
+        if trend_score >= 5 and confidence > 0.6:  # Reduced thresholds
             if plus_di > minus_di:
                 return {"regime": "STRONG_TREND", "confidence": confidence, "trend_direction": "UP"}
             else:
                 return {"regime": "STRONG_TREND", "confidence": confidence, "trend_direction": "DOWN"}
-        elif trend_score <= 3 and confidence < 0.4:
+        elif trend_score <= 2 and confidence < 0.3:  # Reduced thresholds
             return {"regime": "SIDEWAYS", "confidence": confidence, "trend_direction": "NEUTRAL"}
         else:
             return {"regime": "MIXED", "confidence": confidence, "trend_direction": "NEUTRAL"}
     
     def enhanced_sideways_detection(self) -> bool:
-        """Enhanced sideways detection dengan multiple confirmation"""
+        """Enhanced sideways detection dengan kondisi yang lebih realistis"""
         if len(self.candles) < 20:
             return False
         
-        close = self.candles['close'].values
-        high = self.candles['high'].values
-        low = self.candles['low'].values
-        
-        # 1. ADX rendah (di bawah 20)
-        plus_di, minus_di, adx = self.calculate_directional_indicators()
-        if adx > 20:
+        try:
+            close = self.candles['close'].values
+            high = self.candles['high'].values
+            low = self.candles['low'].values
+            
+            # 1. ADX rendah (di bawah 22 - increased threshold)
+            plus_di, minus_di, adx = self.calculate_directional_indicators()
+            if adx > 22:  # Increased from 20
+                return False
+            
+            # 2. EMA berdekatan (threshold increased)
+            ema_fast, ema_slow, _ = self.calculate_ema_indicators()
+            ema_diff_pct = abs(ema_fast - ema_slow) / close[-1]
+            if ema_diff_pct > 0.015:  # Increased from 0.01
+                return False
+            
+            # 3. Price range sempit (menggunakan ATR - threshold increased)
+            atr = talib.ATR(high, low, close, timeperiod=14)[-1]
+            atr_pct = atr / close[-1]
+            if atr_pct > 0.008:  # Increased from 0.005
+                return False
+            
+            # 4. RSI netral (tambahan kondisi baru)
+            rsi = talib.RSI(close, timeperiod=14)[-1] if len(close) >= 14 else 50
+            if rsi < 40 or rsi > 60:  # RSI di luar range netral
+                return False
+            
+            # Jika semua kondisi terpenuhi, maka sideways
+            print(f"[SIDEWAYS DETECTED] ADX:{adx:.1f}, EMA_diff:{ema_diff_pct:.3f}, ATR%:{atr_pct:.3f}, RSI:{rsi:.1f}")
+            return True
+            
+        except Exception as e:
+            print(f"[ERROR] Sideways detection: {e}")
+            return False
+    
+    def _validate_candle_data(self) -> bool:
+        """Validasi kualitas dan kelengkapan data candle"""
+        if len(self.candles) < 20:
+            print("[WARN] Not enough candle data for analysis")
             return False
         
-        # 2. EMA mendatar atau berdekatan
-        ema_fast, ema_slow, _ = self.calculate_ema_indicators()
-        ema_diff_pct = abs(ema_fast - ema_slow) / close[-1]
-        if ema_diff_pct > 0.01:  # EMA terpisah lebih dari 1%
+        # Cek ada NaN values
+        if self.candles.isnull().any().any():
+            print("[WARN] Candle data contains NaN values")
             return False
         
-        # 3. Price range sempit (menggunakan ATR)
-        atr = talib.ATR(high, low, close, timeperiod=14)[-1]
-        atr_pct = atr / close[-1]
-        if atr_pct > 0.005:  # ATR lebih dari 0.5%
-            return False
-        
-        # 4. Bollinger Bands squeeze
-        bb_upper = talib.BBANDS(close, timeperiod=20, nbdevup=2)[0][-1]
-        bb_lower = talib.BBANDS(close, timeperiod=20, nbdevdn=2)[2][-1]
-        bb_width = (bb_upper - bb_lower) / close[-1]
-        if bb_width > 0.03:  # Bollinger bandwidth lebih dari 3%
+        # Cek volume (jangan terlalu rendah)
+        recent_volume = self.candles['volume'].tail(5).mean()
+        if recent_volume < 1000:  # Minimum volume threshold
+            print(f"[WARN] Low volume: {recent_volume:.0f}")
             return False
         
         return True
@@ -1140,12 +1190,24 @@ class ImprovedLiveDualEntryBot:
     async def _process_watches(self, reverse=False):
         if self._current_position is not None:
             return
+
+         # VALIDASI DATA CANDLE SEBELUM ANALISIS
+        if not self._validate_candle_data():
+            print("[SKIP] Candle data validation failed - skipping analysis")
+            return
         
         # ENHANCED MARKET DETECTION
         market_analysis = self.enhanced_trend_detection()
         regime = market_analysis['regime']
         confidence = market_analysis['confidence']
         trend_direction = market_analysis['trend_direction']
+
+        is_sideways = self.enhanced_sideways_detection()
+        if is_sideways and regime != "SIDEWAYS":
+            print(f"[ADJUST] Overriding regime to SIDEWAYS based on detailed analysis")
+            regime = "SIDEWAYS"
+            confidence = 0.8
+
         print(f"[MARKET] Regime: {regime}, Direction: {trend_direction}, Confidence: {confidence:.2f}")
 
         size_multiplier = self.get_daily_size_multiplier()
