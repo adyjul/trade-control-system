@@ -1,25 +1,23 @@
-# live_trade_bot7_tick_enhanced.py
+# live_bot_dual_entry_liveclose_improved.py
 import asyncio
 import math
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Deque
-from collections import deque
+from typing import List, Dict, Optional
+
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from binance import AsyncClient, BinanceSocketManager
 from binance.enums import SIDE_BUY, SIDE_SELL, ORDER_TYPE_MARKET, ORDER_TYPE_LIMIT, TIME_IN_FORCE_GTC
 from dotenv import load_dotenv
-import talib
-
+import talib  # pastikan talib sudah terinstall
 load_dotenv()
 
-# ---------------- Enhanced Config ----------------  
+# ---------------- Config ----------------
 @dataclass
 class BotConfig:
-    # Existing config
     api_key: str = os.getenv('BINANCE_API_KEY')
     api_secret: str = os.getenv('BINANCE_API_SECRET')
     pair: str = "AVAXUSDT"
@@ -45,34 +43,31 @@ class BotConfig:
     adaptive_tp_sl: bool = True
 
     # AVAX-specific precision settings
-    qty_precision: int = 1
-    price_precision: int = 3
+    qty_precision: int = 1  # 1 decimal for AVAX
+    price_precision: int = 3  # 3 decimals for AVAX
     profit_pct_close_tp: float = 0.05
 
-    # Guard settings
-    max_hold_guard_sec = 600
-    guard_profit_trigger = 0.04
-    max_hold_guard_sec2 = 1200
-    guard_profit_trigger2 = 0.03
-    max_hold_guard_sec3 = 1800
+    # Guard settings tp 1
+    max_hold_guard_sec = 600        # 10 menit
+    guard_profit_trigger = 0.04 
+
+    # Guard settings tp 2
+    max_hold_guard_sec2 = 1200        # 20 menit
+    guard_profit_trigger2 = 0.03 
+
+    # Guard settings tp 3
+    max_hold_guard_sec3 = 1800        # 30 menit
     guard_profit_trigger3 = 0.02
-    max_hold_guard_sl_sec = 1800
+
+    # Guard settings sl
+    max_hold_guard_sl_sec = 1800     # 30 menit
     guard_loss_trigger = -0.04
 
-    daily_profit_lock_pct = 1.0
-    daily_reset_hour = 7
+    daily_profit_lock_pct = 1.0      # misal 1%
+    daily_reset_hour = 7 
 
-    # NEW: Tick trading settings
-    enable_tick_trading: bool = True  # Enable/disable tick trading
-    tick_buffer_size: int = 50  # Store last 50 ticks for analysis
-    min_tick_volume: float = 1000.0  # Minimum volume to consider tick valid
-    tick_momentum_period: int = 10  # Period for tick momentum calculation
-    quick_tp_pct: float = 0.005  # 0.5% quick TP for scalping
-    quick_sl_pct: float = 0.003  # 0.3% quick SL for scalping
-    max_scalp_duration: int = 300  # Max 5 minutes per scalp trade
-    tick_volume_threshold: float = 2.0  # Volume multiplier for significant ticks
 
-# ---------------- Excel Logger (Tetap Sama) ----------------
+# ---------------- Excel Logger ----------------
 def init_excel(path: str):
     if not os.path.exists(path):
         wb = Workbook()
@@ -81,7 +76,7 @@ def init_excel(path: str):
         ws.append([
             "pair", "entry_time", "side", "entry_price", "qty", "tp_price", "sl_price",
             "exit_time", "exit_price", "pnl", "fees", "exit_reason", "balance_after",
-            "atr_value", "volatility_ratio", "trade_type"  # NEW: trade_type column
+            "atr_value", "volatility_ratio"
         ])
         wb.save(path)
 
@@ -92,7 +87,8 @@ def append_trade_excel(path: str, row: List):
     ws.append(clean_row)
     wb.save(path)
 
-# ---------------- Technical Helpers (Tetap Sama) ----------------
+
+# ---------------- Technical helpers ----------------
 def compute_atr_from_df(df: pd.DataFrame, period: int):
     high_low = df['high'] - df['low']
     high_close = (df['high'] - df['close'].shift(1)).abs()
@@ -115,6 +111,29 @@ def compute_qty_by_risk(balance: float, risk_pct: float, entry_price: float, sl_
     qty = risk_amount / risk_per_unit
     return qty
 
+
+def calculate_order_quality(self, order: Dict) -> float:
+    """Calculate a quality score for order prioritization"""
+    # Factors to consider:
+    # 1. Distance from current price (closer is better)
+    # 2. Volatility multiplier (higher volatility might be better for scalping)
+    # 3. Time since signal (newer signals might be better)
+    
+    current_price = self.candles['close'].iloc[-1] if not self.candles.empty else 0
+    price_distance = abs(order['entry_price'] - current_price) / current_price if current_price else 1
+    
+    # Lower distance = higher quality
+    distance_score = 1 - min(price_distance, 0.1) * 10  # Normalize to 0-1 range
+    
+    # Higher volatility multiplier = higher quality (for aggressive trading)
+    volatility_score = order.get('vol_mult', 1.0)
+    
+    # Newer orders are generally better
+    time_score = 1.0  # Can be based on order time if needed
+    
+    return distance_score * 0.5 + volatility_score * 0.3 + time_score * 0.2
+
+
 async def round_qty_to_step(client: AsyncClient, symbol: str, raw_qty: float):
     info = await client.futures_exchange_info()
     stepSize = None
@@ -133,505 +152,71 @@ async def round_qty_to_step(client: AsyncClient, symbol: str, raw_qty: float):
         return 0.0
     return float(f"{rounded:.8f}")
 
-# ---------------- Enhanced Live Bot dengan Tick Trading ----------------
+# ---------------- Live Bot ----------------
 class ImprovedLiveDualEntryBot:
     def __init__(self, cfg: BotConfig):
         self.cfg = cfg
         self.balance = cfg.initial_balance
         self.candles = pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume'])
-        
-        # Existing attributes
         self._current_position: Optional[Dict] = None
         self.watches: List[Dict] = []
         self.pending_orders: List[Dict] = []
-        self.active_orders: List[Dict] = []
+        init_excel(self.cfg.logfile)
+        self.client: Optional[AsyncClient] = None
+        self.bm: Optional[BinanceSocketManager] = None
+        self.volatility_ratio = 0.0
+        self.pending_orders: List[Dict] = []  # Sudah ada
+        self.active_orders: List[Dict] = []   # Order yang sudah aktif tapi belum ditutup
+        self.order_timeout = 600  # 5 menit timeout untuk pending orders
         self._current_signal_side = None
         self.daily_start_equity = None
         self.daily_realized_pct = 0.0
         self.trade_locked = False
-        self.volatility_ratio = 0.0
-        self.order_timeout = 600
         
-        # NEW: Tick trading attributes
-        self.tick_prices: Deque[float] = deque(maxlen=cfg.tick_buffer_size)
-        self.tick_volumes: Deque[float] = deque(maxlen=cfg.tick_buffer_size)
-        self.tick_timestamps: Deque[datetime] = deque(maxlen=cfg.tick_buffer_size)
-        self.last_tick_price = 0.0
-        self.last_tick_time = None
-        self.tick_analysis_ready = False
-        
-        init_excel(self.cfg.logfile)
-        self.client: Optional[AsyncClient] = None
-        self.bm: Optional[BinanceSocketManager] = None
-
-    # NEW: Tick Analysis Methods
-    def _calculate_tick_momentum(self) -> float:
-        """Calculate momentum from recent ticks"""
-        if len(self.tick_prices) < self.cfg.tick_momentum_period:
-            return 0.0
-        
-        recent_prices = list(self.tick_prices)
-        if len(recent_prices) < 2:
-            return 0.0
-            
-        price_change = (recent_prices[-1] - recent_prices[0]) / recent_prices[0]
-        return price_change
-
-    def _calculate_tick_volatility(self) -> float:
-        """Calculate volatility from recent ticks"""
-        if len(self.tick_prices) < 10:
-            return 0.0
-        
-        returns = []
-        for i in range(1, len(self.tick_prices)):
-            if self.tick_prices[i-1] > 0:
-                ret = (self.tick_prices[i] - self.tick_prices[i-1]) / self.tick_prices[i-1]
-                returns.append(abs(ret))
-        
-        return np.mean(returns) if returns else 0.0
-
-    def _detect_tick_volume_spike(self) -> bool:
-        """Detect significant volume spikes in tick data"""
-        if len(self.tick_volumes) < 10:
-            return False
-        
-        recent_volumes = list(self.tick_volumes)
-        avg_volume = np.mean(recent_volumes[:-3])  # Average excluding last 3 ticks
-        current_volume = recent_volumes[-1] if recent_volumes else 0
-        
-        return current_volume > avg_volume * self.cfg.tick_volume_threshold
-
-    def _analyze_tick_sentiment(self) -> Dict[str, float]:
-        """Analyze market sentiment from tick data"""
-        sentiment = {
-            "momentum": 0.0,
-            "volatility": 0.0,
-            "volume_spike": False,
-            "trend_strength": 0.0
-        }
-        
-        if len(self.tick_prices) >= 10:
-            sentiment["momentum"] = self._calculate_tick_momentum()
-            sentiment["volatility"] = self._calculate_tick_volatility()
-            sentiment["volume_spike"] = self._detect_tick_volume_spike()
-            
-            # Simple trend strength (price consistency in direction)
-            if len(self.tick_prices) >= 5:
-                recent_changes = [self.tick_prices[i] - self.tick_prices[i-1] 
-                                for i in range(1, len(self.tick_prices))]
-                positive_changes = sum(1 for change in recent_changes if change > 0)
-                sentiment["trend_strength"] = abs(positive_changes / len(recent_changes) - 0.5) * 2
-        
-        return sentiment
-
-    # NEW: Tick-based Entry Conditions
-    def _check_tick_entry_signal(self, current_price: float, is_buyer_maker: bool) -> Optional[str]:
-        """Check for entry signals based on tick data"""
-        if not self.tick_analysis_ready or self._current_position is not None:
-            return None
-        
-        sentiment = self._analyze_tick_sentiment()
-        
-        # Strong bullish signal: positive momentum + high volume + low volatility
-        bullish_condition = (
-            sentiment["momentum"] > 0.001 and 
-            sentiment["volume_spike"] and 
-            sentiment["volatility"] < 0.002 and
-            not is_buyer_maker  # Buyer is aggressive
-        )
-        
-        # Strong bearish signal: negative momentum + high volume + low volatility  
-        bearish_condition = (
-            sentiment["momentum"] < -0.001 and
-            sentiment["volume_spike"] and
-            sentiment["volatility"] < 0.002 and
-            is_buyer_maker  # Seller is aggressive
-        )
-        
-        if bullish_condition:
-            return "LONG"
-        elif bearish_condition:
-            return "SHORT"
-        
-        return None
-
-    # NEW: Quick Scalping Methods
-    async def _execute_quick_scalp(self, side: str, current_price: float):
-        """Execute quick scalp trade based on tick signals"""
-        if self._current_position is not None:
-            return
-            
-        # Calculate smaller position size for scalping
-        base_qty = self.calculate_proper_position_size(
-            current_price, 
-            current_price * (0.99 if side == "LONG" else 1.01)  # Conservative SL for calculation
-        )
-        scalp_qty = base_qty * 0.5  # 50% of normal size for scalping
-        
-        if scalp_qty <= 0:
-            return
-            
-        # Set tight TP/SL for scalping
-        if side == "LONG":
-            tp_price = current_price * (1 + self.cfg.quick_tp_pct)
-            sl_price = current_price * (1 - self.cfg.quick_sl_pct)
-        else:
-            tp_price = current_price * (1 - self.cfg.quick_tp_pct)
-            sl_price = current_price * (1 + self.cfg.quick_sl_pct)
-            
-        # Round prices
-        current_price = self._round_price(current_price)
-        tp_price = self._round_price(tp_price)
-        sl_price = self._round_price(sl_price)
-        scalp_qty = self._round_qty(scalp_qty)
-        
-        try:
-            # Use market order for fastest execution
-            order = await self.client.futures_create_order(
-                symbol=self.cfg.pair,
-                side=SIDE_BUY if side == 'LONG' else SIDE_SELL,
-                type=ORDER_TYPE_MARKET,
-                quantity=scalp_qty
-            )
-            
-            # Get execution price from order fills
-            exec_price = current_price
-            if 'fills' in order and order['fills']:
-                filled_prices = [float(fill['price']) for fill in order['fills']]
-                exec_price = sum(filled_prices) / len(filled_prices)
-            
-            exec_price = self._round_price(exec_price)
-            
-            # Update position
-            self._current_position = {
-                "side": side,
-                "entry_price": exec_price,
-                "qty": scalp_qty,
-                "tp_price": tp_price,
-                "sl_price": sl_price,
-                "entry_time": datetime.now(timezone.utc),
-                "atr": 0.0,  # Not used for scalping
-                "vol_mult": 1.0,
-                "is_scalp": True,  # Mark as scalp trade
-                "scalp_start_time": datetime.now(timezone.utc)
-            }
-            
-            print(f"🎯 [QUICK SCALP] {side} {scalp_qty:.2f} @ {exec_price:.3f} | TP: {tp_price:.3f} | SL: {sl_price:.3f}")
-            
-            # Log scalp trade
-            append_trade_excel(self.cfg.logfile, [
-                self.cfg.pair,
-                datetime.now(timezone.utc),
-                side,
-                exec_price,
-                scalp_qty,
-                tp_price,
-                sl_price,
-                None,  # exit_time
-                None,  # exit_price
-                0,  # pnl
-                0,  # fees
-                "SCALP_ENTRY",
-                self.balance,
-                0.0,  # atr_value
-                0.0,  # volatility_ratio
-                "SCALP"  # trade_type
-            ])
-            
-        except Exception as e:
-            print(f"[ERROR] Quick scalp execution: {e}")
-
-    # NEW: Scalp Position Management
-    async def _manage_scalp_position(self, current_price: float):
-        """Manage quick scalp positions with tight TP/SL"""
-        if self._current_position is None or not self._current_position.get('is_scalp', False):
-            return
-            
-        pos = self._current_position
-        current_time = datetime.now(timezone.utc)
-        hold_duration = (current_time - pos['scalp_start_time']).total_seconds()
-        
-        # Force close if max duration reached
-        if hold_duration >= self.cfg.max_scalp_duration:
-            await self._close_position(pos['side'], current_price, "SCALP_TIMEOUT")
-            return
-            
-        # Check TP/SL
-        if pos['side'] == 'LONG':
-            if current_price >= pos['tp_price']:
-                await self._close_position('LONG', current_price, "SCALP_TP")
-            elif current_price <= pos['sl_price']:
-                await self._close_position('LONG', current_price, "SCALP_SL")
-        else:  # SHORT
-            if current_price <= pos['tp_price']:
-                await self._close_position('SHORT', current_price, "SCALP_TP")
-            elif current_price >= pos['sl_price']:
-                await self._close_position('SHORT', current_price, "SCALP_SL")
-
-    # MODIFIED: Enhanced Emergency Exit Check dengan Tick Support
-    async def _emergency_exit_check(self, price: float):
-        """Enhanced emergency exit with scalp position support"""
-        if self._current_position is None:
-            return
-
-        pos = self._current_position
-        
-        # Handle scalp positions separately
-        if pos.get('is_scalp', False):
-            await self._manage_scalp_position(price)
-            return
-
-        # Existing emergency exit logic for normal positions
-        entry_price = pos['entry_price']
-        tp = pos['tp_price']
-        sl = pos['sl_price']
-        entry_time = pos['entry_time']
-        side = pos['side']
-
-        elapsed_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
-        profit_pct = self.calc_profit_percent(entry_price, side, price, leverage=self.cfg.leverage)
-        
-        # Existing guard exit conditions...
-        if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
-            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
-            await self._close_position(side, price, "GUARD_PROFIT_LOCK")
-            return
-
-        if elapsed_sec >= self.cfg.max_hold_guard_sec2 and profit_pct >= self.cfg.guard_profit_trigger2:
-            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
-            await self._close_position(side, price, "GUARD_PROFIT_LOCK")
-            return
-        
-        if elapsed_sec >= self.cfg.max_hold_guard_sec3 and profit_pct >= self.cfg.guard_profit_trigger3:
-            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
-            await self._close_position(side, price, "GUARD_PROFIT_LOCK")
-            return
-
-        if elapsed_sec >= self.cfg.max_hold_guard_sl_sec and profit_pct <= self.cfg.guard_loss_trigger:
-            print(f"[GUARD EXIT] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
-            await self._close_position(side, price, "GUARD_STOP_LOST")
-            return
-
-        # Standard TP/SL check
-        if side == "LONG":
-            if price <= sl:
-                await self._close_position("LONG", price, "EMERGENCY_SL")
-            elif price >= tp:
-                await self._close_position("LONG", price, "EMERGENCY_TP")
-        elif side == "SHORT":
-            if price >= sl:
-                await self._close_position("SHORT", price, "EMERGENCY_SL")
-            elif price <= tp:
-                await self._close_position("SHORT", price, "EMERGENCY_TP")
-
-    # NEW: Process Tick Data
-    async def _process_tick_data(self, price: float, volume: float, is_buyer_maker: bool, timestamp: datetime):
-        """Process incoming tick data for quick trading decisions"""
-        
-        # Store tick data
-        self.tick_prices.append(price)
-        self.tick_volumes.append(volume)
-        self.tick_timestamps.append(timestamp)
-        self.last_tick_price = price
-        self.last_tick_time = timestamp
-        
-        # Mark analysis ready after collecting enough data
-        if len(self.tick_prices) >= 10 and not self.tick_analysis_ready:
-            self.tick_analysis_ready = True
-            print("[TICK] Tick analysis ready - monitoring for quick entries")
-        
-        # Process tick data only if enabled and ready
-        if self.cfg.enable_tick_trading and self.tick_analysis_ready:
-            # Check for quick scalp entries
-            if self._current_position is None and not self.trade_locked:
-                tick_signal = self._check_tick_entry_signal(price, is_buyer_maker)
-                if tick_signal:
-                    print(f"⚡ [TICK SIGNAL] {tick_signal} detected at {price:.3f}")
-                    await self._execute_quick_scalp(tick_signal, price)
-            
-            # Manage existing positions with tick data
-            await self._emergency_exit_check(price)
-
-    # MODIFIED: Enhanced Start Method dengan Tick Stream
-    async def start(self):
-        self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
-        try:
-            await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=int(self.cfg.leverage))
-            try:
-                await self.client.futures_change_margin_type(symbol=self.cfg.pair, marginType=self.cfg.margin_type)
-            except Exception:
-                pass
-        except Exception as e:
-            print("[WARN] set leverage/margin:", e)
-        
-        self.bm = BinanceSocketManager(self.client)
-        print(f"[INFO] Starting enhanced live-dual-entry bot for {self.cfg.pair}")
-        print(f"[TICK] Tick trading: {'ENABLED' if self.cfg.enable_tick_trading else 'DISABLED'}")
-        
-        # Start periodic tasks
-        asyncio.create_task(self.periodic_order_checks())
-        
-        # Run both kline and tick streams concurrently
-        await asyncio.gather(
-            self._run_kline_stream(),
-            self._run_tick_stream()
-        )
-
-    # NEW: Tick Stream Handler
-    async def _run_tick_stream(self):
-        """Handle tick data stream"""
-        print("[TICK] Starting tick data stream...")
-        async with self.bm.trade_socket(self.cfg.pair) as stream:
-            while True:
-                try:
-                    res = await stream.recv()
-                    
-                    # Extract tick data
-                    price = float(res['p'])
-                    volume = float(res['q'])
-                    is_buyer_maker = res['m']  # True if seller is aggressive (bearish)
-                    timestamp = pd.to_datetime(res['T'], unit='ms', utc=True)
-                    
-                    # Process tick data
-                    await self._process_tick_data(price, volume, is_buyer_maker, timestamp)
-                    
-                except Exception as e:
-                    print(f"[ERROR] tick stream: {e}")
-                    await asyncio.sleep(1)
-
-    # NEW: Kline Stream Handler (dipisah dari main loop)
-    async def _run_kline_stream(self):
-        """Handle kline data stream for candle-based analysis"""
-        print("[CANDLE] Starting kline data stream...")
-        async with self.bm.kline_futures_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
-            while True:
-                try:
-                    res = await stream.recv()
-                    k = res.get('k', {})
-                    is_closed = k.get('x', False)
-                    ts = pd.to_datetime(k.get('t'), unit='ms', utc=True)
-                    o, h, l, c, v = map(float, (k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')))
-                    
-                    self._append_candle(ts, o, h, l, c, v)
-                    self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
-
-                    await self._check_daily_reset()
-                    await self._update_daily_profit()
-
-                    if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
-                        print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → locking trading.")
-                        await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
-                        self.trade_locked = True
-
-                    if is_closed:
-                        atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
-                        current_atr = atr_series.iat[-1] if len(atr_series) >= self.cfg.atr_period else np.nan
-
-                        if not np.isnan(current_atr) and current_atr >= self.cfg.min_atr:
-                            self._create_watch(current_atr)
-
-                        await self._process_watches()
-                        await self._process_current_position()
-                        await self._cancel_misaligned_orders()
-                        await self._check_pending_orders()
-
-                except Exception as e:
-                    print(f"[ERROR] kline stream: {e}")
-                    await asyncio.sleep(1)
-
-    def calculate_order_quality(self, order: Dict) -> float:
-        """Calculate a quality score for order prioritization"""
-        # Factors to consider:
-        # 1. Distance from current price (closer is better)
-        # 2. Volatility multiplier (higher volatility might be better for scalping)
-        # 3. Time since signal (newer signals might be better)
-        
-        current_price = self.candles['close'].iloc[-1] if not self.candles.empty else 0
-        price_distance = abs(order['entry_price'] - current_price) / current_price if current_price else 1
-        
-        # Lower distance = higher quality
-        distance_score = 1 - min(price_distance, 0.1) * 10  # Normalize to 0-1 range
-        
-        # Higher volatility multiplier = higher quality (for aggressive trading)
-        volatility_score = order.get('vol_mult', 1.0)
-        
-        # Newer orders are generally better
-        time_score = 1.0  # Can be based on order time if needed
-        
-        return distance_score * 0.5 + volatility_score * 0.3 + time_score * 0.2
-
-    # MODIFIED: Enhanced Position Close dengan Trade Type Tracking
-    async def _close_position(self, side: str, exit_price: float, reason: str = "EMERGENCY"):
-        if self._current_position is None:
-            return
-        
-        pos = self._current_position
-        try:
-            close_order = await self.client.futures_create_order(
-                symbol=self.cfg.pair,
-                side=SIDE_SELL if side == 'LONG' else SIDE_BUY,
-                type=ORDER_TYPE_MARKET,
-                reduceOnly=True,
-                quantity=pos['qty']
-            )
-
-            # Calculate execution price
-            exit_exec_price = 0.0
-            exit_qty = 0.0
-            if 'fills' in close_order and close_order['fills']:
-                for fill in close_order['fills']:
-                    exit_qty += float(fill['qty'])
-                    exit_exec_price += float(fill['price']) * float(fill['qty'])
-                exit_exec_price = exit_exec_price / exit_qty if exit_qty > 0 else exit_price
-            else:
-                exit_exec_price = exit_price
-
-            # Apply slippage
-            if pos['side'] == 'LONG':
-                exit_exec_price *= 1 - self.cfg.slippage_pct
-            else:
-                exit_exec_price *= 1 + self.cfg.slippage_pct
-
-            exit_exec_price = self._round_price(exit_exec_price)
-
-            # Calculate PnL
-            raw_pnl = pos['qty'] * ((exit_exec_price - pos['entry_price']) if pos['side'] == 'LONG' else (pos['entry_price'] - exit_exec_price))
-            fees = self.cfg.fee_rate * self.balance
-            net_pnl = raw_pnl - fees
-            self.balance += net_pnl
-
-            # Determine trade type for logging
-            trade_type = "SCALP" if pos.get('is_scalp', False) else "SWING"
-
-            # Log to Excel with trade type
-            append_trade_excel(self.cfg.logfile, [
-                self.cfg.pair,
-                pos['entry_time'],
-                pos['side'],
-                pos['entry_price'],
-                pos['qty'],
-                pos.get('tp_price', 0),
-                pos.get('sl_price', 0),
-                datetime.now(timezone.utc),
-                exit_exec_price,
-                net_pnl,
-                fees,
-                reason,
-                self.balance,
-                pos.get('atr', 0),
-                pos.get('vol_mult', 1.0),
-                trade_type  # NEW: Add trade type
-            ])
-
-            print(f"[POSITION CLOSED] {pos['side']} {trade_type} exit={exit_exec_price:.3f} reason={reason} pnl={net_pnl:.6f} balance={self.balance:.4f}")
-            
-            # Cleanup
-            self._current_position = None
-            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
-            
-        except Exception as e:
-            print("[ERROR] closing position:", e)
     
+    async def check_order_timeouts(self):
+        """Cancel orders that have been pending too long"""
+        now = datetime.now(timezone.utc)
+        for order in self.pending_orders[:]:
+            if (now - order['place_time']).total_seconds() > self.order_timeout:
+                try:
+                    await self.client.futures_cancel_order(
+                        symbol=self.cfg.pair,
+                        orderId=order['order_id']
+                    )
+                    self.pending_orders.remove(order)
+                    # self.watches = [w for w in self.watches if w.get('order_id') != order['order_id']]
+                    print(f"[ORDER CANCELED] Timeout - {order['order_id']}")
+                except Exception as e:
+                    print(f"[ERROR] canceling timed out order: {e}")
+
+    def compute_ema(series: pd.Series, period: int):
+        return series.ewm(span=period, adjust=False).mean()
+
+    def compute_adx(df: pd.DataFrame, period: int = 14):
+        high = df['high']
+        low = df['low']
+        close = df['close']
+
+        prev_close = close.shift(1)
+        tr1 = high - low
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+        up_move = high.diff()
+        down_move = -low.diff()
+        plus_dm = ((up_move > down_move) & (up_move > 0)) * up_move
+        minus_dm = ((down_move > up_move) & (down_move > 0)) * down_move
+
+        atr = tr.rolling(window=period).mean()
+        plus_di = 100 * (plus_dm.rolling(window=period).sum() / atr)
+        minus_di = 100 * (minus_dm.rolling(window=period).sum() / atr)
+
+        dx = ((plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)) * 100
+        adx = dx.rolling(window=period).mean()
+        return adx.fillna(0)
+
     async def manage_order_conflicts(self, new_order: Dict):
         """Handle multiple order requests based on priority"""
         # Strategy 1: Cancel oldest order if new order has better potential
@@ -696,7 +281,26 @@ class ImprovedLiveDualEntryBot:
 
         else:
             print("[WARN] USDT balance tidak ditemukan")
-    
+            
+    async def _force_close_all(self):
+        print("[LOCK] Closing all open positions...")
+        positions = await self.client.futures_position_information()
+        for pos in positions:
+            qty = float(pos['positionAmt'])
+            symbol = pos['symbol']
+            if qty != 0:
+                side = 'SELL' if qty > 0 else 'BUY'
+                await self.client.futures_create_order(
+                    symbol=symbol,
+                    side=side,
+                    type='MARKET',
+                    quantity=abs(qty)
+                )
+                print(f"[FORCE CLOSE] {symbol} {side} {abs(qty)} closed.")
+
+        print("[LOCK] Canceling all pending orders...")
+        await self.client.futures_cancel_all_open_orders()
+
     async def _force_close_all2(self):
         print("[LOCK] Closing all open positions...")
         
@@ -725,6 +329,27 @@ class ImprovedLiveDualEntryBot:
                 print(f"[LOCK] All pending orders for {sym} canceled.")
             except Exception as e:
                 print(f"[LOCK][WARN] Gagal cancel {sym}: {e}")
+
+    def calculate_order_quality(self, order: Dict) -> float:
+        """Calculate a quality score for order prioritization"""
+        # Factors to consider:
+        # 1. Distance from current price (closer is better)
+        # 2. Volatility multiplier (higher volatility might be better for scalping)
+        # 3. Time since signal (newer signals might be better)
+        
+        current_price = self.candles['close'].iloc[-1] if not self.candles.empty else 0
+        price_distance = abs(order['entry_price'] - current_price) / current_price if current_price else 1
+        
+        # Lower distance = higher quality
+        distance_score = 1 - min(price_distance, 0.1) * 10  # Normalize to 0-1 range
+        
+        # Higher volatility multiplier = higher quality (for aggressive trading)
+        volatility_score = order.get('vol_mult', 1.0)
+        
+        # Newer orders are generally better
+        time_score = 1.0  # Can be based on order time if needed
+        
+        return distance_score * 0.5 + volatility_score * 0.3 + time_score * 0.2
     
     async def check_order_status(self):
         """Periodically check status of all pending orders"""
@@ -776,7 +401,7 @@ class ImprovedLiveDualEntryBot:
                     
             except Exception as e:
                 print(f"[ERROR] checking order status: {e}")
-    
+
     def _round_price(self, price: float) -> float:
         """Round price to configured precision"""
         return round(price, self.cfg.price_precision)
@@ -784,7 +409,7 @@ class ImprovedLiveDualEntryBot:
     def _round_qty(self, qty: float) -> float:
         """Round quantity to configured precision"""
         return round(qty, self.cfg.qty_precision)
-    
+
     async def periodic_order_checks(self):
         """Run order checks periodically"""
         while True:
@@ -794,7 +419,7 @@ class ImprovedLiveDualEntryBot:
                 await self.check_order_timeouts()
             except Exception as e:
                 print("[ERROR] in periodic order checks:", e)
-    
+
     def calculate_proper_position_size(self, entry_price: float, sl_price: float) -> float:
         """Calculate position size based on risk percentage"""
         risk_amount = self.balance * self.cfg.risk_pct  # 0.8% risk per trade
@@ -863,7 +488,7 @@ class ImprovedLiveDualEntryBot:
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
             )
-
+    
     def calculate_directional_indicators(self):
         """Hitung Plus DI dan Minus DI menggunakan TA-Lib"""
         if len(self.candles) < 15:
@@ -906,7 +531,7 @@ class ImprovedLiveDualEntryBot:
         current_ema_long = ema_long[-1] if len(ema_long) > 0 else 0
         
         return current_ema_fast, current_ema_slow, current_ema_long
-
+    
     def enhanced_trend_detection(self) -> Dict:
         """Enhanced trend detection dengan DI dan EMA"""
         if len(self.candles) < 50:
@@ -978,6 +603,7 @@ class ImprovedLiveDualEntryBot:
         else:
             return {"regime": "MIXED", "confidence": confidence, "trend_direction": "NEUTRAL"}
     
+
     def enhanced_sideways_detection(self) -> bool:
         """Enhanced sideways detection dengan multiple confirmation"""
         if len(self.candles) < 20:
@@ -1024,6 +650,74 @@ class ImprovedLiveDualEntryBot:
         else:
             return 1.0  # Full size
     
+    async def _close_position(self, side: str, exit_price: float, reason: str = "EMERGENCY"):
+        if self._current_position is None:
+            return
+        
+        pos = self._current_position
+        try:
+            # market close order
+            close_order = await self.client.futures_create_order(
+                symbol=self.cfg.pair,
+                side=SIDE_SELL if side == 'LONG' else SIDE_BUY,
+                type=ORDER_TYPE_MARKET,
+                reduceOnly=True,
+                quantity=pos['qty']
+            )
+
+            # Hitung harga rata-rata eksekusi
+            exit_exec_price = 0.0
+            exit_qty = 0.0
+            if 'fills' in close_order and close_order['fills']:
+                for fill in close_order['fills']:
+                    exit_qty += float(fill['qty'])
+                    exit_exec_price += float(fill['price']) * float(fill['qty'])
+                exit_exec_price = exit_exec_price / exit_qty if exit_qty > 0 else exit_price
+            else:
+                exit_exec_price = exit_price
+
+            # Sesuaikan slippage
+            if pos['side'] == 'LONG':
+                exit_exec_price *= 1 - self.cfg.slippage_pct
+            else:
+                exit_exec_price *= 1 + self.cfg.slippage_pct
+
+            exit_exec_price = self._round_price(exit_exec_price)
+
+            # Hitung PnL
+            raw_pnl = pos['qty'] * ((exit_exec_price - pos['entry_price']) if pos['side'] == 'LONG' else (pos['entry_price'] - exit_exec_price))
+            fees = self.cfg.fee_rate * self.balance
+            net_pnl = raw_pnl - fees
+            self.balance += net_pnl
+
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            # self.watches.clear()
+
+            # Log ke Excel
+            append_trade_excel(self.cfg.logfile, [
+                self.cfg.pair,
+                pos['entry_time'],
+                pos['side'],
+                pos['entry_price'],
+                pos['qty'],
+                pos['tp_price'],
+                pos['sl_price'],
+                datetime.now(timezone.utc),
+                exit_exec_price,
+                net_pnl,
+                fees,
+                reason,
+                self.balance,
+                pos['atr'],
+                pos['vol_mult']
+            ])
+
+            print(f"[POSITION CLOSED] {pos['side']} exit={exit_exec_price:.3f} reason={reason} pnl={net_pnl:.6f} balance={self.balance:.4f}")
+            
+        except Exception as e:
+            print("[ERROR] closing position:", e)
+
     async def _cancel_misaligned_orders(self,reverse=False):
         """
         Membatalkan limit order yang arah-nya sudah tidak sama dengan sinyal aktif terakhir.
@@ -1049,6 +743,85 @@ class ImprovedLiveDualEntryBot:
                     print(f"[CANCEL] {order_side} limit dibatalkan karena sinyal berubah → {signal_side}")
         except Exception as e:
             print(f"[ERROR] gagal cancel misaligned orders: {e}")
+    
+    async def _emergency_exit_check(self, price: float):
+
+        if self._current_position is None:
+            return
+
+        pos = self._current_position
+        side = pos['side']
+        entry_price = pos['entry_price']
+        tp = pos['tp_price']
+        sl = pos['sl_price']
+        entry_time = pos['entry_time']
+
+        elapsed_sec = (self.candles.index[-1].to_pydatetime() - entry_time).total_seconds()
+        profit_pct = self.calc_profit_percent(entry_price, side, price, leverage=self.cfg.leverage)
+        
+        # exit tp 10 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
+            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+
+        # exit tp 20 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sec2 and profit_pct >= self.cfg.guard_profit_trigger2:
+            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+        
+        # exit tp 30 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sec3 and profit_pct >= self.cfg.guard_profit_trigger3:
+            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_PROFIT_LOCK")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+
+        # exit sl 30 menit
+        if elapsed_sec >= self.cfg.max_hold_guard_sl_sec and profit_pct <= self.cfg.guard_loss_trigger:
+            print(f"[GUARD EXIT] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min @ {price}")
+            await self._close_position(side, price, reason="GUARD_STOP_LOST")
+            self._current_position = None
+            self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            return
+
+        # LONG position
+        if side == "LONG":
+
+            if price <= sl:
+                print(f"[EMERGENCY EXIT] LONG SL hit @ {price}")
+                await self._close_position("LONG", price, reason="EMERGENCY SL")
+                self._current_position = None
+                # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            elif price >= tp:
+                print(f"[EMERGENCY EXIT] LONG TP hit @ {price}")
+                await self._close_position("LONG", price, reason="EMERGENCY TP")
+                self._current_position = None
+                # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+
+        # SHORT position
+        elif side == "SHORT":
+
+            if price >= sl:
+                print(f"[EMERGENCY EXIT] SHORT SL hit @ {price}")
+                await self._close_position("SHORT", price, reason="EMERGENCY SL")
+                self._current_position = None
+                # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
+            elif price <= tp:
+                print(f"[EMERGENCY EXIT] SHORT TP hit @ {price}")
+                await self._close_position("SHORT", price, reason="EMERGENCY TP")
+                self._current_position = None
+                # self.watches.clear()
+                self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
     
     async def _check_daily_reset(self):
         now = datetime.now().hour
@@ -1094,6 +867,72 @@ class ImprovedLiveDualEntryBot:
             return "trend"
         return "sideways"
 
+                
+    async def start(self):
+        self.client = await AsyncClient.create(self.cfg.api_key, self.cfg.api_secret, testnet=self.cfg.use_testnet)
+        try:
+            await self.client.futures_change_leverage(symbol=self.cfg.pair, leverage=int(self.cfg.leverage))
+            try:
+                await self.client.futures_change_margin_type(symbol=self.cfg.pair, marginType=self.cfg.margin_type)
+            except Exception:
+                pass
+        except Exception as e:
+            print("[WARN] set leverage/margin:", e)
+        
+        
+
+        self.bm = BinanceSocketManager(self.client)
+        print(f"[INFO] Starting improved live-dual-entry bot for {self.cfg.pair} (testnet={self.cfg.use_testnet})")
+        print(f"[CONFIG] Price precision: {self.cfg.price_precision}, Qty precision: {self.cfg.qty_precision}")
+        
+        asyncio.create_task(self.periodic_order_checks())
+        async with self.bm.kline_futures_socket(self.cfg.pair, interval=self.cfg.interval) as stream:
+            while True:
+                try:
+                    res = await stream.recv()
+                    k = res.get('k', {})
+                    is_closed = k.get('x', False)
+                    ts = pd.to_datetime(k.get('t'), unit='ms', utc=True)
+                    o, h, l, c, v = map(float, (k.get('o'), k.get('h'), k.get('l'), k.get('c'), k.get('v')))
+                    self._append_candle(ts, o, h, l, c, v)
+
+                    self.volatility_ratio = compute_volatility_ratio(self.candles, self.cfg.atr_period)
+                    last_price = float(k.get('c', 0))
+
+                    await self._check_daily_reset()
+                    await self._update_daily_profit()
+
+                    if not self.trade_locked and self.daily_realized_pct >= self.cfg.daily_profit_lock_pct:
+                        print(f"[LOCK] Target harian {self.daily_realized_pct:.2f}% tercapai → closing all & lock trading.")
+                        # await self._force_close_all2()
+                        await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
+                        self.trade_locked = True
+
+                    if self.trade_locked:
+                        print("[LOCK] Trading locked for the rest of the day.")
+                        return  # skip proses entry
+
+                    await self._emergency_exit_check(last_price)
+                    
+                    if is_closed:
+                       
+                        atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
+                        current_atr = atr_series.iat[-1] if len(atr_series) >= self.cfg.atr_period else np.nan
+
+                        if not np.isnan(current_atr) and current_atr >= self.cfg.min_atr:
+                            self._create_watch(current_atr)
+
+                        await self._process_watches()
+                        await self._process_current_position()
+                        await self._cancel_misaligned_orders()
+                        await self._check_pending_orders()
+                        await self.check_order_status()
+                        await self.check_order_timeouts()
+
+                except Exception as e:
+                    print("[ERROR] main loop:", e)
+                    await asyncio.sleep(1)
+
     def calc_profit_percent(self,entry_price: float, side: str, latest_price: float,leverage = 1) -> float:
         if side.upper() == "LONG":
             raw =  (latest_price - entry_price) / entry_price
@@ -1112,6 +951,7 @@ class ImprovedLiveDualEntryBot:
             self.candles = pd.concat([self.candles, row])
         if len(self.candles) > self.cfg.candles_buffer:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
+    
     
     def _create_watch(self, atr_value):
         if self._current_position is not None:
@@ -1135,7 +975,6 @@ class ImprovedLiveDualEntryBot:
         }
         self.watches.append(watch)
         print(f"[WATCH CREATED] {watch['trigger_time']} ATR={atr_value:.6f} long={watch['long_level']:.3f} short={watch['short_level']:.3f} vol_mult={volatility_mult:.2f}")
-
 
     async def _process_watches(self, reverse=False):
         if self._current_position is not None:
@@ -1234,7 +1073,7 @@ class ImprovedLiveDualEntryBot:
                     new_watches.append(w)
 
         self.watches = new_watches
-    
+
     async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
         # qty = self._round_qty(1.0)  # 1 AVAX
         qty = self.calculate_proper_position_size(entry_price, sl_price)
@@ -1329,7 +1168,7 @@ class ImprovedLiveDualEntryBot:
             
         except Exception as e:
             print("[ERROR] place limit order:", e)
-    
+
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
         # qty = self._round_qty(1.0)  # 1 AVAX
         qty = self.calculate_proper_position_size(entry_price, sl_price)
@@ -1389,7 +1228,7 @@ class ImprovedLiveDualEntryBot:
         
         except Exception as e:
             print("[ERROR] open position:", e)
-    
+
     async def _check_pending_orders(self):
         now = datetime.now(timezone.utc)
         for order in self.pending_orders[:]:
@@ -1403,7 +1242,7 @@ class ImprovedLiveDualEntryBot:
                     self.pending_orders.remove(order)
                 except Exception as e:
                     print(f"[ERROR] cancel order {order['order_id']}:", e)
-    
+
     async def _process_current_position(self):
         if self._current_position is None:
             return
@@ -1416,6 +1255,8 @@ class ImprovedLiveDualEntryBot:
         exit_reason = None
         exit_price = None
        
+        # print('[DEBUG] pos[side]:', pos['side'])
+        # print(f"elapsed {elapsed_sec} min_hold_sec {self.cfg.min_hold_sec}")
         if elapsed_sec >= self.cfg.min_hold_sec:
             calc_profit_percent = self.calc_profit_percent(
                 pos['entry_price'],
@@ -1425,6 +1266,13 @@ class ImprovedLiveDualEntryBot:
             )
             print(f"Profit% (Binance style): {calc_profit_percent*100:.2f}%")
 
+            # if calc_profit_percent >= 0.038:  # +4% atau lebih
+            #     exit_price = latest_candle['close']
+            #     exit_reason = f"Quick TP {calc_profit_percent*100:.2f}%"
+            # elif calc_profit_percent <= -0.038:  # -4% atau lebih rugi
+            #     exit_price = latest_candle['close']
+            #     exit_reason = f"Quick SL {calc_profit_percent*100:.2f}%"
+
             if pos['side'] == 'LONG':
                 if latest_candle['low'] <= pos['entry_price'] * (1 - 0.038):  # -3.8%
                     exit_price = latest_candle['low']
@@ -1433,6 +1281,23 @@ class ImprovedLiveDualEntryBot:
                 if latest_candle['high'] >= pos['entry_price'] * (1 + 0.038):  # -3.8%
                     exit_price = latest_candle['high']
                     exit_reason = f"Quick SL intrabar"
+
+            # Kalau gak kena quick exit, baru cek TP/SL candle-based
+            # if exit_price is None:
+            #     if pos['side'] == 'LONG':
+            #         if latest_candle['high'] >= pos['tp_price']:
+            #             exit_price = pos['tp_price']
+            #             exit_reason = 'TP'
+            #         elif latest_candle['low'] <= pos['sl_price']:
+            #             exit_price = pos['sl_price']
+            #             exit_reason = 'SL'
+            #     else:
+            #         if latest_candle['low'] <= pos['tp_price']:
+            #             exit_price = pos['tp_price']
+            #             exit_reason = 'TP'
+            #         elif latest_candle['high'] >= pos['sl_price']:
+            #             exit_price = pos['sl_price']
+            #             exit_reason = 'SL'
 
             if exit_price is None:
                 if calc_profit_percent >= 0.038:  # +3.8% atau lebih
@@ -1506,46 +1371,20 @@ class ImprovedLiveDualEntryBot:
                 self._current_position = None
                 self.watches = [w for w in self.watches if w['expire_idx'] > len(self.candles)-1]
 
-
-    async def check_order_timeouts(self):
-        """Cancel orders that have been pending too long"""
-        now = datetime.now(timezone.utc)
-        for order in self.pending_orders[:]:
-            if (now - order['place_time']).total_seconds() > self.order_timeout:
-                try:
-                    await self.client.futures_cancel_order(
-                        symbol=self.cfg.pair,
-                        orderId=order['order_id']
-                    )
-                    self.pending_orders.remove(order)
-                    print(f"[ORDER CANCELED] Timeout - {order['order_id']}")
-                except Exception as e:
-                    print(f"[ERROR] canceling timed out order: {e}")
-
-# ---------------- Run ----------------  
+# ---------------- Run ----------------
 if __name__ == "__main__":
     cfg = BotConfig()
     cfg.api_key = os.getenv('BINANCE_API_KEY')
     cfg.api_secret = os.getenv('BINANCE_API_SECRET')
     cfg.use_testnet = False
     
-    # Existing config
     cfg.use_limit_orders = True
     cfg.require_confirmation = True
     cfg.adaptive_tp_sl = True
     cfg.slippage_pct = 0.001
     cfg.qty_precision = 1
     cfg.price_precision = 3
-    
-    # NEW: Tick trading config
-    cfg.enable_tick_trading = True  # Enable tick-based quick trading
-    cfg.tick_buffer_size = 50
-    cfg.min_tick_volume = 1000.0
-    cfg.tick_momentum_period = 10
-    cfg.quick_tp_pct = 0.005  # 0.5% quick TP
-    cfg.quick_sl_pct = 0.003  # 0.3% quick SL
-    cfg.max_scalp_duration = 300  # 5 minutes
-    cfg.tick_volume_threshold = 2.0
+
 
     init_excel(cfg.logfile)
     bot = ImprovedLiveDualEntryBot(cfg)
