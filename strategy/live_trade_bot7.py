@@ -838,14 +838,16 @@ class ImprovedLiveDualEntryBot:
         if market_regime == "STRONG_UPTREND":
             # 🚀 TREND-FOLLOWING LONG
             print("🚀 UPTREND - Trend-following long dengan market order")
+            qty = self.calculate_proper_position_size(entry_price, sl_price) * 1.0
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, size_multiplier=1.0
+                atr_value, vol_mult, qty
             )
             
         elif market_regime == "SIDEWAYS":
             # 🔄 MEAN-REVERSION LONG  
             print("🔄 SIDEWAYS - Mean-reversion long dengan limit order")
+            
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
             await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
@@ -1297,9 +1299,9 @@ class ImprovedLiveDualEntryBot:
 
         self.watches = new_watches
     
-    async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
+    async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
         # qty = self._round_qty(1.0)  # 1 AVAX
-        qty = self.calculate_proper_position_size(entry_price, sl_price)
+        # qty = self.calculate_proper_position_size(entry_price, sl_price)
         if qty <= 0:
             print(f"[SKIP] Quantity too small: {qty}")
             return
@@ -1392,9 +1394,9 @@ class ImprovedLiveDualEntryBot:
         except Exception as e:
             print("[ERROR] place limit order:", e)
     
-    async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float):
+    async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
         # qty = self._round_qty(1.0)  # 1 AVAX
-        qty = self.calculate_proper_position_size(entry_price, sl_price)
+        # qty = self.calculate_proper_position_size(entry_price, sl_price)
 
         if qty <= 0:
             print(f"[SKIP] Quantity too small: {qty}")
