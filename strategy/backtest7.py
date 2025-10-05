@@ -7,8 +7,7 @@ import asyncio
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from binance.client import AsyncClient
-from binance.streams import BinanceSocketManager
+from binance import AsyncClient,BinanceSocketManager
 import ta                   # pip install ta
 import openpyxl
 import os
