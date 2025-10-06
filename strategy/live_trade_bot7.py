@@ -101,6 +101,10 @@ def compute_atr_from_df(df: pd.DataFrame, period: int):
     atr = tr.rolling(period).mean()
     return atr
 
+def adjust_qty(qty, step_size):
+        # Membulatkan ke bawah sesuai step size
+        return math.floor(qty / step_size) * step_size
+
 def compute_volatility_ratio(df: pd.DataFrame, atr_period: int = 14):
     atr = compute_atr_from_df(df, atr_period)
     current_atr = atr.iat[-1] if len(atr) > 0 else 0
@@ -841,6 +845,7 @@ class ImprovedLiveDualEntryBot:
             # 🚀 TREND-FOLLOWING LONG
             print("🚀 UPTREND - Trend-following long dengan market order")
             qty = self.calculate_proper_position_size(entry_price, sl_price) * 1.0
+            qty = adjust_qty(qty,self.cfg.price_precision)
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, qty
@@ -849,8 +854,8 @@ class ImprovedLiveDualEntryBot:
         elif market_regime == "SIDEWAYS":
             # 🔄 MEAN-REVERSION LONG  
             print("🔄 SIDEWAYS - Mean-reversion long dengan limit order")
-            
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
+            reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
@@ -860,26 +865,30 @@ class ImprovedLiveDualEntryBot:
             # ⚠️ CAUTIOUS LONG
             print("⚠️  MIXED - Cautious long dengan reduced size")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
+            reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
             )
-    
+
     async def short_strategy(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, market_regime: str):
         """Master short strategy berdasarkan market regime"""
         
         if market_regime == "STRONG_DOWNTREND":
             # 🚀 TREND-FOLLOWING SHORT
             print("🚀 DOWNTREND - Trend-following short dengan market order")
+            qty = self.calculate_proper_position_size(entry_price, sl_price) * 1.0
+            qty = adjust_qty(qty,self.cfg.price_precision)
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, size_multiplier=1.0
+                atr_value, vol_mult, qty
             )
             
         elif market_regime == "SIDEWAYS":
             # 🔄 MEAN-REVERSION SHORT
             print("🔄 SIDEWAYS - Mean-reversion short dengan limit order") 
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
+            reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
@@ -889,6 +898,7 @@ class ImprovedLiveDualEntryBot:
             # ⚠️ CAUTIOUS SHORT
             print("⚠️  MIXED - Cautious short dengan reduced size")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
+            reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
@@ -1302,13 +1312,12 @@ class ImprovedLiveDualEntryBot:
         self.watches = new_watches
     
     async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
-        qty = self._round_qty(1.0)  # 1 AVAX
+        # qty = self._round_qty(1.0)  # 1 AVAX
         # qty = self.calculate_proper_position_size(entry_price, sl_price)
         if qty <= 0:
             print(f"[SKIP] Quantity too small: {qty}")
             return
 
-        print(f"qty {qty}")
         if side == 'LONG':
             order_price = entry_price * (1 - 0.0002)  # 0.05% below trigger
         else:
