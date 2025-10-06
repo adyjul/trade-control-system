@@ -270,7 +270,10 @@ class ImprovedLiveDualEntryBot:
             current_price, 
             current_price * (0.99 if side == "LONG" else 1.01)  # Conservative SL for calculation
         )
-        scalp_qty = base_qty * 0.5  # 50% of normal size for scalping
+        # scalp_qty = base_qty * 0.5  # 50% of normal size for scalping
+
+        scalp_qty = 0.5  # 0.5 AVAX untuk scalping (separuh dari normal)
+        scalp_qty = self._round_qty(scalp_qty)
         
         if scalp_qty <= 0:
             return
