@@ -1318,7 +1318,7 @@ class ImprovedLiveDualEntryBot:
         self.watches = new_watches
     
     async def _place_limit_order(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
-        # qty = self._round_qty(1.0)  # 1 AVAX
+        qty = self._round_qty(1.0)  # 1 AVAX
         # qty = self.calculate_proper_position_size(entry_price, sl_price)
         if qty <= 0:
             print(f"[SKIP] Quantity too small: {qty}")
@@ -1455,7 +1455,7 @@ class ImprovedLiveDualEntryBot:
             self.cfg.price_precision = 3
     
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
-        # qty = self._round_qty(1.0)  # 1 AVAX
+        qty = self._round_qty(1.0)  # 1 AVAX
         # qty = self.calculate_proper_position_size(entry_price, sl_price)
 
         if qty <= 0:
