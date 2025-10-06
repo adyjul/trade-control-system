@@ -719,12 +719,12 @@ class ImprovedLiveDualEntryBot:
                 (current_equity - self.daily_start_equity) / self.daily_start_equity * 100
             )
 
-            daily_loss_limit = -1.0  # 0.5% max daily loss
-            if self.daily_realized_pct <= daily_loss_limit:
-                print(f"🚨 DAILY LOSS LIMIT REACHED: {self.daily_realized_pct:.2f}%")
-                print(f"🚨 STOPPING ALL TRADING FOR TODAY")
-                self.trade_locked = True
-                await self._force_close_all2()
+            # daily_loss_limit = -1.0  # 0.5% max daily loss
+            # if self.daily_realized_pct <= daily_loss_limit:
+            #     print(f"🚨 DAILY LOSS LIMIT REACHED: {self.daily_realized_pct:.2f}%")
+            #     print(f"🚨 STOPPING ALL TRADING FOR TODAY")
+            #     self.trade_locked = True
+            #     await self._force_close_all2()
 
                 # print(f"[INFO] Profit harian: {self.daily_realized_pct:.2f}% "
                 #     f"(Equity: {current_equity:.2f} USDT)")
