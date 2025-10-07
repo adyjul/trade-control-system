@@ -1,5 +1,5 @@
 from coinmarketcap import CoinMarketCap
-# market = CoinMarketCap()
-# resp = market.stats(convert="BTC")
+market = CoinMarketCap()
+resp = market.coin_list()
 
-print('hai')
+print(resp)
