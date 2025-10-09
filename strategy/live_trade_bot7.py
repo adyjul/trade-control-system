@@ -378,7 +378,6 @@ class ImprovedLiveDualEntryBot:
     # MODIFIED: Enhanced Emergency Exit Check dengan Tick Support
     async def _emergency_exit_check(self, price: float):
         """Enhanced emergency exit with scalp position support"""
-        print('hai hai')
         if self._current_position is None:
             return
 
