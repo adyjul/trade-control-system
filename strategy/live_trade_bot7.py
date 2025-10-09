@@ -55,7 +55,7 @@ class BotConfig:
     max_hold_guard_sec2 = 1200
     guard_profit_trigger2 = 0.03
     max_hold_guard_sec3 = 1800
-    guard_profit_trigger3 = 0.02
+    guard_profit_trigger3 = 0.018
     max_hold_guard_sl_sec = 1800
     guard_loss_trigger = -0.04
 
@@ -398,6 +398,7 @@ class ImprovedLiveDualEntryBot:
         elapsed_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
         profit_pct = self.calc_profit_percent(entry_price, side, price, leverage=self.cfg.leverage)
         
+        print(f"Profit% (Binance style): {profit_pct*100:.2f}%")
         # Existing guard exit conditions...
         if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
             print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
@@ -457,7 +458,7 @@ class ImprovedLiveDualEntryBot:
                     await self._execute_quick_scalp(tick_signal, price)
             
             # Manage existing positions with tick data
-            await self._emergency_exit_check(price)
+        await self._emergency_exit_check(price)
 
     # MODIFIED: Enhanced Start Method dengan Tick Stream
     async def start(self):
