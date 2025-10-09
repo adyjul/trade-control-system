@@ -378,6 +378,7 @@ class ImprovedLiveDualEntryBot:
     # MODIFIED: Enhanced Emergency Exit Check dengan Tick Support
     async def _emergency_exit_check(self, price: float):
         """Enhanced emergency exit with scalp position support"""
+        print('hai hai')
         if self._current_position is None:
             return
 
@@ -456,7 +457,7 @@ class ImprovedLiveDualEntryBot:
                 if tick_signal:
                     print(f"⚡ [TICK SIGNAL] {tick_signal} detected at {price:.3f}")
                     await self._execute_quick_scalp(tick_signal, price)
-            
+
             # Manage existing positions with tick data
         await self._emergency_exit_check(price)
 
