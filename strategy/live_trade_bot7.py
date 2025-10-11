@@ -397,8 +397,20 @@ class ImprovedLiveDualEntryBot:
 
         elapsed_sec = (datetime.now(timezone.utc) - entry_time).total_seconds()
         profit_pct = self.calc_profit_percent(entry_price, side, price, leverage=self.cfg.leverage)
+
+         # Standard TP/SL check
+        if side == "LONG":
+            if price <= sl:
+                await self._close_position("LONG", price, "EMERGENCY_SL")
+            elif price >= tp:
+                await self._close_position("LONG", price, "EMERGENCY_TP")
+        elif side == "SHORT":
+            if price >= sl:
+                await self._close_position("SHORT", price, "EMERGENCY_SL")
+            elif price <= tp:
+                await self._close_position("SHORT", price, "EMERGENCY_TP")
+
         
-        print(f"Profit% (Binance style): {profit_pct*100:.2f}%")
         # Existing guard exit conditions...
         if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
             print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
@@ -419,18 +431,6 @@ class ImprovedLiveDualEntryBot:
             print(f"[GUARD EXIT] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
             await self._close_position(side, price, "GUARD_STOP_LOST")
             return
-
-        # Standard TP/SL check
-        if side == "LONG":
-            if price <= sl:
-                await self._close_position("LONG", price, "EMERGENCY_SL")
-            elif price >= tp:
-                await self._close_position("LONG", price, "EMERGENCY_TP")
-        elif side == "SHORT":
-            if price >= sl:
-                await self._close_position("SHORT", price, "EMERGENCY_SL")
-            elif price <= tp:
-                await self._close_position("SHORT", price, "EMERGENCY_TP")
 
     # NEW: Process Tick Data
     async def _process_tick_data(self, price: float, volume: float, is_buyer_maker: bool, timestamp: datetime):
@@ -795,13 +795,13 @@ class ImprovedLiveDualEntryBot:
                     }
                     
                     try:
-                        # await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
-                        # print("[CANCEL] Semua pending order limit/stop dibatalkan.")
-                        open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
-                        for o in open_orders:
-                            if o["orderId"] != order_status["orderId"]:  # jangan cancel order yg barusan filled
-                                await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
-                                print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")
+                        await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
+                        print("[CANCEL] Semua pending order limit/stop dibatalkan.")
+                        # open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
+                        # for o in open_orders:
+                        #     if o["orderId"] != order_status["orderId"]:  # jangan cancel order yg barusan filled
+                        #         await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
+                        #         print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")
                     except Exception as e:
                         print("[ERROR] Cancel open orders failed:", e)
 
