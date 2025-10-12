@@ -1134,7 +1134,7 @@ class ImprovedLiveDualEntryBot:
                 usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
 
                 if usdt_row:
-                    self.daily_start_equity = float(usdt_row['balance'])
+                    self.daily_start_equity = float(usdt_row['availableBalance'])
                     self.daily_realized_pct = 0
                     self.trade_locked = False         # buka kunci untuk hari baru
                     self._last_reset_day = datetime.now().day
@@ -1188,6 +1188,7 @@ class ImprovedLiveDualEntryBot:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
     
     def _create_watch(self, atr_value):
+
         if self._current_position is not None:
             return
         last_close = self.candles['close'].iat[-1]
@@ -1213,6 +1214,9 @@ class ImprovedLiveDualEntryBot:
 
     async def _process_watches(self, reverse=False):
         if self._current_position is not None:
+            return
+
+        if self.trade_locked:
             return
 
          # VALIDASI DATA CANDLE SEBELUM ANALISIS
