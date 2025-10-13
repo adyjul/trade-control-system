@@ -862,6 +862,10 @@ class ImprovedLiveDualEntryBot:
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             print(f"Qty: {reduced_qty}")
+            # await self._open_market_position(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, qty
+            # )
             await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
@@ -873,9 +877,13 @@ class ImprovedLiveDualEntryBot:
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             print(f"Qty: {reduced_qty}")
-            await self._place_limit_order(
+            # await self._place_limit_order(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, reduced_qty
+            # )
+            await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, reduced_qty
+                atr_value, vol_mult, qty
             )
 
     async def short_strategy(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, market_regime: str):
