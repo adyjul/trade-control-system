@@ -1181,6 +1181,7 @@ class ImprovedLiveDualEntryBot:
         return "sideways"
 
     def calc_profit_percent(self,entry_price: float, side: str, latest_price: float,leverage = 1) -> float:
+        print(side.upper())
         if side.upper() == "LONG":
             raw =  (latest_price - entry_price) / entry_price
         elif side.upper() == "SHORT":
