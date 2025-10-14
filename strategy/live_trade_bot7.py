@@ -917,9 +917,13 @@ class ImprovedLiveDualEntryBot:
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             print(f"Qty: {reduced_qty}")
-            await self._place_limit_order(
+            # await self._place_limit_order(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, reduced_qty
+            # )
+            await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, reduced_qty
+                atr_value, vol_mult, qty
             )
 
     def calculate_directional_indicators(self):
