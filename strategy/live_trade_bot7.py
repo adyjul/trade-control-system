@@ -883,7 +883,7 @@ class ImprovedLiveDualEntryBot:
             # )
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, qty
+                atr_value, vol_mult, reduced_qty
             )
 
     async def short_strategy(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, market_regime: str):
@@ -923,7 +923,7 @@ class ImprovedLiveDualEntryBot:
             # )
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, qty
+                atr_value, vol_mult, reduced_qty
             )
 
     def calculate_directional_indicators(self):
