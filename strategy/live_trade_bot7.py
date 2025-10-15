@@ -1536,6 +1536,9 @@ class ImprovedLiveDualEntryBot:
                         'side' : side,
                         'tp_price': tp_price,
                         'sl_price': sl_price,
+                        'qty' : qty,
+                        'vol_mult' : vol_mult,
+                        'atr' : atr_value,
                         'entry_price': float(avg_price),
                         'entry_time': datetime.now(timezone.utc),
                         'status': 'FILLED'
@@ -1546,6 +1549,9 @@ class ImprovedLiveDualEntryBot:
                         'side' : side,
                         'tp_price': tp_price,
                         'sl_price': sl_price,
+                        'qty' : qty,
+                        'vol_mult' : vol_mult,
+                        'atr' : atr_value,
                         "entry_price": avg_price,
                         "entry_time": datetime.now(timezone.utc),
                         'status': 'FILLED'
