@@ -1489,7 +1489,7 @@ class ImprovedLiveDualEntryBot:
 
         risk_per_trade = abs(entry_price - sl_price) * qty
         risk_percentage = (risk_per_trade / self.balance) * 100
-        print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade")
+        print(f"[DEBUG] Actual risk: {risk_percentage:.2f}% per trade tp : {tp_price} sl : {sl_price}")
         
 
         try:
