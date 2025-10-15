@@ -851,7 +851,7 @@ class ImprovedLiveDualEntryBot:
             print("🚀 UPTREND - Trend-following long dengan market order")
             qty = self.calculate_proper_position_size(entry_price, sl_price) * 1.0
             qty = adjust_qty(qty,self.cfg.price_precision)
-            print(f"Qty: {qty}")
+            print(f"Qty: {qty} tp : {tp_price}, sl: {sl_price}")
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, qty
@@ -877,7 +877,7 @@ class ImprovedLiveDualEntryBot:
             print("⚠️  MIXED - Cautious long dengan reduced size")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"Qty: {reduced_qty}")
+            print(f"Qty: {qty} tp : {tp_price}, sl: {sl_price}")
             # await self._place_limit_order(
             #     side, entry_price, tp_price, sl_price,
             #     atr_value, vol_mult, reduced_qty
@@ -895,7 +895,7 @@ class ImprovedLiveDualEntryBot:
             print("🚀 DOWNTREND - Trend-following short dengan market order")
             qty = self.calculate_proper_position_size(entry_price, sl_price) * 1.0
             qty = adjust_qty(qty,self.cfg.price_precision)
-            print(f"Qty: {qty}")
+            print(f"Qty: {qty} tp : {tp_price}, sl: {sl_price}")
             await self._open_market_position(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, qty
@@ -917,7 +917,7 @@ class ImprovedLiveDualEntryBot:
             print("⚠️  MIXED - Cautious short dengan reduced size")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"Qty: {reduced_qty}")
+            print(f"Qty: {qty} tp : {tp_price}, sl: {sl_price}")
             # await self._place_limit_order(
             #     side, entry_price, tp_price, sl_price,
             #     atr_value, vol_mult, reduced_qty
