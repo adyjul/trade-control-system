@@ -390,6 +390,7 @@ class ImprovedLiveDualEntryBot:
 
         # Existing emergency exit logic for normal positions
         entry_price = pos['entry_price']
+        print(f"POS: {pos}")
         tp = pos['tp_price']
         sl = pos['sl_price']
         entry_time = pos['entry_time']
@@ -1262,7 +1263,6 @@ class ImprovedLiveDualEntryBot:
         candle_close = self.candles['close'].iat[-1]
 
         mode = self._detect_trend_mode()
-        print(f"[MODE] Market mode: {mode}")
 
         new_watches = []
         for w in self.watches:
