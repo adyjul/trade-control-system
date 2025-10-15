@@ -1519,14 +1519,32 @@ class ImprovedLiveDualEntryBot:
             avg_price = self._round_price(avg_price)
             print(f"[POSITION OPENED] {side} {exec_qty} @ {avg_price:.3f}")
 
+            # hapus semua pending yang ada
+            self.pending_orders.clear()
+
+            # cancel semua open order binance
+            try:
+                open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
+                for o in open_orders:
+                    await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
+                    print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")    
+            except Exception as e:
+                print("[ERROR] Cancel open orders failed:", e)
+
             self.active_orders.append({
                         **order,
+                        'side' : side,
+                        'tp_price': tp_price,
+                        'sl_price': sl_price,
                         'entry_price': float(avg_price),
                         'entry_time': datetime.now(timezone.utc),
                         'status': 'FILLED'
                     })
+            
             self._current_position = {
                         **order,
+                        'tp_price': tp_price,
+                        'sl_price': sl_price,
                         "entry_price": avg_price,
                         "entry_time": datetime.now(timezone.utc),
                         'status': 'FILLED'
