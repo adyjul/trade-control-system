@@ -390,7 +390,7 @@ class ImprovedLiveDualEntryBot:
 
         # Existing emergency exit logic for normal positions
         entry_price = pos['entry_price']
-        print(f"POS: {pos}")
+        # print(f"POS: {pos}")
         tp = pos['tp_price']
         sl = pos['sl_price']
         entry_time = pos['entry_time']
@@ -1543,6 +1543,7 @@ class ImprovedLiveDualEntryBot:
             
             self._current_position = {
                         **order,
+                        'side' : side,
                         'tp_price': tp_price,
                         'sl_price': sl_price,
                         "entry_price": avg_price,
