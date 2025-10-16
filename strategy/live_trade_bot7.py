@@ -385,9 +385,9 @@ class ImprovedLiveDualEntryBot:
         pos = self._current_position
         
         # Handle scalp positions separately
-        if pos.get('is_scalp', False):
-            await self._manage_scalp_position(price)
-            return
+        # if pos.get('is_scalp', False):
+        #     await self._manage_scalp_position(price)
+        #     return
 
         # Existing emergency exit logic for normal positions
         entry_price = pos['entry_price']
@@ -451,13 +451,13 @@ class ImprovedLiveDualEntryBot:
             print("[TICK] Tick analysis ready - monitoring for quick entries")
         
         # Process tick data only if enabled and ready
-        if self.cfg.enable_tick_trading and self.tick_analysis_ready:
-            # Check for quick scalp entries
-            if self._current_position is None and not self.trade_locked:
-                tick_signal = self._check_tick_entry_signal(price, is_buyer_maker)
-                if tick_signal:
-                    # print(f"⚡ [TICK SIGNAL] {tick_signal} detected at {price:.3f}")
-                    # await self._execute_quick_scalp(tick_signal, price)
+        # if self.cfg.enable_tick_trading and self.tick_analysis_ready:
+        #     # Check for quick scalp entries
+        #     if self._current_position is None and not self.trade_locked:
+        #         tick_signal = self._check_tick_entry_signal(price, is_buyer_maker)
+        #         if tick_signal:
+        #             print(f"⚡ [TICK SIGNAL] {tick_signal} detected at {price:.3f}")
+        #             await self._execute_quick_scalp(tick_signal, price)
 
             # Manage existing positions with tick data
         await self._emergency_exit_check(price)
