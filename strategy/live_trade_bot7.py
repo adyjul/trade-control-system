@@ -456,8 +456,8 @@ class ImprovedLiveDualEntryBot:
             if self._current_position is None and not self.trade_locked:
                 tick_signal = self._check_tick_entry_signal(price, is_buyer_maker)
                 if tick_signal:
-                    print(f"⚡ [TICK SIGNAL] {tick_signal} detected at {price:.3f}")
-                    await self._execute_quick_scalp(tick_signal, price)
+                    # print(f"⚡ [TICK SIGNAL] {tick_signal} detected at {price:.3f}")
+                    # await self._execute_quick_scalp(tick_signal, price)
 
             # Manage existing positions with tick data
         await self._emergency_exit_check(price)
@@ -863,15 +863,15 @@ class ImprovedLiveDualEntryBot:
             print("🔄 SIDEWAYS - Mean-reversion long dengan limit order")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"Qty: {reduced_qty}")
+            print(f"kita skip dulu sideways ya")
             # await self._open_market_position(
             #     side, entry_price, tp_price, sl_price,
             #     atr_value, vol_mult, qty
             # )
-            await self._place_limit_order(
-                side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, reduced_qty
-            )
+            # await self._place_limit_order(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, reduced_qty
+            # )
             
         elif market_regime == "MIXED":
             # ⚠️ CAUTIOUS LONG
@@ -907,11 +907,11 @@ class ImprovedLiveDualEntryBot:
             print("🔄 SIDEWAYS - Mean-reversion short dengan limit order") 
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"Qty: {reduced_qty}")
-            await self._place_limit_order(
-                side, entry_price, tp_price, sl_price,
-                atr_value, vol_mult, reduced_qty
-            )
+            print(f"kita skip dulu sideways ya")
+            # await self._place_limit_order(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, reduced_qty
+            # )
             
         elif market_regime == "MIXED":
             # ⚠️ CAUTIOUS SHORT
