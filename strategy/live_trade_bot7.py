@@ -877,7 +877,7 @@ class ImprovedLiveDualEntryBot:
             print("⚠️  MIXED - Cautious long dengan reduced size")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"Qty: {qty} tp : {tp_price}, sl: {sl_price}")
+            print(f"Qty: {reduced_qty} tp : {tp_price}, sl: {sl_price}")
             # await self._place_limit_order(
             #     side, entry_price, tp_price, sl_price,
             #     atr_value, vol_mult, reduced_qty
@@ -917,7 +917,7 @@ class ImprovedLiveDualEntryBot:
             print("⚠️  MIXED - Cautious short dengan reduced size")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"Qty: {qty} tp : {tp_price}, sl: {sl_price}")
+            print(f"Qty: {reduced_qty} tp : {tp_price}, sl: {sl_price}")
             # await self._place_limit_order(
             #     side, entry_price, tp_price, sl_price,
             #     atr_value, vol_mult, reduced_qty
