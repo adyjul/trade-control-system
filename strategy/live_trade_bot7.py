@@ -27,10 +27,11 @@ class BotConfig:
     initial_balance: float = 20.0
     leverage: float = 10.0
     fee_rate: float = 0.0004
-    min_atr: float = 0.0005
+    # min_atr: float = 0.0005
+    min_atr: float = 0.003   
     atr_period: int = 14
     level_mult: float = 0.15
-    tp_atr_mult: float = 0.9
+    tp_atr_mult: float = 1.1
     sl_atr_mult: float = 1.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
