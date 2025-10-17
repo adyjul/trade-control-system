@@ -1557,13 +1557,25 @@ class ImprovedLiveDualEntryBot:
             # Bersihkan hanya pending order searah di memori
             self.pending_orders = [po for po in self.pending_orders if po['side'] != side]
 
+            self.active_orders.append({
+                'side': side,
+                'entry_price': avg_price,  # Gunakan harga eksekusi riil
+                'qty': qty,
+                'tp_price': new_tp,
+                'sl_price': new_sl,
+                'atr': atr_value,
+                'vol_mult': vol_mult,
+                'entry_time': datetime.now(timezone.utc),
+                'status': 'FILLED'
+            })
+        
             # Simpan posisi
             self._current_position = {
                 'side': side,
                 'entry_price': avg_price,  # Gunakan harga eksekusi riil
-                'qty': exec_qty,
-                'tp_price': tp_price,
-                'sl_price': sl_price,
+                'qty': qty,
+                'tp_price': new_tp,
+                'sl_price': new_sl,
                 'atr': atr_value,
                 'vol_mult': vol_mult,
                 'entry_time': datetime.now(timezone.utc),

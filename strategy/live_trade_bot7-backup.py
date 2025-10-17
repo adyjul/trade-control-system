@@ -1219,6 +1219,7 @@ class ImprovedLiveDualEntryBot:
                         'entry_time': datetime.now(timezone.utc),
                         'status': 'FILLED'
                     })
+            
             self._current_position = {
                         **order,
                         "entry_price": avg_price,
