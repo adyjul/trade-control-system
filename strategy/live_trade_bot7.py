@@ -56,7 +56,7 @@ class BotConfig:
     max_hold_guard_sec2 = 1200
     guard_profit_trigger2 = 0.03
     max_hold_guard_sec3 = 1800
-    guard_profit_trigger3 = 0.018
+    guard_profit_trigger3 = 0.02
     max_hold_guard_sl_sec = 1800
     guard_loss_trigger = -0.04
 
