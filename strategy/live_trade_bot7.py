@@ -1523,7 +1523,8 @@ class ImprovedLiveDualEntryBot:
                     fill_price = float(fill['price'])
                     exec_qty += fill_qty
                     avg_price += fill_price * fill_qty
-                avg_price = avg_price / exec_qty if exec_qty > 0 else entry_price
+
+                avg_price = avg_price / qty if qty > 0 else entry_price
             else:
                 # Fallback: gunakan harga terakhir dari tick atau candle
                 avg_price = self.last_tick_price if self.last_tick_price > 0 else entry_price
