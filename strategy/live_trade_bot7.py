@@ -1561,8 +1561,8 @@ class ImprovedLiveDualEntryBot:
                 'side': side,
                 'entry_price': avg_price,  # Gunakan harga eksekusi riil
                 'qty': qty,
-                'tp_price': new_tp,
-                'sl_price': new_sl,
+                'tp_price': tp_price,
+                'sl_price': sl_price,
                 'atr': atr_value,
                 'vol_mult': vol_mult,
                 'entry_time': datetime.now(timezone.utc),
@@ -1574,8 +1574,8 @@ class ImprovedLiveDualEntryBot:
                 'side': side,
                 'entry_price': avg_price,  # Gunakan harga eksekusi riil
                 'qty': qty,
-                'tp_price': new_tp,
-                'sl_price': new_sl,
+                'tp_price': tp_price,
+                'sl_price': sl_price,
                 'atr': atr_value,
                 'vol_mult': vol_mult,
                 'entry_time': datetime.now(timezone.utc),
