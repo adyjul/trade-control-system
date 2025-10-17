@@ -1149,7 +1149,7 @@ class ImprovedLiveDualEntryBot:
                 usdt_row = next((x for x in info if x['asset'] == 'USDT'), None)
 
                 if usdt_row:
-                    self.daily_start_equity = float(usdt_row['availableBalance'])
+                    self.daily_start_equity = float(usdt_row['balance'])
                     self.daily_realized_pct = 0
                     self.trade_locked = False         # buka kunci untuk hari baru
                     self._last_reset_day = datetime.now().day
