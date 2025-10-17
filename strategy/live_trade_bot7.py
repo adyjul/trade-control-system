@@ -830,6 +830,7 @@
                     await asyncio.sleep(30)  # Check every 30 seconds
                     await self.check_order_status()
                     await self.check_order_timeouts()
+                    await self._check_pending_orders()
                 except Exception as e:
                     print("[ERROR] in periodic order checks:", e)
         
@@ -1483,6 +1484,14 @@
             if qty <= 0:
                 print(f"[SKIP] Quantity too small: {qty}")
                 return
+            
+            # === 🔒 OPSIONAL: SKIP JIKA ADA LIMIT ORDER LAWAN ARAH ===
+            opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
+            has_opposite_limit = any(po['side'] == opposite_side for po in self.pending_orders)
+            if has_opposite_limit:
+                print(f"[FILTER] Skip market {side}: opposite limit ({opposite_side}) active → potential false breakout")
+                return
+
             # Round prices
             entry_price = self._round_price(entry_price)
             tp_price = self._round_price(tp_price)
@@ -1533,41 +1542,33 @@
                 # hapus semua pending yang ada
                 self.pending_orders.clear()
                 
-                # cancel semua open order binance
                 try:
                     open_orders = await self.client.futures_get_open_orders(symbol=self.cfg.pair)
                     for o in open_orders:
-                        await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
-                        print(f"[CANCEL] Pending order {o['orderId']} side={o['side']} qty={o['origQty']}")    
+                        order_side = 'LONG' if o['side'] == 'BUY' else 'SHORT'
+                        if order_side == side:  # Hanya cancel searah
+                            await self.client.futures_cancel_order(symbol=self.cfg.pair, orderId=o["orderId"])
+                            print(f"[CANCEL] Same-side pending order {o['orderId']} canceled.")
+                        else:
+                            print(f"[KEEP] Opposite-side limit order {o['orderId']} kept as filter.")
                 except Exception as e:
-                    print("[ERROR] Cancel open orders failed:", e)
+                    print("[ERROR] Cancel same-side orders failed:", e)
 
-                self.active_orders.append({
-                            **order,
-                            'side' : side,
-                            'tp_price': new_tp,
-                            'sl_price': new_sl,
-                            'qty' : qty,
-                            'vol_mult' : vol_mult,
-                            'atr' : atr_value,
-                            'entry_price': avg_price,
-                            'entry_time': datetime.now(timezone.utc),
-                            'status': 'FILLED'
-                        })
-                
+                # Bersihkan hanya pending order searah di memori
+                self.pending_orders = [po for po in self.pending_orders if po['side'] != side]
+
+                # Simpan posisi
                 self._current_position = {
-                            # **order,
-                            'side': side,
-                            'entry_price': avg_price,          # ✅ Ini yang penting!
-                            'qty': exec_qty,
-                            'tp_price': new_tp,
-                            'sl_price': new_sl,
-                            'atr': atr_value,
-                            'vol_mult': vol_mult,
-                            'entry_time': datetime.now(timezone.utc),
-                            'status': 'FILLED',
-                            'is_scalp': False
-                        }
+                    'side': side,
+                    'entry_price': avg_price,  # Gunakan harga eksekusi riil
+                    'qty': exec_qty,
+                    'tp_price': tp_price,
+                    'sl_price': sl_price,
+                    'atr': atr_value,
+                    'vol_mult': vol_mult,
+                    'entry_time': datetime.now(timezone.utc),
+                    'status': 'FILLED'
+                }
             
             except Exception as e:
                 print("[ERROR] open position:", e)
