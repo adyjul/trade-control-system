@@ -864,15 +864,15 @@ class ImprovedLiveDualEntryBot:
             print("🔄 SIDEWAYS - Mean-reversion long dengan limit order")
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"kita skip dulu sideways ya")
+            # print(f"kita skip dulu sideways ya")
             # await self._open_market_position(
             #     side, entry_price, tp_price, sl_price,
             #     atr_value, vol_mult, qty
             # )
-            # await self._place_limit_order(
-            #     side, entry_price, tp_price, sl_price,
-            #     atr_value, vol_mult, reduced_qty
-            # )
+            await self._place_limit_order(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, reduced_qty
+            )
             
         elif market_regime == "MIXED":
             # ⚠️ CAUTIOUS LONG
@@ -908,11 +908,11 @@ class ImprovedLiveDualEntryBot:
             print("🔄 SIDEWAYS - Mean-reversion short dengan limit order") 
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.7
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
-            print(f"kita skip dulu sideways ya")
-            # await self._place_limit_order(
-            #     side, entry_price, tp_price, sl_price,
-            #     atr_value, vol_mult, reduced_qty
-            # )
+            # print(f"kita skip dulu sideways ya")
+            await self._place_limit_order(
+                side, entry_price, tp_price, sl_price,
+                atr_value, vol_mult, reduced_qty
+            )
             
         elif market_regime == "MIXED":
             # ⚠️ CAUTIOUS SHORT
