@@ -1516,9 +1516,15 @@ class ImprovedLiveDualEntryBot:
                 quantity=qty
             )
             
-            exec_qty = float(order.get('executedQty', 0))
-            avg_price = float(order.get('avgPrice', 0))
-            print(f"debug harga {order.get()}")
+            order_id = order['orderId']
+            await asyncio.sleep(0.1)
+            filled_order = await self.client.futures_get_order(
+                symbol=self.cfg.pair,
+                orderId=order_id
+            )
+
+            exec_qty = float(filled_order.get('executedQty', 0))
+            avg_price = float(filled_order.get('avgPrice', 0))
 
             if exec_qty <= 0 or avg_price <= 0:
                 if 'fills' in order and order['fills']:
