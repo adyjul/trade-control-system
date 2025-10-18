@@ -32,8 +32,8 @@ class BotConfig:
     min_atr = 0.025
     atr_period: int = 14
     level_mult: float = 1.0
-    tp_atr_mult: float = 2.0
-    sl_atr_mult: float = 1.5
+    tp_atr_mult: float = 3.0
+    sl_atr_mult: float = 2.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
     min_hold_sec: int = 600
@@ -1265,8 +1265,6 @@ class ImprovedLiveDualEntryBot:
         candle_low = self.candles['low'].iat[-1]
         candle_close = self.candles['close'].iat[-1]
 
-        mode = self._detect_trend_mode()
-
         new_watches = []
         for w in self.watches:
             if latest_idx < w['start_idx']:
@@ -1333,6 +1331,8 @@ class ImprovedLiveDualEntryBot:
                         await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
                     else:
                         await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
+                
+                break
 
             else:
                 # Masih menunggu expire
