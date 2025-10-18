@@ -184,6 +184,52 @@ class ImprovedLiveDualEntryBot:
         price_change = (recent_prices[-1] - recent_prices[0]) / recent_prices[0]
         return price_change
 
+    def _detect_sr_levels(self, lookback: int = 30) -> Dict[str, List[float]]:
+        """Deteksi support/resistance berdasarkan swing high/low sederhana."""
+        if len(self.candles) < lookback:
+            return {"supports": [], "resistances": []}
+        
+        highs = self.candles['high'].tail(lookback).values
+        lows = self.candles['low'].tail(lookback).values
+        closes = self.candles['close'].tail(lookback).values
+
+        supports = []
+        resistances = []
+
+        # Swing low = support
+        for i in range(2, len(lows) - 2):
+            if lows[i] < lows[i-1] and lows[i] < lows[i-2] and lows[i] < lows[i+1] and lows[i] < lows[i+2]:
+                supports.append(lows[i])
+
+        # Swing high = resistance
+        for i in range(2, len(highs) - 2):
+            if highs[i] > highs[i-1] and highs[i] > highs[i-2] and highs[i] > highs[i+1] and highs[i] > highs[i+2]:
+                resistances.append(highs[i])
+
+        # Optional: cluster level yang berdekatan (misal: jarak < 0.2%)
+        def cluster_levels(levels: List[float], tol_pct: float = 0.002) -> List[float]:
+            if not levels:
+                return []
+            levels = sorted(set(levels))
+            clustered = [levels[0]]
+            for lvl in levels[1:]:
+                if abs(lvl - clustered[-1]) / clustered[-1] > tol_pct:
+                    clustered.append(lvl)
+            return clustered
+
+        supports = cluster_levels(supports)
+        resistances = cluster_levels(resistances)
+
+        return {"supports": supports, "resistances": resistances}
+    
+    def _is_near_support(self, price: float, tolerance_pct: float = 0.002) -> bool:
+        sr = self._detect_sr_levels()
+        return any(abs(price - s) <= price * tolerance_pct for s in sr["supports"])
+
+    def _is_near_resistance(self, price: float, tolerance_pct: float = 0.002) -> bool:
+        sr = self._detect_sr_levels()
+        return any(abs(price - r) <= price * tolerance_pct for r in sr["resistances"])
+
     def _calculate_tick_volatility(self) -> float:
         """Calculate volatility from recent ticks"""
         if len(self.tick_prices) < 10:
@@ -882,14 +928,14 @@ class ImprovedLiveDualEntryBot:
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             print(f"Qty: {reduced_qty} tp : {tp_price}, sl: {sl_price}")
-            # await self._place_limit_order(
-            #     side, entry_price, tp_price, sl_price,
-            #     atr_value, vol_mult, reduced_qty
-            # )
-            await self._open_market_position(
+            await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
             )
+            # await self._open_market_position(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, reduced_qty
+            # )
 
     async def short_strategy(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, market_regime: str):
         """Master short strategy berdasarkan market regime"""
@@ -922,14 +968,14 @@ class ImprovedLiveDualEntryBot:
             reduced_qty = self.calculate_proper_position_size(entry_price, sl_price) * 0.5
             reduced_qty = adjust_qty(reduced_qty,self.cfg.price_precision)
             print(f"Qty: {reduced_qty} tp : {tp_price}, sl: {sl_price}")
-            # await self._place_limit_order(
-            #     side, entry_price, tp_price, sl_price,
-            #     atr_value, vol_mult, reduced_qty
-            # )
-            await self._open_market_position(
+            await self._place_limit_order(
                 side, entry_price, tp_price, sl_price,
                 atr_value, vol_mult, reduced_qty
             )
+            # await self._open_market_position(
+            #     side, entry_price, tp_price, sl_price,
+            #     atr_value, vol_mult, reduced_qty
+            # )
 
     def calculate_directional_indicators(self):
         """Hitung Plus DI dan Minus DI menggunakan TA-Lib"""
@@ -976,6 +1022,7 @@ class ImprovedLiveDualEntryBot:
 
     def enhanced_trend_detection(self) -> Dict:
         """Enhanced trend detection yang lebih akurat dan konsisten"""
+        print(f"jumlah candle {len(self.candles)}")
         if len(self.candles) < 30:  # Reduced from 50 to 30
             return {"regime": "MIXED", "confidence": 0.3, "trend_direction": "NEUTRAL"}
         
@@ -994,59 +1041,70 @@ class ImprovedLiveDualEntryBot:
         
         # Price structure analysis - lebih robust
         if len(high) >= 10 and len(low) >= 10:
-            recent_highs = high[-10:]  # Reduced from 20 to 10
+            # recent_highs = high[-10:]  # Reduced from 20 to 10
+            # recent_lows = low[-10:]
+            # higher_highs = all(recent_highs[i] > recent_highs[i-1] for i in range(1, len(recent_highs)))
+            # lower_lows = all(recent_lows[i] < recent_lows[i-1] for i in range(1, len(recent_lows)))
+            recent_highs = high[-10:]
             recent_lows = low[-10:]
-            higher_highs = all(recent_highs[i] > recent_highs[i-1] for i in range(1, len(recent_highs)))
-            lower_lows = all(recent_lows[i] < recent_lows[i-1] for i in range(1, len(recent_lows)))
+            hh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs[i] > recent_highs[i-1])
+            ll_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows[i] < recent_lows[i-1])
+            higher_highs = hh_count >= 7
+            lower_lows = ll_count >= 7
         else:
             higher_highs = lower_lows = False
         
         # Scoring system yang lebih realistis
         trend_score = 0
-        max_score = 8  # Reduced from 10
+        max_score = 6  # Reduced from 10
         
         # 1. ADX Strength (2 points)
-        if adx > 25: 
+        if adx > 22:  # dari 25 → 22
             trend_score += 2
-        elif adx > 18:  # Reduced threshold
+        elif adx > 16:  # dari 18 → 16
             trend_score += 1
         
-        # 2. EMA Alignment (2 points) - simplified
-        if ema_fast > ema_slow and ema_slow > ema_long:
-            trend_score += 2  # Strong uptrend
-        elif ema_fast < ema_slow and ema_slow < ema_long:
-            trend_score += 2  # Strong downtrend
-        elif (ema_fast > ema_slow) != (ema_slow > ema_long):  # Mixed alignment
-            trend_score += 0  # No points for mixed
+        # # 2. EMA Alignment (2 points) - simplified
+        # if ema_fast > ema_slow and ema_slow > ema_long:
+        #     trend_score += 2  # Strong uptrend
+        # elif ema_fast < ema_slow and ema_slow < ema_long:
+        #     trend_score += 2  # Strong downtrend
+        # elif (ema_fast > ema_slow) != (ema_slow > ema_long):  # Mixed alignment
+        #     trend_score += 0  # No points for mixed
         
+        if ema_fast > ema_slow:  # hanya fast > slow → uptrend
+            trend_score += 2
+        elif ema_fast < ema_slow:  # fast < slow → downtrend
+            trend_score += 2
+
         # 3. DI Alignment (2 points)
         di_diff = plus_di - minus_di
-        if abs(di_diff) > 15:  # Significant DI difference
+        if abs(di_diff) > 12:  # Significant DI difference
             trend_score += 2
-        elif abs(di_diff) > 8:  # Moderate DI difference
+        elif abs(di_diff) > 6:  # Moderate DI difference
             trend_score += 1
         
         # 4. Price Structure (2 points)
-        if higher_highs and not lower_lows:
-            trend_score += 2  # Uptrend structure
-        elif lower_lows and not higher_highs:
-            trend_score += 2  # Downtrend structure
+        # if higher_highs and not lower_lows:
+        #     trend_score += 2  # Uptrend structure
+        # elif lower_lows and not higher_highs:
+        #     trend_score += 2  # Downtrend structure
         
         confidence = trend_score / max_score
         
         # Tentukan regime dengan threshold yang lebih reasonable
-        if trend_score >= 5 and confidence > 0.6:  # Reduced thresholds
+        if trend_score >= 4 and confidence > 0.5:  # dari 5 → 4, dari 0.6 → 0.5
             if plus_di > minus_di:
                 return {"regime": "STRONG_TREND", "confidence": confidence, "trend_direction": "UP"}
             else:
                 return {"regime": "STRONG_TREND", "confidence": confidence, "trend_direction": "DOWN"}
-        elif trend_score <= 2 and confidence < 0.3:  # Reduced thresholds
+        elif trend_score <= 2:
             return {"regime": "SIDEWAYS", "confidence": confidence, "trend_direction": "NEUTRAL"}
         else:
             return {"regime": "MIXED", "confidence": confidence, "trend_direction": "NEUTRAL"}
     
     def enhanced_sideways_detection(self) -> bool:
-        """Enhanced sideways detection dengan kondisi yang lebih realistis"""
+        """Enhanced sideways detection — lebih responsif untuk AVAX/USDT 5m"""
         if len(self.candles) < 20:
             return False
         
@@ -1055,29 +1113,28 @@ class ImprovedLiveDualEntryBot:
             high = self.candles['high'].values
             low = self.candles['low'].values
             
-            # 1. ADX rendah (di bawah 22 - increased threshold)
+            # 1. ADX rendah (lebih longgar)
             plus_di, minus_di, adx = self.calculate_directional_indicators()
-            if adx > 22:  # Increased from 20
+            if adx > 25:  # dari 22 → 25
                 return False
             
-            # 2. EMA berdekatan (threshold increased)
+            # 2. EMA berdekatan
             ema_fast, ema_slow, _ = self.calculate_ema_indicators()
             ema_diff_pct = abs(ema_fast - ema_slow) / close[-1]
-            if ema_diff_pct > 0.015:  # Increased from 0.01
+            if ema_diff_pct > 0.02:  # dari 0.015 → 0.02
                 return False
             
-            # 3. Price range sempit (menggunakan ATR - threshold increased)
+            # 3. Price range sempit (ATR%)
             atr = talib.ATR(high, low, close, timeperiod=14)[-1]
             atr_pct = atr / close[-1]
-            if atr_pct > 0.008:  # Increased from 0.005
+            if atr_pct > 0.012:  # dari 0.008 → 0.012
                 return False
             
-            # 4. RSI netral (tambahan kondisi baru)
+            # 4. RSI netral (lebih longgar)
             rsi = talib.RSI(close, timeperiod=14)[-1] if len(close) >= 14 else 50
-            if rsi < 40 or rsi > 60:  # RSI di luar range netral
-                return False
+            # if rsi < 35 or rsi > 65:  # dari 40/60 → 35/65
+            #     return False
             
-            # Jika semua kondisi terpenuhi, maka sideways
             print(f"[SIDEWAYS DETECTED] ADX:{adx:.1f}, EMA_diff:{ema_diff_pct:.3f}, ATR%:{atr_pct:.3f}, RSI:{rsi:.1f}")
             return True
             
@@ -1311,6 +1368,24 @@ class ImprovedLiveDualEntryBot:
             #      JIKA TRIGGER
             # =====================
             if triggered:
+
+                valid_sr = False
+
+                if side == "LONG":
+                    if self._is_near_support(entry_price):
+                        valid_sr = True
+                        print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat SUPPORT")
+                    else:
+                        print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari SUPPORT → skip")
+                elif side == "SHORT":
+                    if self._is_near_resistance(entry_price):
+                        valid_sr = True
+                        print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RESISTANCE")
+                    else:
+                        print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RESISTANCE → skip")
+
+                if not valid_sr:
+                    continue  # skip entry ini
 
                 # Tentukan strategi berdasarkan regime dan trend direction
                 if regime == "STRONG_TREND":
