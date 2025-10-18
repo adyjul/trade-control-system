@@ -66,7 +66,7 @@ class BotConfig:
     daily_reset_hour = 7
 
     # NEW: Tick trading settings
-    enable_tick_trading: bool = false  # Enable/disable tick trading
+    enable_tick_trading: bool = False  # Enable/disable tick trading
     tick_buffer_size: int = 50  # Store last 50 ticks for analysis
     min_tick_volume: float = 1000.0  # Minimum volume to consider tick valid
     tick_momentum_period: int = 10  # Period for tick momentum calculation
