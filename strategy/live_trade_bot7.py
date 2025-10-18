@@ -1515,28 +1515,38 @@ class ImprovedLiveDualEntryBot:
                 quantity=qty
             )
             
-            exec_qty = 0.0
-            avg_price = 0.0
-            if 'fills' in order and order['fills']:
-                for fill in order['fills']:
-                    fill_qty = float(fill['qty'])
-                    fill_price = float(fill['price'])
-                    exec_qty += fill_qty
-                    avg_price += fill_price * fill_qty
+            exec_qty = float(order.get('executedQty', 0))
+            avg_price = float(order.get('avgPrice', 0))
 
-                avg_price = avg_price / qty if qty > 0 else entry_price
-            else:
-                # Fallback: gunakan harga terakhir dari tick atau candle
-                avg_price = self.last_tick_price if self.last_tick_price > 0 else entry_price
+            if exec_qty <= 0 or avg_price <= 0:
+                if 'fills' in order and order['fills']:
+                    total_val = 0.0
+                    total_qty = 0.0
+                    for fill in order['fills']:
+                        qty_f = float(fill['qty'])
+                        price_f = float(fill['price'])
+                        total_qty += qty_f
+                        total_val += qty_f * price_f
+                    if total_qty > 0:
+                        avg_price = total_val / total_qty
+                        exec_qty = total_qty
+                    else:
+                        avg_price = self.last_tick_price if self.last_tick_price > 0 else entry_price
+                        exec_qty = qty
+                else:
+                    avg_price = self.last_tick_price if self.last_tick_price > 0 else entry_price
+                    exec_qty = qty
+
+            avg_price = self._round_price(avg_price)
 
 
             # ✅ Hitung ulang TP/SL berdasarkan harga eksekusi riil!
             if side == 'LONG':
-                new_tp = avg_price * (1 + self.cfg.quick_tp_pct) if getattr(self, '_is_scalp', False) else self._round_price(avg_price + (tp_price - entry_price))
-                new_sl = avg_price * (1 - self.cfg.quick_sl_pct) if getattr(self, '_is_scalp', False) else self._round_price(avg_price - (entry_price - sl_price))
+                new_tp = self._round_price(avg_price + (tp_price - entry_price))
+                new_sl = self._round_price(avg_price - (entry_price - sl_price))
             else:
-                new_tp = avg_price * (1 - self.cfg.quick_tp_pct) if getattr(self, '_is_scalp', False) else self._round_price(avg_price - (entry_price - tp_price))
-                new_sl = avg_price * (1 + self.cfg.quick_sl_pct) if getattr(self, '_is_scalp', False) else self._round_price(avg_price + (sl_price - entry_price))
+                new_tp = self._round_price(avg_price - (entry_price - tp_price))
+                new_sl = self._round_price(avg_price + (sl_price - entry_price))
 
             print(f"[POSITION OPENED] {side} {exec_qty:.2f} @ {avg_price:.3f} | TP: {new_tp:.3f} | SL: {new_sl:.3f}")
 
@@ -1562,8 +1572,8 @@ class ImprovedLiveDualEntryBot:
                 'side': side,
                 'entry_price': avg_price,  # Gunakan harga eksekusi riil
                 'qty': qty,
-                'tp_price': tp_price,
-                'sl_price': sl_price,
+                'tp_price': new_tp,
+                'sl_price': new_sl,
                 'atr': atr_value,
                 'vol_mult': vol_mult,
                 'entry_time': datetime.now(timezone.utc),
@@ -1575,8 +1585,8 @@ class ImprovedLiveDualEntryBot:
                 'side': side,
                 'entry_price': avg_price,  # Gunakan harga eksekusi riil
                 'qty': qty,
-                'tp_price': tp_price,
-                'sl_price': sl_price,
+                'tp_price': new_tp,
+                'sl_price': new_sl,
                 'atr': atr_value,
                 'vol_mult': vol_mult,
                 'entry_time': datetime.now(timezone.utc),
