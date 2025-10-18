@@ -29,7 +29,8 @@ class BotConfig:
     fee_rate: float = 0.0004
     # min_atr: float = 0.0005
     # min_atr: float = 0.003   
-    min_atr = 0.025
+    min_atr = 0.01
+    # min_atr = 0.025
     atr_period: int = 14
     level_mult: float = 1.0
     tp_atr_mult: float = 3.0
@@ -65,7 +66,7 @@ class BotConfig:
     daily_reset_hour = 7
 
     # NEW: Tick trading settings
-    enable_tick_trading: bool = True  # Enable/disable tick trading
+    enable_tick_trading: bool = false  # Enable/disable tick trading
     tick_buffer_size: int = 50  # Store last 50 ticks for analysis
     min_tick_volume: float = 1000.0  # Minimum volume to consider tick valid
     tick_momentum_period: int = 10  # Period for tick momentum calculation
