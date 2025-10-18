@@ -780,7 +780,7 @@ class ImprovedLiveDualEntryBot:
                 
                 if order_status['status'] == 'FILLED':
                     # Order filled, move to active orders
-                    print(f"[ORDER FILLED] {order['side']} {order['qty']} @ {order_status['avgPrice']}")
+                    print(f"[ORDER FILLED] {order['side']} {order['qty']} @ {order_status['avgPrice']} tp {order['tp_price']} sl {order['sl_price']}")
                     self.pending_orders.remove(order)
                     
                     self.active_orders.append({
