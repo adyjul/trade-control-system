@@ -1518,7 +1518,7 @@ class ImprovedLiveDualEntryBot:
             
             exec_qty = float(order.get('executedQty', 0))
             avg_price = float(order.get('avgPrice', 0))
-
+            print(f"debug harga {order.get()}")
             if exec_qty <= 0 or avg_price <= 0:
                 if 'fills' in order and order['fills']:
                     total_val = 0.0
