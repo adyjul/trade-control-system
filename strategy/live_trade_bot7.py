@@ -28,7 +28,8 @@ class BotConfig:
     leverage: float = 10.0
     fee_rate: float = 0.0004
     # min_atr: float = 0.0005
-    min_atr: float = 0.003   
+    # min_atr: float = 0.003   
+    min_atr = 0.025
     atr_period: int = 14
     level_mult: float = 1.0
     tp_atr_mult: float = 2.0
