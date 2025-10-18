@@ -416,14 +416,32 @@ class ImprovedLiveDualEntryBot:
             return
         
         pos = self._current_position
+
         try:
-            # market close order
+            # ✅ Ambil informasi posisi riil dari Binance
+            positions = await self.client.futures_position_information(symbol=self.cfg.pair)
+            binance_pos = next((p for p in positions if p['symbol'] == self.cfg.pair), None)
+
+            if not binance_pos or float(binance_pos['positionAmt']) == 0:
+                print("[CLOSE] No active position on Binance — skipping close.")
+                self._current_position = None
+                return
+
+            current_qty = abs(float(binance_pos['positionAmt']))
+            actual_side = 'LONG' if float(binance_pos['positionAmt']) > 0 else 'SHORT'
+
+             # Validasi arah
+            if actual_side != side:
+                print(f"[WARN] Mismatch: bot thinks {side}, but Binance has {actual_side}. Forcing correct side.")
+                side = actual_side
+
+            # Gunakan ukuran riil dari Binance
             close_order = await self.client.futures_create_order(
                 symbol=self.cfg.pair,
                 side=SIDE_SELL if side == 'LONG' else SIDE_BUY,
                 type=ORDER_TYPE_MARKET,
-                reduceOnly=True,
-                quantity=pos['qty']
+                quantity=current_qty,
+                reduceOnly=True  # Sekarang aman, karena qty pasti ≤ posisi riil
             )
 
             # Hitung harga rata-rata eksekusi
