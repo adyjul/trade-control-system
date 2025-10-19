@@ -33,8 +33,8 @@ class BotConfig:
     # min_atr = 0.025
     atr_period: int = 14
     level_mult: float = 1.0
-    tp_atr_mult: float = 3.0
-    sl_atr_mult: float = 2.0
+    tp_atr_mult: float = 4.0
+    sl_atr_mult: float = 3.0
     monitor_candles: int = 3
     candles_buffer: int = 1000
     min_hold_sec: int = 600
@@ -1143,45 +1143,84 @@ class ImprovedLiveDualEntryBot:
         else:
             return {"regime": "MIXED", "confidence": confidence, "trend_direction": "NEUTRAL"}
     
+    # def enhanced_sideways_detection(self) -> bool:
+    #     """Enhanced sideways detection — lebih responsif untuk AVAX/USDT 5m"""
+    #     if len(self.candles) < 20:
+    #         return False
+        
+    #     try:
+    #         close = self.candles['close'].values
+    #         high = self.candles['high'].values
+    #         low = self.candles['low'].values
+            
+    #         # 1. ADX rendah (lebih longgar)
+    #         plus_di, minus_di, adx = self.calculate_directional_indicators()
+    #         if adx > 25:  # dari 22 → 25
+    #             return False
+            
+    #         # 2. EMA berdekatan
+    #         ema_fast, ema_slow, _ = self.calculate_ema_indicators()
+    #         ema_diff_pct = abs(ema_fast - ema_slow) / close[-1]
+    #         if ema_diff_pct > 0.02:  # dari 0.015 → 0.02
+    #             return False
+            
+    #         # 3. Price range sempit (ATR%)
+    #         atr = talib.ATR(high, low, close, timeperiod=14)[-1]
+    #         atr_pct = atr / close[-1]
+    #         if atr_pct > 0.012:  # dari 0.008 → 0.012
+    #             return False
+            
+    #         # 4. RSI netral (lebih longgar)
+    #         rsi = talib.RSI(close, timeperiod=14)[-1] if len(close) >= 14 else 50
+    #         # if rsi < 35 or rsi > 65:  # dari 40/60 → 35/65
+    #         #     return False
+            
+    #         print(f"[SIDEWAYS DETECTED] ADX:{adx:.1f}, EMA_diff:{ema_diff_pct:.3f}, ATR%:{atr_pct:.3f}, RSI:{rsi:.1f}")
+    #         return True
+            
+    #     except Exception as e:
+    #         print(f"[ERROR] Sideways detection: {e}")
+    #         return False
+    
     def enhanced_sideways_detection(self) -> bool:
-        """Enhanced sideways detection — lebih responsif untuk AVAX/USDT 5m"""
         if len(self.candles) < 20:
             return False
-        
-        try:
-            close = self.candles['close'].values
-            high = self.candles['high'].values
-            low = self.candles['low'].values
-            
-            # 1. ADX rendah (lebih longgar)
-            plus_di, minus_di, adx = self.calculate_directional_indicators()
-            if adx > 25:  # dari 22 → 25
-                return False
-            
-            # 2. EMA berdekatan
-            ema_fast, ema_slow, _ = self.calculate_ema_indicators()
-            ema_diff_pct = abs(ema_fast - ema_slow) / close[-1]
-            if ema_diff_pct > 0.02:  # dari 0.015 → 0.02
-                return False
-            
-            # 3. Price range sempit (ATR%)
-            atr = talib.ATR(high, low, close, timeperiod=14)[-1]
-            atr_pct = atr / close[-1]
-            if atr_pct > 0.012:  # dari 0.008 → 0.012
-                return False
-            
-            # 4. RSI netral (lebih longgar)
-            rsi = talib.RSI(close, timeperiod=14)[-1] if len(close) >= 14 else 50
-            # if rsi < 35 or rsi > 65:  # dari 40/60 → 35/65
-            #     return False
-            
-            print(f"[SIDEWAYS DETECTED] ADX:{adx:.1f}, EMA_diff:{ema_diff_pct:.3f}, ATR%:{atr_pct:.3f}, RSI:{rsi:.1f}")
-            return True
-            
-        except Exception as e:
-            print(f"[ERROR] Sideways detection: {e}")
-            return False
-    
+
+        df = self.candles.copy()
+        # Ambil nilai terakhir
+        adx = df['adx'].iloc[-1]
+        rsi = df['rsi'].iloc[-1]
+        atr = df['ATR'].iloc[-1]
+        close = df['close'].iloc[-1]
+        ema_fast = df['ema_fast'].iloc[-1]
+        ema_slow = df['ema_slow'].iloc[-1]
+
+        # Classic sideways
+        classic = (
+            (adx < 22) &
+            (abs(ema_fast - ema_slow) / close < 0.0015) &
+            (atr / close < 0.008) &
+            (40 < rsi < 60)
+        )
+
+        # Post-trend consolidation
+        if len(df) >= 25:
+            recent_adx_high = df['adx'].iloc[-16:-1].max() > 25
+            price_range = df['close'].iloc[-10:].max() - df['close'].iloc[-10:].min()
+            low_movement = (price_range / close) < 0.005
+            adx_declining = df['adx'].iloc[-1] < df['adx'].iloc[-2]
+            post_trend = (
+                recent_adx_high &
+                low_movement &
+                adx_declining &
+                (atr / close < 0.008) &
+                (abs(ema_fast - ema_slow) / close < 0.002)
+            )
+        else:
+            post_trend = False
+
+        return bool(classic or post_trend)
+
     def _validate_candle_data(self) -> bool:
         """Validasi kualitas dan kelengkapan data candle"""
         if len(self.candles) < 20:
@@ -1293,6 +1332,16 @@ class ImprovedLiveDualEntryBot:
         
         return raw * leverage
 
+    # def _append_candle(self, ts, o, h, l, c, v):
+    #     row = pd.DataFrame([[o, h, l, c, v]], index=[ts], columns=['open', 'high', 'low', 'close', 'volume'])
+    #     if self.candles.empty:
+    #         self.candles = row
+    #     else:
+    #         self.candles = pd.concat([self.candles, row])
+    #     if len(self.candles) > self.cfg.candles_buffer:
+    #         self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
+    
+
     def _append_candle(self, ts, o, h, l, c, v):
         row = pd.DataFrame([[o, h, l, c, v]], index=[ts], columns=['open', 'high', 'low', 'close', 'volume'])
         if self.candles.empty:
@@ -1301,7 +1350,21 @@ class ImprovedLiveDualEntryBot:
             self.candles = pd.concat([self.candles, row])
         if len(self.candles) > self.cfg.candles_buffer:
             self.candles = self.candles.iloc[-self.cfg.candles_buffer:]
-    
+
+        # Hitung dan simpan indikator sekali di sini
+        if len(self.candles) >= 50:
+            close = self.candles['close'].values
+            high = self.candles['high'].values
+            low = self.candles['low'].values
+
+            self.candles.loc[ts, 'ema_fast'] = talib.EMA(close, 20)[-1]
+            self.candles.loc[ts, 'ema_slow'] = talib.EMA(close, 50)[-1]
+            self.candles.loc[ts, 'rsi'] = talib.RSI(close, 14)[-1] if len(close) >= 14 else 50
+            self.candles.loc[ts, 'adx'] = talib.ADX(high, low, close, 14)[-1]
+            self.candles.loc[ts, 'ATR'] = talib.ATR(high, low, close, 14)[-1]
+            self.candles.loc[ts, 'plusDI'] = talib.PLUS_DI(high, low, close, 14)[-1]
+            self.candles.loc[ts, 'minusDI'] = talib.MINUS_DI(high, low, close, 14)[-1]
+
     def _create_watch(self, atr_value):
 
         if self._current_position is not None:
