@@ -230,6 +230,46 @@ class ImprovedLiveDualEntryBot:
         sr = self._detect_sr_levels()
         return any(abs(price - r) <= price * tolerance_pct for r in sr["resistances"])
 
+    def is_valid_sr_for_entry(entry_price, side, regime, direction, support, resistance, atr):
+        """
+        Menentukan apakah entry dekat dengan S/R yang relevan,
+        dengan logika berbeda tergantung regime pasar.
+        """
+        max_dist = atr * 1.0  # default untuk sideways/mixed
+
+        if regime == "STRONG_TREND":
+            if direction == "DOWN" and side == "SHORT":
+                # Di strong downtrend, short TIDAK perlu dekat resistance lama.
+                # Cukup pastikan harga sudah breakdown dan tidak jauh dari recent swing high.
+                # Gunakan resistance dinamis: high 1-3 candle terakhir
+                recent_high = max(
+                    df['high'].iloc[-1],
+                    df['high'].iloc[-2] if len(df) > 1 else df['high'].iloc[-1],
+                    df['high'].iloc[-3] if len(df) > 2 else df['high'].iloc[-1]
+                )
+                return abs(entry_price - recent_high) <= atr * 2.0
+
+            elif direction == "UP" and side == "LONG":
+                recent_low = min(
+                    df['low'].iloc[-1],
+                    df['low'].iloc[-2] if len(df) > 1 else df['low'].iloc[-1],
+                    df['low'].iloc[-3] if len(df) > 2 else df['low'].iloc[-1]
+                )
+                return abs(entry_price - recent_low) <= atr * 2.0
+
+            else:
+                # Long di downtrend atau short di uptrend → tetap ketat (atau skip)
+                return False
+
+        else:
+            # Regime: SIDEWAYS / MIXED → gunakan S/R statis seperti biasa
+            if side == "LONG":
+                return abs(entry_price - support) <= max_dist
+            elif side == "SHORT":
+                return abs(entry_price - resistance) <= max_dist
+
+        return False
+
     def _calculate_tick_volatility(self) -> float:
         """Calculate volatility from recent ticks"""
         if len(self.tick_prices) < 10:
@@ -1369,20 +1409,52 @@ class ImprovedLiveDualEntryBot:
             # =====================
             if triggered:
 
+               # --- ADAPTIVE SR FILTER BERDASARKAN REGIME ---
                 valid_sr = False
-
-                if side == "LONG":
-                    if self._is_near_support(entry_price):
-                        valid_sr = True
-                        print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat SUPPORT")
+                if regime == "STRONG_TREND":
+                    if trend_direction == "DOWN" and side == "SHORT":
+                        # Gunakan resistance dinamis: high 1-3 candle terakhir
+                        recent_high = max(
+                            self.candles['high'].iloc[-1],
+                            self.candles['high'].iloc[-2] if len(self.candles) > 1 else self.candles['high'].iloc[-1],
+                            self.candles['high'].iloc[-3] if len(self.candles) > 2 else self.candles['high'].iloc[-1]
+                        )
+                        max_dist = w['atr'] * 2.0
+                        if abs(entry_price - recent_high) <= max_dist:
+                            valid_sr = True
+                            print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RECENT HIGH ({recent_high:.3f})")
+                        else:
+                            print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RECENT HIGH ({recent_high:.3f}) → skip")
+                    elif trend_direction == "UP" and side == "LONG":
+                        recent_low = min(
+                            self.candles['low'].iloc[-1],
+                            self.candles['low'].iloc[-2] if len(self.candles) > 1 else self.candles['low'].iloc[-1],
+                            self.candles['low'].iloc[-3] if len(self.candles) > 2 else self.candles['low'].iloc[-1]
+                        )
+                        max_dist = w['atr'] * 2.0
+                        if abs(entry_price - recent_low) <= max_dist:
+                            valid_sr = True
+                            print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat RECENT LOW ({recent_low:.3f})")
+                        else:
+                            print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari RECENT LOW ({recent_low:.3f}) → skip")
                     else:
-                        print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari SUPPORT → skip")
-                elif side == "SHORT":
-                    if self._is_near_resistance(entry_price):
-                        valid_sr = True
-                        print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RESISTANCE")
-                    else:
-                        print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RESISTANCE → skip")
+                        # Long di downtrend / short di uptrend → skip
+                        valid_sr = False
+                        print(f"[SR FILTER] ❌ {side} tidak sesuai arah tren {trend_direction} → skip")
+                else:
+                    # SIDEWAYS / MIXED → gunakan S/R statis seperti sebelumnya
+                    if side == "LONG":
+                        if self._is_near_support(entry_price):
+                            valid_sr = True
+                            print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat SUPPORT")
+                        else:
+                            print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari SUPPORT → skip")
+                    elif side == "SHORT":
+                        if self._is_near_resistance(entry_price):
+                            valid_sr = True
+                            print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RESISTANCE")
+                        else:
+                            print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RESISTANCE → skip")
 
                 if not valid_sr:
                     continue  # skip entry ini
