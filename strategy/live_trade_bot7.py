@@ -548,7 +548,7 @@ class ImprovedLiveDualEntryBot:
         #             await self._execute_quick_scalp(tick_signal, price)
 
             # Manage existing positions with tick data
-        await self._emergency_exit_check(price)
+        # await self._emergency_exit_check(price)
 
     # MODIFIED: Enhanced Start Method dengan Tick Stream
     async def start(self):
