@@ -1222,7 +1222,7 @@ class ImprovedLiveDualEntryBot:
         return bool(classic or post_trend)
 
     def _validate_candle_data(self) -> bool:
-        print(self.candles)
+
         """Validasi kualitas dan kelengkapan data candle"""
         if len(self.candles) < 20:
             print("[WARN] Not enough candle data for analysis")
