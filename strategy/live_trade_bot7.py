@@ -600,7 +600,7 @@ class ImprovedLiveDualEntryBot:
         # Run both kline and tick streams concurrently
         await asyncio.gather(
             self._run_kline_stream(),
-            self._run_tick_stream()
+            # self._run_tick_stream()
         )
 
     # NEW: Tick Stream Handler
@@ -1871,7 +1871,7 @@ class ImprovedLiveDualEntryBot:
             if calc_profit_percent <= -0.09:
                 exit_price = latest_candle['close']
                 exit_reason = "Quick SL by PnL"
-            elif calc_profit_percent >= 0.04:
+            elif calc_profit_percent >= 0.03:
                 exit_price = latest_candle['close']
                 exit_reason = "Quick TP by PnL"
 
