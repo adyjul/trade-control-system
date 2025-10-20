@@ -52,7 +52,7 @@ class BotConfig:
     price_precision: int = 3
     profit_pct_close_tp: float = 0.05
 
-    # Guard settings
+    # Guard settings coba coba
     max_hold_guard_sec = 600
     guard_profit_trigger = 0.04
     max_hold_guard_sec2 = 1200
