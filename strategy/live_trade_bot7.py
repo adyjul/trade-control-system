@@ -649,6 +649,8 @@ class ImprovedLiveDualEntryBot:
                         await self.client.futures_cancel_all_open_orders(symbol=self.cfg.pair)
                         self.trade_locked = True
 
+                    current_price = float(k.get('c'))
+                    await self._emergency_exit_check(current_price)
                     if is_closed:
                         atr_series = compute_atr_from_df(self.candles, self.cfg.atr_period)
                         current_atr = atr_series.iat[-1] if len(atr_series) >= self.cfg.atr_period else np.nan
@@ -1865,19 +1867,18 @@ class ImprovedLiveDualEntryBot:
             )
             print(f"Profit% (Binance style): {calc_profit_percent*100:.2f}%")
 
-            if pos['side'] == 'LONG':
-                if latest_candle['low'] <= pos['entry_price'] * (1 - 0.038):  # -3.8%
-                    exit_price = latest_candle['low']
-                    exit_reason = f"Quick SL intrabar"
-            else:
-                if latest_candle['high'] >= pos['entry_price'] * (1 + 0.038):  # -3.8%
-                    exit_price = latest_candle['high']
-                    exit_reason = f"Quick SL intrabar"
+             # SL berdasarkan PnL, bukan harga absolut
+            if calc_profit_percent <= -0.04:
+                exit_price = latest_candle['close']
+                exit_reason = "Quick SL by PnL"
+            elif calc_profit_percent >= 0.04:
+                exit_price = latest_candle['close']
+                exit_reason = "Quick TP by PnL"
 
-            if exit_price is None:
-                if calc_profit_percent >= 0.038:  # +3.8% atau lebih
-                    exit_price = latest_candle['close']
-                    exit_reason = f"Quick TP (close)"
+            # if exit_price is None:
+            #     if calc_profit_percent >= 0.038:  # +3.8% atau lebih
+            #         exit_price = latest_candle['close']
+            #         exit_reason = f"Quick TP (close)"
 
         if exit_price is not None:
             try:
