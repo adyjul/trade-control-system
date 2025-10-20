@@ -1868,7 +1868,7 @@ class ImprovedLiveDualEntryBot:
             print(f"Profit% (Binance style): {calc_profit_percent*100:.2f}%")
 
              # SL berdasarkan PnL, bukan harga absolut
-            if calc_profit_percent <= -0.06:
+            if calc_profit_percent <= -0.09:
                 exit_price = latest_candle['close']
                 exit_reason = "Quick SL by PnL"
             elif calc_profit_percent >= 0.04:
