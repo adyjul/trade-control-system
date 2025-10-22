@@ -490,11 +490,25 @@ class ImprovedLiveDualEntryBot:
 
         # Standard TP/SL check
         if side == "LONG":
-            # blok untuk close normal
+            
+            # blok untuk SL close normal
             if price <= sl:
                 print(f"[Profit SL] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
                 await self._close_position("LONG", price, "EMERGENCY_SL")
                 return
+            
+            # blok untuk SL close wick atau close cepat
+            elif profit_pct <= -0.15:
+                print(f"[Profit Fast] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
+                await self._close_position("LONG", price, "EMERGENCY_SL_FAST")
+                return
+            
+            elif profit_pct <= -0.10:
+                print(f"[Profit Fast] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
+                await self._close_position("LONG", price, "EMERGENCY_SL_FAST")
+                return
+            
+            # blok untuk TP close normal
             elif price >= tp:
                 print(f"[Profit TP] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
                 await self._close_position("LONG", price, "EMERGENCY_TP")
@@ -529,6 +543,18 @@ class ImprovedLiveDualEntryBot:
                 await self._close_position("SHORT", price, "EMERGENCY_TP")
                 return
             
+            # blok untuk SL close wick atau close cepat
+            elif profit_pct <= -0.15:
+                print(f"[Profit Fast] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
+                await self._close_position("SHORT", price, "EMERGENCY_SL_FAST")
+                return
+
+            elif profit_pct <= -0.10:
+                print(f"[Profit Fast] SL {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
+                await self._close_position("SHORT", price, "EMERGENCY_SL_FAST")
+                return
+            
+
             # blok untuk tp wick atau close cepat
             elif profit_pct >= 0.15:
                     print(f"[Profit Fast] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
@@ -548,16 +574,16 @@ class ImprovedLiveDualEntryBot:
                     return
 
         
-        # Existing guard exit conditions...
-        if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
-            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
-            await self._close_position(side, price, "GUARD_PROFIT_LOCK")
-            return
+        # # Existing guard exit conditions...
+        # if elapsed_sec >= self.cfg.max_hold_guard_sec and profit_pct >= self.cfg.guard_profit_trigger:
+        #     print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
+        #     await self._close_position(side, price, "GUARD_PROFIT_LOCK")
+        #     return
 
-        if elapsed_sec >= self.cfg.max_hold_guard_sec2 and profit_pct >= self.cfg.guard_profit_trigger2:
-            print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
-            await self._close_position(side, price, "GUARD_PROFIT_LOCK")
-            return
+        # if elapsed_sec >= self.cfg.max_hold_guard_sec2 and profit_pct >= self.cfg.guard_profit_trigger2:
+        #     print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
+        #     await self._close_position(side, price, "GUARD_PROFIT_LOCK")
+        #     return
         
         if elapsed_sec >= self.cfg.max_hold_guard_sec3 and profit_pct >= self.cfg.guard_profit_trigger3:
             print(f"[GUARD EXIT] TP {side} profit {profit_pct*100:.2f}% after {elapsed_sec/60:.1f} min")
