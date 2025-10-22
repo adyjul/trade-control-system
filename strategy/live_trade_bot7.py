@@ -1730,37 +1730,44 @@ class ImprovedLiveDualEntryBot:
                 quantity=qty
             )
             
-            order_id = order['orderId']
-            await asyncio.sleep(0.1)
-            filled_order = await self.client.futures_get_order(
-                symbol=self.cfg.pair,
-                orderId=order_id
-            )
+            try:
+                order_id = order['orderId']
+                await asyncio.sleep(0.1)
+                filled_order = await self.client.futures_get_order(
+                    symbol=self.cfg.pair,
+                    orderId=order_id
+                )
 
-            exec_qty = float(filled_order.get('executedQty', 0))
-            avg_price = float(filled_order.get('avgPrice', 0))
+                exec_qty = float(filled_order.get('executedQty', 0))
+                avg_price = float(filled_order.get('avgPrice', 0))
 
-            if exec_qty <= 0 or avg_price <= 0:
-                if 'fills' in order and order['fills']:
-                    total_val = 0.0
-                    total_qty = 0.0
-                    for fill in order['fills']:
-                        qty_f = float(fill['qty'])
-                        price_f = float(fill['price'])
-                        total_qty += qty_f
-                        total_val += qty_f * price_f
-                    if total_qty > 0:
-                        avg_price = total_val / total_qty
-                        exec_qty = total_qty
+                if exec_qty <= 0 or avg_price <= 0:
+                    if 'fills' in order and order['fills']:
+                        total_val = 0.0
+                        total_qty = 0.0
+                        for fill in order['fills']:
+                            qty_f = float(fill['qty'])
+                            price_f = float(fill['price'])
+                            total_qty += qty_f
+                            total_val += qty_f * price_f
+                        if total_qty > 0:
+                            avg_price = total_val / total_qty
+                            exec_qty = total_qty
+                        else:
+                            # ❌ JANGAN fallback ke last_tick_price → fallback ke entry_price (estimasi ATR)
+                            avg_price = entry_price
+                            exec_qty = qty
+                            print(f"[WARN] No fills data! Using ATR entry_price={entry_price:.3f} as fallback (not tick price)")
                     else:
-                        # ❌ JANGAN fallback ke last_tick_price → fallback ke entry_price (estimasi ATR)
-                        avg_price = entry_price
+                        avg_price = entry_price  # fallback ke entry_price, BUKAN last_tick_price
                         exec_qty = qty
-                        print(f"[WARN] No fills data! Using ATR entry_price={entry_price:.3f} as fallback (not tick price)")
-                else:
-                    avg_price = entry_price  # fallback ke entry_price, BUKAN last_tick_price
-                    exec_qty = qty
-                    print(f"[WARN] No avgPrice or fills! Using ATR entry_price={entry_price:.3f} as fallback")
+                        print(f"[WARN] No avgPrice or fills! Using ATR entry_price={entry_price:.3f} as fallback")
+
+            except Exception as e:
+                avg_price = entry_price 
+                exec_qty = qty
+                print("[WARN] pencarian order error:", e)
+                print(f"[WARN] No avgPrice or fills! Using ATR entry_price={entry_price:.3f} as fallback")
 
             avg_price = self._round_price(avg_price)
 
