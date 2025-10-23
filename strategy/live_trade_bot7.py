@@ -1440,6 +1440,56 @@ class ImprovedLiveDualEntryBot:
             self.candles.loc[ts, 'ATR'] = talib.ATR(high, low, close, 14)[-1]
             self.candles.loc[ts, 'plusDI'] = talib.PLUS_DI(high, low, close, 14)[-1]
             self.candles.loc[ts, 'minusDI'] = talib.MINUS_DI(high, low, close, 14)[-1]
+    
+    def is_liquidity_sweep_short(self, entry_price: float) -> bool:
+        if len(self.candles) < 15:
+            return False
+
+        prev_candle = self.candles.iloc[-2]
+        curr_candle = self.candles.iloc[-1]
+
+        if prev_candle['low'] >= entry_price:
+            return False
+
+        mid_prev = (prev_candle['low'] + prev_candle['high']) / 2
+        if curr_candle['close'] <= mid_prev:
+            return False
+
+        avg_vol = self.candles['volume'].tail(10).mean()
+        if prev_candle['volume'] < avg_vol * 0.8:
+            return False
+
+        plus_di, minus_di, adx = self.calculate_directional_indicators()
+        if adx > 25 and minus_di > plus_di:
+            return False
+
+        print(f"[LIQUIDITY SWEEP] Short di {entry_price:.3f} terdeteksi sebagai false breakout")
+        return True
+
+    def is_liquidity_sweep_long(self, entry_price: float) -> bool:
+        if len(self.candles) < 15:
+            return False
+
+        prev_candle = self.candles.iloc[-2]
+        curr_candle = self.candles.iloc[-1]
+
+        if prev_candle['high'] <= entry_price:
+            return False
+
+        mid_prev = (prev_candle['low'] + prev_candle['high']) / 2
+        if curr_candle['close'] >= mid_prev:
+            return False
+
+        avg_vol = self.candles['volume'].tail(10).mean()
+        if prev_candle['volume'] < avg_vol * 0.8:
+            return False
+
+        plus_di, minus_di, adx = self.calculate_directional_indicators()
+        if adx > 25 and plus_di > minus_di:
+            return False
+
+        print(f"[LIQUIDITY SWEEP] Long di {entry_price:.3f} terdeteksi sebagai false breakout")
+        return True
 
     def _create_watch(self, atr_value):
 
@@ -1479,16 +1529,24 @@ class ImprovedLiveDualEntryBot:
             return
         
         # ENHANCED MARKET DETECTION
-        market_analysis = self.enhanced_trend_detection()
-        regime = market_analysis['regime']
-        confidence = market_analysis['confidence']
-        trend_direction = market_analysis['trend_direction']
+        # market_analysis = self.enhanced_trend_detection()
+        # regime = market_analysis['regime']
+        # is_sideways = self.enhanced_sideways_detection()
+        # if is_sideways and regime != "SIDEWAYS":
+        #     print(f"[ADJUST] Overriding regime to SIDEWAYS based on detailed analysis")
+        #     regime = "SIDEWAYS"
+        #     confidence = 0.8
 
         is_sideways = self.enhanced_sideways_detection()
-        if is_sideways and regime != "SIDEWAYS":
-            print(f"[ADJUST] Overriding regime to SIDEWAYS based on detailed analysis")
+        if is_sideways:
             regime = "SIDEWAYS"
             confidence = 0.8
+            trend_direction = "NEUTRAL"
+        else:
+            market_analysis = self.enhanced_trend_detection()
+            regime = market_analysis['regime']
+            confidence = market_analysis['confidence']
+            trend_direction = market_analysis['trend_direction']
 
         print(f"[MARKET] Regime: {regime}, Direction: {trend_direction}, Confidence: {confidence:.2f}")
 
@@ -1515,13 +1573,29 @@ class ImprovedLiveDualEntryBot:
             sl_price = None
 
             # --- DETEKSI KONDISI ENTRY ---
-            if self.cfg.require_confirmation:
+            use_confirmation = (regime == "STRONG_TREND")
+
+            if use_confirmation:
+                avg_vol = self.candles['volume'].tail(10).mean() if len(self.candles) >= 10 else 1
+                current_vol = self.candles['volume'].iat[-1]
+
+                # Konfirmasi LONG: close di atas level + volume tinggi
+                long_condition = (
+                    candle_close >= w['long_level'] and
+                    current_vol > avg_vol * 1.2
+                )
+
+                # Konfirmasi SHORT: close di bawah level + volume tinggi
+                short_condition = (
+                    candle_close <= w['short_level'] and
+                    current_vol > avg_vol * 1.2
+                )
+            else:
+                # Di SIDEWAYS/MIXED, tetap pakai logika dasar (tanpa volume, karena false breakout sering terjadi)
                 long_condition = candle_close >= w['long_level']
                 short_condition = candle_close <= w['short_level']
-            else:
-                long_condition = candle_high >= w['long_level']
-                short_condition = candle_low <= w['short_level']
 
+            
             # --- HITUNG TP/SL AWAL ---
             if long_condition:
                 triggered = True
@@ -1546,7 +1620,29 @@ class ImprovedLiveDualEntryBot:
             # =====================
             #      JIKA TRIGGER
             # =====================
+
+
             if triggered:
+
+                # --- LIQUIDITY SWEEP FILTER (hanya untuk SIDEWAYS/MIXED) ---
+                # if regime in ["SIDEWAYS", "MIXED"] and len(self.candles) >= 2:
+                #     prev_candle = self.candles.iloc[-2]
+                #     curr_candle = self.candles.iloc[-1]
+                #     mid_prev = (prev_candle['low'] + prev_candle['high']) / 2
+
+                #     if side == "SHORT" and curr_candle['close'] > mid_prev:
+                #         print(f"[FILTER] SHORT skipped: liquidity sweep detected")
+                #         continue
+                #     elif side == "LONG" and curr_candle['close'] < mid_prev:
+                #         print(f"[FILTER] LONG skipped: liquidity sweep detected")
+                #         continue
+                
+                # --- LIQUIDITY SWEEP FILTER ---
+                if regime in ["SIDEWAYS", "MIXED"]:
+                    if side == "SHORT" and self.is_liquidity_sweep_short(entry_price):
+                        continue
+                    elif side == "LONG" and self.is_liquidity_sweep_long(entry_price):
+                        continue
 
                # --- ADAPTIVE SR FILTER BERDASARKAN REGIME ---
                 valid_sr = False
@@ -1581,19 +1677,40 @@ class ImprovedLiveDualEntryBot:
                         valid_sr = False
                         print(f"[SR FILTER] ❌ {side} tidak sesuai arah tren {trend_direction} → skip")
                 else:
-                    # SIDEWAYS / MIXED → gunakan S/R statis seperti sebelumnya
-                    if side == "LONG":
-                        if self._is_near_support(entry_price):
-                            valid_sr = True
-                            print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat SUPPORT")
-                        else:
-                            print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari SUPPORT → skip")
-                    elif side == "SHORT":
-                        if self._is_near_resistance(entry_price):
-                            valid_sr = True
-                            print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RESISTANCE")
-                        else:
-                            print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RESISTANCE → skip")
+                    if regime == "SIDEWAYS":
+                        # 🔁 LONGGARKAN FILTER: gunakan range harga sebagai fallback
+                        recent_high = self.candles['high'].tail(20).max()
+                        recent_low = self.candles['low'].tail(20).min()
+                        range_mid = (recent_high + recent_low) / 2
+                        range_width = recent_high - recent_low
+                        tolerance = range_width * 0.15  # 15% dari lebar range
+
+                        if side == "LONG":
+                            if entry_price <= range_mid + tolerance:
+                                valid_sr = True
+                                print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dalam zona mean-reversion (range: {recent_low:.3f}-{recent_high:.3f})")
+                            else:
+                                print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} terlalu tinggi di range → skip")
+                        elif side == "SHORT":
+                            if entry_price >= range_mid - tolerance:
+                                valid_sr = True
+                                print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dalam zona mean-reversion (range: {recent_low:.3f}-{recent_high:.3f})")
+                            else:
+                                print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} terlalu rendah di range → skip")
+                    else:
+                        # MIXED → tetap pakai S/R ketat seperti sebelumnya
+                        if side == "LONG":
+                            if self._is_near_support(entry_price):
+                                valid_sr = True
+                                print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat SUPPORT")
+                            else:
+                                print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari SUPPORT → skip")
+                        elif side == "SHORT":
+                            if self._is_near_resistance(entry_price):
+                                valid_sr = True
+                                print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RESISTANCE")
+                            else:
+                                print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RESISTANCE → skip")
 
                 if not valid_sr:
                     continue  # skip entry ini
