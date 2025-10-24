@@ -350,7 +350,7 @@ class BacktestBot:
 
 # ---------------- Main ----------------
 if __name__ == "__main__":
-    df = pd.read_csv("AVAXUSDT_5m-24.csv")
+    df = pd.read_csv("/home/julbot/trade-control-system/backtest_by_data/AVAXUSDT_5m.csv")
     cfg = BotConfig()
     bot = BacktestBot(cfg, df)
     trades_df = bot.run()
