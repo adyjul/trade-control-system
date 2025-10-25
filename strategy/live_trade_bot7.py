@@ -1556,11 +1556,9 @@ class ImprovedLiveDualEntryBot:
             return
 
         latest_idx = len(self.candles) - 1
-        candle_high = self.candles['high'].iat[-1]
-        candle_low = self.candles['low'].iat[-1]
         candle_close = self.candles['close'].iat[-1]
-
         new_watches = []
+
         for w in self.watches:
             if latest_idx < w['start_idx']:
                 new_watches.append(w)
@@ -1574,26 +1572,35 @@ class ImprovedLiveDualEntryBot:
 
             # --- DETEKSI KONDISI ENTRY ---
             use_confirmation = (regime == "STRONG_TREND")
+            vol_threshold = 1.0 
 
             if use_confirmation:
                 avg_vol = self.candles['volume'].tail(10).mean() if len(self.candles) >= 10 else 1
                 current_vol = self.candles['volume'].iat[-1]
-
-                # Konfirmasi LONG: close di atas level + volume tinggi
-                long_condition = (
-                    candle_close >= w['long_level'] and
-                    current_vol > avg_vol * 1.2
-                )
-
-                # Konfirmasi SHORT: close di bawah level + volume tinggi
-                short_condition = (
-                    candle_close <= w['short_level'] and
-                    current_vol > avg_vol * 1.2
-                )
+                long_condition = (candle_close >= w['long_level'] and current_vol > avg_vol * vol_threshold)
+                short_condition = (candle_close <= w['short_level'] and current_vol > avg_vol * vol_threshold)
             else:
-                # Di SIDEWAYS/MIXED, tetap pakai logika dasar (tanpa volume, karena false breakout sering terjadi)
                 long_condition = candle_close >= w['long_level']
                 short_condition = candle_close <= w['short_level']
+
+            if long_condition:
+                triggered = True
+                side = 'LONG'
+                self._current_signal_side = 'LONG'
+                entry_price = w['long_level']
+                tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
+                sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
+                tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
+                sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
+            elif short_condition:
+                triggered = True
+                side = 'SHORT'
+                self._current_signal_side = 'SHORT'
+                entry_price = w['short_level']
+                tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
+                sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
+                tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
+                sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
 
             
             # --- HITUNG TP/SL AWAL ---
@@ -1623,19 +1630,6 @@ class ImprovedLiveDualEntryBot:
 
 
             if triggered:
-
-                # --- LIQUIDITY SWEEP FILTER (hanya untuk SIDEWAYS/MIXED) ---
-                # if regime in ["SIDEWAYS", "MIXED"] and len(self.candles) >= 2:
-                #     prev_candle = self.candles.iloc[-2]
-                #     curr_candle = self.candles.iloc[-1]
-                #     mid_prev = (prev_candle['low'] + prev_candle['high']) / 2
-
-                #     if side == "SHORT" and curr_candle['close'] > mid_prev:
-                #         print(f"[FILTER] SHORT skipped: liquidity sweep detected")
-                #         continue
-                #     elif side == "LONG" and curr_candle['close'] < mid_prev:
-                #         print(f"[FILTER] LONG skipped: liquidity sweep detected")
-                #         continue
                 
                 # --- LIQUIDITY SWEEP FILTER ---
                 if regime in ["SIDEWAYS", "MIXED"]:
@@ -1646,96 +1640,112 @@ class ImprovedLiveDualEntryBot:
 
                # --- ADAPTIVE SR FILTER BERDASARKAN REGIME ---
                 valid_sr = False
+                size_mult = 1.0  # default full size
+
                 if regime == "STRONG_TREND":
                     if trend_direction == "DOWN" and side == "SHORT":
-                        # Gunakan resistance dinamis: high 1-3 candle terakhir
                         recent_high = max(
                             self.candles['high'].iloc[-1],
                             self.candles['high'].iloc[-2] if len(self.candles) > 1 else self.candles['high'].iloc[-1],
                             self.candles['high'].iloc[-3] if len(self.candles) > 2 else self.candles['high'].iloc[-1]
                         )
-                        max_dist = w['atr'] * 2.0
+                        max_dist = w['atr'] * 2.5  # 🔁 Diperlonggar dari 2.0 → 2.5
                         if abs(entry_price - recent_high) <= max_dist:
                             valid_sr = True
+                            size_mult = 1.0
                             print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RECENT HIGH ({recent_high:.3f})")
                         else:
                             print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RECENT HIGH ({recent_high:.3f}) → skip")
+
                     elif trend_direction == "UP" and side == "LONG":
                         recent_low = min(
                             self.candles['low'].iloc[-1],
                             self.candles['low'].iloc[-2] if len(self.candles) > 1 else self.candles['low'].iloc[-1],
                             self.candles['low'].iloc[-3] if len(self.candles) > 2 else self.candles['low'].iloc[-1]
                         )
-                        max_dist = w['atr'] * 2.0
+                        max_dist = w['atr'] * 2.5  # 🔁 Diperlonggar
                         if abs(entry_price - recent_low) <= max_dist:
                             valid_sr = True
+                            size_mult = 1.0
                             print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat RECENT LOW ({recent_low:.3f})")
                         else:
                             print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari RECENT LOW ({recent_low:.3f}) → skip")
+
                     else:
-                        # Long di downtrend / short di uptrend → skip
-                        valid_sr = False
-                        print(f"[SR FILTER] ❌ {side} tidak sesuai arah tren {trend_direction} → skip")
+                        # ⚠️ COUNTER-TREND ENTRY: izinkan dengan ukuran kecil
+                        if side == "SHORT":
+                            recent_high = max(
+                                self.candles['high'].iloc[-1],
+                                self.candles['high'].iloc[-2] if len(self.candles) > 1 else self.candles['high'].iloc[-1],
+                                self.candles['high'].iloc[-3] if len(self.candles) > 2 else self.candles['high'].iloc[-1]
+                            )
+                            max_dist = w['atr'] * 2.5
+                            if abs(entry_price - recent_high) <= max_dist:
+                                valid_sr = True
+                                size_mult = 0.3
+                                print(f"[SR FILTER] ⚠️ Counter-trend SHORT {entry_price:.3f} dekat RECENT HIGH → small size")
+                            else:
+                                print(f"[SR FILTER] ❌ Counter-trend SHORT terlalu jauh → skip")
+                        elif side == "LONG":
+                            recent_low = min(
+                                self.candles['low'].iloc[-1],
+                                self.candles['low'].iloc[-2] if len(self.candles) > 1 else self.candles['low'].iloc[-1],
+                                self.candles['low'].iloc[-3] if len(self.candles) > 2 else self.candles['low'].iloc[-1]
+                            )
+                            max_dist = w['atr'] * 2.5
+                            if abs(entry_price - recent_low) <= max_dist:
+                                valid_sr = True
+                                size_mult = 0.3
+                                print(f"[SR FILTER] ⚠️ Counter-trend LONG {entry_price:.3f} dekat RECENT LOW → small size")
+                            else:
+                                print(f"[SR FILTER] ❌ Counter-trend LONG terlalu jauh → skip")
+
                 else:
+                    # SIDEWAYS / MIXED → gunakan logika asli
                     if regime == "SIDEWAYS":
-                        # 🔁 LONGGARKAN FILTER: gunakan range harga sebagai fallback
                         recent_high = self.candles['high'].tail(20).max()
                         recent_low = self.candles['low'].tail(20).min()
                         range_mid = (recent_high + recent_low) / 2
                         range_width = recent_high - recent_low
-                        tolerance = range_width * 0.15  # 15% dari lebar range
-
+                        tolerance = range_width * 0.15
                         if side == "LONG":
-                            if entry_price <= range_mid + tolerance:
-                                valid_sr = True
-                                print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dalam zona mean-reversion (range: {recent_low:.3f}-{recent_high:.3f})")
-                            else:
-                                print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} terlalu tinggi di range → skip")
-                        elif side == "SHORT":
-                            if entry_price >= range_mid - tolerance:
-                                valid_sr = True
-                                print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dalam zona mean-reversion (range: {recent_low:.3f}-{recent_high:.3f})")
-                            else:
-                                print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} terlalu rendah di range → skip")
-                    else:
-                        # MIXED → tetap pakai S/R ketat seperti sebelumnya
+                            valid_sr = entry_price <= range_mid + tolerance
+                        else:
+                            valid_sr = entry_price >= range_mid - tolerance
+                    else:  # MIXED
                         if side == "LONG":
-                            if self._is_near_support(entry_price):
-                                valid_sr = True
-                                print(f"[SR FILTER] ✅ Long entry {entry_price:.3f} dekat SUPPORT")
-                            else:
-                                print(f"[SR FILTER] ❌ Long entry {entry_price:.3f} jauh dari SUPPORT → skip")
-                        elif side == "SHORT":
-                            if self._is_near_resistance(entry_price):
-                                valid_sr = True
-                                print(f"[SR FILTER] ✅ Short entry {entry_price:.3f} dekat RESISTANCE")
-                            else:
-                                print(f"[SR FILTER] ❌ Short entry {entry_price:.3f} jauh dari RESISTANCE → skip")
+                            valid_sr = self._is_near_support(entry_price)
+                        else:
+                            valid_sr = self._is_near_resistance(entry_price)
 
                 if not valid_sr:
                     continue  # skip entry ini
 
                 # Tentukan strategi berdasarkan regime dan trend direction
                 if regime == "STRONG_TREND":
-                    if trend_direction == "UP" and side == "LONG":
-                        await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "STRONG_UPTREND")
-                    elif trend_direction == "DOWN" and side == "SHORT":  
-                        await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "STRONG_DOWNTREND")
+                    if (trend_direction == "UP" and side == "LONG") or (trend_direction == "DOWN" and side == "SHORT"):
+                        # Entry searah → full size
+                        if side == "LONG":
+                            await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "STRONG_UPTREND")
+                        else:
+                            await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "STRONG_DOWNTREND")
                     else:
-                        print(f"🚫 Trend direction {trend_direction} tidak match dengan signal {side}")
-                        
+                        # Counter-trend → panggil strategi MIXED dengan size kecil
+                        if side == "LONG":
+                            await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
+                        else:
+                            await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
                 elif regime == "SIDEWAYS":
                     if side == "LONG":
                         await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "SIDEWAYS")
                     else:
                         await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "SIDEWAYS")
-                        
                 else:  # MIXED
                     if side == "LONG":
                         await self.long_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
                     else:
                         await self.short_strategy(side, entry_price, tp_price, sl_price, w['atr'], w['volatility_mult'], "MIXED")
-                
+                        
                 break
 
             else:

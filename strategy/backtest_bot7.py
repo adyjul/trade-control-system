@@ -312,6 +312,23 @@ class BacktestBot:
         })
         self._current_position = None
 
+    def _simulate_limit_fill(self, order_price: float, side: str, candle: pd.Series) -> bool:
+        """Simulasi apakah limit order terisi berdasarkan high/low candle"""
+        if side == "LONG":
+            # Limit buy terisi jika low <= order_price
+            return candle['low'] <= order_price
+        else:
+            # Limit sell terisi jika high >= order_price
+            return candle['high'] >= order_price
+
+    def _get_fill_price(self, order_price: float, side: str, candle: pd.Series) -> float:
+        """Dapatkan harga eksekusi realistis"""
+        if side == "LONG":
+            # Eksekusi di max(order_price, open) — asumsi conservative
+            return max(order_price, candle['open'])
+        else:
+            return min(order_price, candle['open'])
+
     def run(self):
         print(f"Starting backtest on {len(self.df)} candles...")
         for i, (ts, row) in enumerate(self.df.iterrows()):
