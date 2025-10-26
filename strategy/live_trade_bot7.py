@@ -1893,12 +1893,17 @@ class ImprovedLiveDualEntryBot:
             self.cfg.price_precision = 3
     
     async def _open_market_position(self, side: str, entry_price: float, tp_price: float, sl_price: float, atr_value: float, vol_mult: float, qty: float):
-        qty = self._round_qty(1.0)  # 1 AVAX
+
+        # qty = self._round_qty(1.0)  # 1 AVAX
         # qty = self.calculate_proper_position_size(entry_price, sl_price)
 
+        # if qty <= 0:
+        #     print(f"[SKIP] Quantity too small: {qty}")
+        #     return
+
         if qty <= 0:
-            print(f"[SKIP] Quantity too small: {qty}")
-            return
+            print(f"Menggunakan fix QTY: 1")
+            qty = self._round_qty(1.0) 
         
         # === 🔒 OPSIONAL: SKIP JIKA ADA LIMIT ORDER LAWAN ARAH ===
         opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
@@ -1906,6 +1911,8 @@ class ImprovedLiveDualEntryBot:
         if has_opposite_limit:
             print(f"[FILTER] Skip market {side}: opposite limit ({opposite_side}) active → potential false breakout")
             return
+
+
 
         # Round prices
         entry_price = self._round_price(entry_price)
