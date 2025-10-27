@@ -1572,7 +1572,7 @@ class ImprovedLiveDualEntryBot:
 
             # --- DETEKSI KONDISI ENTRY ---
             use_confirmation = (regime == "STRONG_TREND")
-            vol_threshold = 1.0 
+            vol_threshold = 1.1 
 
             if use_confirmation:
                 avg_vol = self.candles['volume'].tail(10).mean() if len(self.candles) >= 10 else 1
