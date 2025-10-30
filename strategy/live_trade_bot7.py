@@ -1623,25 +1623,25 @@ class ImprovedLiveDualEntryBot:
 
             
             # --- HITUNG TP/SL AWAL ---
-            if long_condition:
-                triggered = True
-                side = 'LONG'
-                self._current_signal_side = 'LONG'
-                entry_price = w['long_level']
-                tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
-                sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
-                tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
-                sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
+            # if long_condition:
+            #     triggered = True
+            #     side = 'LONG'
+            #     self._current_signal_side = 'LONG'
+            #     entry_price = w['long_level']
+            #     tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
+            #     sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
+            #     tp_price = self._round_price(entry_price + w['atr'] * tp_mult)
+            #     sl_price = self._round_price(entry_price - w['atr'] * sl_mult)
 
-            elif short_condition:
-                triggered = True
-                side = 'SHORT'
-                self._current_signal_side = 'SHORT'
-                entry_price = w['short_level']
-                tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
-                sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
-                tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
-                sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
+            # elif short_condition:
+            #     triggered = True
+            #     side = 'SHORT'
+            #     self._current_signal_side = 'SHORT'
+            #     entry_price = w['short_level']
+            #     tp_mult = self.cfg.tp_atr_mult * w['volatility_mult']
+            #     sl_mult = self.cfg.sl_atr_mult * w['volatility_mult']
+            #     tp_price = self._round_price(entry_price - w['atr'] * tp_mult)
+            #     sl_price = self._round_price(entry_price + w['atr'] * sl_mult)
 
             # =====================
             #      JIKA TRIGGER
