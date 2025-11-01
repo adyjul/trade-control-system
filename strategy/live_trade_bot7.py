@@ -1572,35 +1572,46 @@ class ImprovedLiveDualEntryBot:
 
             # --- DETEKSI KONDISI ENTRY ---
             use_confirmation = (regime == "STRONG_TREND")
-            vol_threshold = 1.1 
+            vol_threshold = 1.2 
 
             if use_confirmation:
-                # Hitung rata-rata volume (minimal 10 candle)
                 avg_vol = self.candles['volume'].tail(10).mean() if len(self.candles) >= 10 else 1
                 current_vol = self.candles['volume'].iat[-1]
-                vol_ratio = current_vol / avg_vol
-
-                # Ambil level dari w
-                long_level = w['long_level']
-                short_level = w['short_level']
-
-                # Inisialisasi kondisi
-                long_condition = False
-                short_condition = False
-
-                if vol_ratio >= 1.2:
-                    # Mode TREN KUAT: ikuti arah sinyal
-                    long_condition = (candle_close >= long_level)
-                    short_condition = (candle_close <= short_level)
-
-                elif vol_ratio >= 1.0:
-                    # Mode VOLUME SEDANG: lawan arah (antisipasi false breakout / trap)
-                    # Catatan: pastikan level ini masuk akal untuk reversal!
-                    long_condition = (candle_close <= short_level)   # sinyal short → eksekusi long
-                    short_condition = (candle_close >= long_level)   # sinyal long → eksekusi short
+                long_condition = (candle_close >= w['long_level'] and current_vol > avg_vol * vol_threshold)
+                short_condition = (candle_close <= w['short_level'] and current_vol > avg_vol * vol_threshold)
             else:
                 long_condition = candle_close >= w['long_level']
                 short_condition = candle_close <= w['short_level']
+
+            # if use_confirmation:
+            #     # Hitung rata-rata volume (minimal 10 candle)
+            #     avg_vol = self.candles['volume'].tail(10).mean() if len(self.candles) >= 10 else 1
+            #     current_vol = self.candles['volume'].iat[-1]
+            #     vol_ratio = current_vol / avg_vol
+
+            #     # Ambil level dari w
+            #     long_level = w['long_level']
+            #     short_level = w['short_level']
+
+            #     # Inisialisasi kondisi
+            #     long_condition = False
+            #     short_condition = False
+
+            #     if vol_ratio >= 1.2:
+            #         # Mode TREN KUAT: ikuti arah sinyal
+            #         long_condition = (candle_close >= long_level)
+            #         short_condition = (candle_close <= short_level)
+
+            #     elif vol_ratio >= 1.0:
+            #         # Mode VOLUME SEDANG: lawan arah (antisipasi false breakout / trap)
+            #         # Catatan: pastikan level ini masuk akal untuk reversal!
+            #         long_condition = (candle_close <= short_level)   # sinyal short → eksekusi long
+            #         short_condition = (candle_close >= long_level)   # sinyal long → eksekusi short
+            # else:
+            #     long_condition = candle_close >= w['long_level']
+            #     short_condition = candle_close <= w['short_level']
+
+            
 
             if long_condition:
                 triggered = True
