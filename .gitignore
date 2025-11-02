@@ -6,6 +6,7 @@
 /backtest_result_test
 /data_backtest
 /logs
+/data_test
 .env
 
 # Python
