@@ -1,4 +1,4 @@
-# backtest_bot7.py
+# backtest_bot7_fixed.py
 import pandas as pd
 import numpy as np
 import talib
@@ -24,12 +24,13 @@ df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
 df['plus_di'], df['minus_di'], df['adx'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14), \
                                             talib.MINUS_DI(df['high'], df['low'], df['close'], 14), \
                                             talib.ADX(df['high'], df['low'], df['close'], 14)
+# Tambahkan volume rata-rata
+df['vol_ma'] = df['volume'].rolling(10).mean()
 
-# --- FUNGSI REGIME (sama seperti di bot Anda) ---
+# --- FUNGSI REGIME ---
 def enhanced_trend_detection(row_idx, df):
     if row_idx < 30:
         return "MIXED"
-    # Ambil data terbaru
     adx = df['adx'].iloc[row_idx]
     plus_di = df['plus_di'].iloc[row_idx]
     minus_di = df['minus_di'].iloc[row_idx]
@@ -67,7 +68,6 @@ trades = []
 
 for i in range(30, len(df)):
     if position is not None:
-        # Cek exit
         current_price = df['close'].iloc[i]
         if position['side'] == 'LONG':
             if current_price >= position['tp'] or current_price <= position['sl']:
@@ -80,7 +80,8 @@ for i in range(30, len(df)):
                     'entry': position['entry'],
                     'exit': current_price,
                     'pnl': pnl,
-                    'balance': balance
+                    'balance': balance,
+                    'regime': position['regime']
                 })
                 position = None
         else:  # SHORT
@@ -94,26 +95,32 @@ for i in range(30, len(df)):
                     'entry': position['entry'],
                     'exit': current_price,
                     'pnl': pnl,
-                    'balance': balance
+                    'balance': balance,
+                    'regime': position['regime']
                 })
                 position = None
     
     if position is None:
-        # Cek entry
         regime = enhanced_trend_detection(i, df)
         atr = df['atr'].iloc[i]
         close = df['close'].iloc[i]
+        volume = df['volume'].iloc[i]
+        vol_ma = df['vol_ma'].iloc[i]
+        
+        # 🔴 HANYA ENTRY DI STRONG_TREND
+        if regime != "STRONG_TREND":
+            continue
         
         # Buat level breakout
         long_level = close + atr * LEVEL_MULT
         short_level = close - atr * LEVEL_MULT
         
-        # Cek apakah breakout terjadi di candle ini
+        # Cek breakout + konfirmasi volume
         broke_long = df['high'].iloc[i] >= long_level
         broke_short = df['low'].iloc[i] <= short_level
+        vol_confirmed = volume > vol_ma * 1.2  # minimal 120% volume rata-rata
         
-        if broke_long and regime in ["STRONG_TREND", "MIXED"]:
-            # Hitung qty berdasarkan risk
+        if broke_long and vol_confirmed:
             sl = long_level - atr * SL_ATR_MULT
             risk_per_unit = (long_level - sl) * LEVERAGE
             if risk_per_unit > 0:
@@ -125,9 +132,10 @@ for i in range(30, len(df)):
                     'tp': tp,
                     'sl': sl,
                     'qty': qty,
-                    'entry_time': df['timestamp'].iloc[i]
+                    'entry_time': df['timestamp'].iloc[i],
+                    'regime': regime
                 }
-        elif broke_short and regime in ["STRONG_TREND", "MIXED"]:
+        elif broke_short and vol_confirmed:
             sl = short_level + atr * SL_ATR_MULT
             risk_per_unit = (sl - short_level) * LEVERAGE
             if risk_per_unit > 0:
@@ -139,7 +147,8 @@ for i in range(30, len(df)):
                     'tp': tp,
                     'sl': sl,
                     'qty': qty,
-                    'entry_time': df['timestamp'].iloc[i]
+                    'entry_time': df['timestamp'].iloc[i],
+                    'regime': regime
                 }
 
 # --- HASIL ---
@@ -151,6 +160,15 @@ if not trades_df.empty:
     print(f"Win Rate: {win_rate:.2%}")
     print(f"Total PnL: {total_pnl:.4f} USDT")
     print(f"Final Balance: {balance:.4f} USDT")
-    trades_df.to_csv("backtest_results.csv", index=False)
+    
+    # Analisis per regime
+    print("\n--- ANALISIS PER REGIME ---")
+    print(trades_df.groupby('regime').agg(
+        total_trades=('pnl', 'count'),
+        win_rate=('pnl', lambda x: (x > 0).mean()),
+        avg_pnl=('pnl', 'mean')
+    ))
+    
+    trades_df.to_csv("backtest_results_fixed.csv", index=False)
 else:
     print("Tidak ada trade dieksekusi.")
