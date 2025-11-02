@@ -169,6 +169,6 @@ if not trades_df.empty:
         avg_pnl=('pnl', 'mean')
     ))
     
-    trades_df.to_csv("backtest_results_fixed.csv", index=False)
+    trades_df.to_csv("/home/julbot/trade-control-system/data_test/backtest_results_fixed.csv", index=False)
 else:
     print("Tidak ada trade dieksekusi.")
