@@ -1,4 +1,4 @@
-# backtest_bot7_fixed.py
+# backtest_bot7_retest.py
 import pandas as pd
 import numpy as np
 import talib
@@ -24,7 +24,6 @@ df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
 df['plus_di'], df['minus_di'], df['adx'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14), \
                                             talib.MINUS_DI(df['high'], df['low'], df['close'], 14), \
                                             talib.ADX(df['high'], df['low'], df['close'], 14)
-# Tambahkan volume rata-rata
 df['vol_ma'] = df['volume'].rolling(10).mean()
 
 # --- FUNGSI REGIME ---
@@ -100,27 +99,35 @@ for i in range(30, len(df)):
                 })
                 position = None
     
-    if position is None:
+    if position is None and i >= 1:
         regime = enhanced_trend_detection(i, df)
+        if regime != "STRONG_TREND":
+            continue  # 🔴 Hanya STRONG_TREND
+
         atr = df['atr'].iloc[i]
         close = df['close'].iloc[i]
         volume = df['volume'].iloc[i]
         vol_ma = df['vol_ma'].iloc[i]
-        
-        # 🔴 HANYA ENTRY DI STRONG_TREND
-        if regime != "STRONG_TREND":
-            continue
-        
-        # Buat level breakout
-        long_level = close + atr * LEVEL_MULT
-        short_level = close - atr * LEVEL_MULT
-        
-        # Cek breakout + konfirmasi volume
-        broke_long = df['high'].iloc[i] >= long_level
-        broke_short = df['low'].iloc[i] <= short_level
-        vol_confirmed = volume > vol_ma * 1.2  # minimal 120% volume rata-rata
-        
-        if broke_long and vol_confirmed:
+        ema_fast = df['ema_fast'].iloc[i]
+        ema_slow = df['ema_slow'].iloc[i]
+
+        # Ambil level breakout dari candle sebelumnya
+        prev_close = df['close'].iloc[i-1]
+        long_level = prev_close + atr * LEVEL_MULT
+        short_level = prev_close - atr * LEVEL_MULT
+
+        # Cek apakah candle sebelumnya breakout
+        broke_long_prev = df['high'].iloc[i-1] >= long_level
+        broke_short_prev = df['low'].iloc[i-1] <= short_level
+
+        # Cek apakah candle saat ini retest
+        retest_long = broke_long_prev and (df['low'].iloc[i] <= long_level) and (close > long_level * 0.995)
+        retest_short = broke_short_prev and (df['high'].iloc[i] >= short_level) and (close < short_level * 1.005)
+
+        # Volume harus tinggi
+        vol_confirmed = volume >= vol_ma * 2.0
+
+        if retest_long and vol_confirmed and ema_fast > ema_slow:
             sl = long_level - atr * SL_ATR_MULT
             risk_per_unit = (long_level - sl) * LEVERAGE
             if risk_per_unit > 0:
@@ -135,7 +142,8 @@ for i in range(30, len(df)):
                     'entry_time': df['timestamp'].iloc[i],
                     'regime': regime
                 }
-        elif broke_short and vol_confirmed:
+
+        elif retest_short and vol_confirmed and ema_fast < ema_slow:
             sl = short_level + atr * SL_ATR_MULT
             risk_per_unit = (sl - short_level) * LEVERAGE
             if risk_per_unit > 0:
@@ -161,7 +169,6 @@ if not trades_df.empty:
     print(f"Total PnL: {total_pnl:.4f} USDT")
     print(f"Final Balance: {balance:.4f} USDT")
     
-    # Analisis per regime
     print("\n--- ANALISIS PER REGIME ---")
     print(trades_df.groupby('regime').agg(
         total_trades=('pnl', 'count'),
