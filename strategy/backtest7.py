@@ -12,7 +12,7 @@ SL_ATR_MULT = 2.5
 LEVEL_MULT = 1.0
 
 # --- LOAD DATA ---
-df = pd.read_csv("/home/julbot/trade-control-system/data_test/AVAXUSDT_5m-30.csv")
+df = pd.read_csv("/home/julbot/trade-control-system/data_test/AVAXUSDT_5m-25.csv")
 df['timestamp'] = pd.to_datetime(df['timestamp'])
 df = df.sort_values('timestamp').reset_index(drop=True)
 
