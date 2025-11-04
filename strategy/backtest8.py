@@ -276,7 +276,7 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
         }
     })
     
-    print('debug exchange', symbol)
+    print(f"debug exchange {symbol}")
     try:
         print(f"📡 Mengambil data {symbol} ({timeframe}) dari Binance...")
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
