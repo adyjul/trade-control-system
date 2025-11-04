@@ -6,6 +6,7 @@ import ccxt
 from datetime import datetime, timedelta
 import requests
 import time
+from functools import lru_cache
 
 # --- CONFIG UTAMA ---
 INITIAL_BALANCE = 20.0
