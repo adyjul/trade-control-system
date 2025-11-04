@@ -275,8 +275,7 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
             'defaultType': 'spot'
         }
     })
-    
-    print(f"debug exchange {symbol}")
+
     try:
         print(f"📡 Mengambil data {symbol} ({timeframe}) dari Binance...")
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
@@ -390,13 +389,14 @@ def run_backtest(symbol, df):
     symbols = symbol
     asset_data = {}
     hot_assets = []
-    
+    print(f"debug symbol: {symbols}")
     # 3. Ambil data dan scan semua aset
     print("\n🔍 SCANNING SEMUA ASET...")
     scanner = MarketScanner()
     
     for symbol in symbols:
         try:
+
             df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
             
             # Hitung skor market
