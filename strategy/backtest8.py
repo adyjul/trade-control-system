@@ -447,7 +447,7 @@ def run_multi_symbol_backtest():
         df['vol_ma'] = df['volume'].rolling(10).mean()
         
         # Jalankan backtest untuk symbol ini
-        trades = run_single_symbol_backtest(symbol, df)
+        trades = run_backtest_on_symbol(symbol, df)
         
         if trades:
             all_trades.extend(trades)
