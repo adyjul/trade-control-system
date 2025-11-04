@@ -372,7 +372,7 @@ def run_automatic_backtest():
     run_backtest(best_symbol, df)
 
 # --- MAIN PROGRAM ---
-def run_backtest(symbol, df):
+def run_backtest(best_symbol, df):
     """Jalankan backtest multi-aset dengan market scanner"""
     print("🚀 MEMULAI BACKTEST MULTI-ASSET")
     print("=" * 50)
@@ -386,17 +386,17 @@ def run_backtest(symbol, df):
         btc_df = None
     
     # 2. Daftar aset yang akan di-scan
-    symbols = symbol
+    symbols = best_symbol
     asset_data = {}
     hot_assets = []
-    print(f"debug symbol: {symbols}")
+   
     # 3. Ambil data dan scan semua aset
     print("\n🔍 SCANNING SEMUA ASET...")
     scanner = MarketScanner()
     
     for symbol in symbols:
         try:
-
+            print(f"debug symbol: {symbol}")
             df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
             
             # Hitung skor market
