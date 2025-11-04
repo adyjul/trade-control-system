@@ -83,47 +83,68 @@ class MarketScanner:
         ]
         return default_symbols[:self.max_symbols]
     
+    @lru_cache(maxsize=100)  # Cache hasil request
     def get_social_sentiment(self, symbol):
-        """Ambil sentimen sosial dari API (opsional) - FIXED VERSION"""
+        """Ambil sentimen sosial dengan rate limiting handling"""
         try:
-            # Perbaikan 1: Hapus spasi di URL
             coin_id = symbol.split('/')[0].lower()
-            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+            current_time = time.time()
+            
+            # Rate limiting protection
+            if current_time - self.last_cg_request < self.cg_request_delay:
+                wait_time = self.cg_request_delay - (current_time - self.last_cg_request)
+                print(f"⏳ Menunggu {wait_time:.1f} detik sebelum request CoinGecko berikutnya...")
+                time.sleep(wait_time)
+            
+            # URL dengan API key jika tersedia
+            base_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+            if self.cg_api_key:
+                url = f"{base_url}?x_cg_demo_api_key={self.cg_api_key}"
+            else:
+                url = base_url
             
             print(f"🔍 Mengambil sentimen untuk {symbol} dari: {url}")
-            response = requests.get(url, timeout=8, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json'
+            }
             
-            # Perbaikan 2: Cek status code secara eksplisit
+            response = requests.get(url, headers=headers, timeout=10)
+            self.last_cg_request = time.time()  # Update waktu request terakhir
+            
+            # Handle rate limiting
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', 60))
+                print(f"⚠️ Rate limit tercapai! Menunggu {retry_after} detik...")
+                time.sleep(retry_after)
+                return self.get_social_sentiment(symbol)  # Recursive call setelah delay
+            
             if response.status_code != 200:
                 print(f"⚠️ API error untuk {symbol}: Status code {response.status_code}")
                 print(f"   Response: {response.text[:100]}...")
-                return 50  # Return default score
+                return self.get_fallback_sentiment(symbol)
             
             data = response.json()
             
-            # Perbaikan 3: Validasi struktur data sebelum akses
-            if 'market_data' not in data or 'market_cap_rank' not in data['market_data']:
+            # Validasi data
+            if 'market_data' not in data:
                 print(f"⚠️ Data tidak lengkap untuk {symbol}: market_data tidak tersedia")
-                return 50
+                return self.get_fallback_sentiment(symbol)
             
-            # Perbaikan 4: Tambahkan metrics lain untuk sentimen
+            # Hitung skor sentimen
             market_cap_rank = data['market_data'].get('market_cap_rank', 100)
             sentiment_score = max(0, 100 - market_cap_rank)
             
-            # Tambahkan skor berdasarkan popularitas developer
+            # Tambahkan skor developer dan komunitas jika tersedia
             dev_score = 0
-            if 'developer_score' in data:
-                dev_score = data['developer_score'] * 10  # Skala 0-100
-            
-            # Tambahkan skor berdasarkan komunitas
             community_score = 0
+            
+            if 'developer_score' in data:
+                dev_score = data['developer_score'] * 10
             if 'community_score' in data:
                 community_score = data['community_score'] * 10
             
-            # Gabungkan skor
-            final_score = min(100, sentiment_score + dev_score + community_score)
+            final_score = min(100, sentiment_score + (dev_score * 0.3) + (community_score * 0.3))
             
             print(f"✅ Berhasil mengambil sentimen {symbol}:")
             print(f"   Market Cap Rank: #{market_cap_rank}")
@@ -134,23 +155,35 @@ class MarketScanner:
             return final_score
             
         except requests.exceptions.Timeout:
-            print(f"⏱️ Timeout mengambil sentimen untuk {symbol} (8 detik)")
-            return 50
+            print(f"⏱️ Timeout mengambil sentimen untuk {symbol} (10 detik)")
+            return self.get_fallback_sentiment(symbol)
         except requests.exceptions.ConnectionError:
             print(f"🌐 Koneksi gagal untuk {symbol} - cek internet Anda")
-            return 50
-        except requests.exceptions.RequestException as e:
-            print(f"📡 Error request untuk {symbol}: {str(e)}")
-            return 50
-        except ValueError as e:
-            print(f"❌ Error parsing JSON untuk {symbol}: {str(e)}")
-            return 50
+            return self.get_fallback_sentiment(symbol)
         except Exception as e:
             print(f"🔥 Error tidak terduga untuk {symbol}: {str(e)}")
-            print(f"   Tipe error: {type(e).__name__}")
-            import traceback
-            traceback.print_exc()
-            return 50
+            return self.get_fallback_sentiment(symbol)
+    
+    def get_fallback_sentiment(self, symbol):
+        """Fallback method jika API error"""
+        print(f"🔄 Menggunakan fallback sentimen untuk {symbol}")
+        
+        # Default score berdasarkan kapitalisasi pasar
+        default_scores = {
+            'BTC/USDT': 95,
+            'ETH/USDT': 90,
+            'SOL/USDT': 85,
+            'BNB/USDT': 80,
+            'AVAX/USDT': 75,
+            'XRP/USDT': 70,
+            'ADA/USDT': 65,
+            'DOGE/USDT': 80,  # High community sentiment
+            'SHIB/USDT': 75,  # High community sentiment
+            'MATIC/USDT': 70
+        }
+        
+        base_symbol = symbol.split('/')[0]
+        return default_scores.get(base_symbol, 60)  # Default 60 jika tidak dikenali
     
     def rank_symbols_by_activity(self, symbols):
         """Rangking aset berdasarkan aktivitas pasar terkini"""
