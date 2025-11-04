@@ -447,7 +447,7 @@ def run_multi_symbol_backtest():
         df['vol_ma'] = df['volume'].rolling(10).mean()
         
         # Jalankan backtest untuk symbol ini
-        trades = run_backtest_on_symbol(symbol, df)
+        trades = run_single_symbol_backtest(symbol, df)
         
         if trades:
             all_trades.extend(trades)
@@ -488,6 +488,113 @@ def run_multi_symbol_backtest():
     else:
         print("❌ TIDAK ADA TRADE DARI SEMUA ASET")
         print("💡 Saran: Turunkan MIN_SCAN_SCORE atau longgarkan filter entry")
+
+
+def run_single_symbol_backtest(symbol, df):
+    """Jalankan backtest pada satu symbol dan return trades"""
+    balance = INITIAL_BALANCE
+    position = None
+    trades = []
+    
+    for i in range(30, len(df)):
+        # Logic exit position (sama seperti sebelumnya)
+        if position is not None:
+            current_price = df['close'].iloc[i]
+            if position['side'] == 'LONG':
+                if current_price >= position['tp'] or current_price <= position['sl']:
+                    pnl = (current_price - position['entry']) * position['qty'] * LEVERAGE
+                    balance += pnl
+                    trades.append({
+                        'entry_time': position['entry_time'],
+                        'exit_time': df['timestamp'].iloc[i],
+                        'side': 'LONG',
+                        'entry': position['entry'],
+                        'exit': current_price,
+                        'pnl': pnl,
+                        'balance': balance,
+                        'regime': position['regime'],
+                        'symbol': symbol
+                    })
+                    position = None
+                    print(f"✅ EXIT LONG @ {current_price:.4f} | PnL: {pnl:.4f}")
+            else:  # SHORT
+                if current_price <= position['tp'] or current_price >= position['sl']:
+                    pnl = (position['entry'] - current_price) * position['qty'] * LEVERAGE
+                    balance += pnl
+                    trades.append({
+                        'entry_time': position['entry_time'],
+                        'exit_time': df['timestamp'].iloc[i],
+                        'side': 'SHORT',
+                        'entry': position['entry'],
+                        'exit': current_price,
+                        'pnl': pnl,
+                        'balance': balance,
+                        'regime': position['regime'],
+                        'symbol': symbol
+                    })
+                    position = None
+                    print(f"✅ EXIT SHORT @ {current_price:.4f} | PnL: {pnl:.4f}")
+        
+        # Logic entry (sama seperti sebelumnya)
+        if position is None and i >= 1:
+            regime = enhanced_trend_detection(i, df)
+            if regime != "STRONG_TREND":
+                continue
+            
+            atr = df['atr'].iloc[i]
+            close = df['close'].iloc[i]
+            volume = df['volume'].iloc[i]
+            vol_ma = df['vol_ma'].iloc[i]
+            ema_fast = df['ema_fast'].iloc[i]
+            ema_slow = df['ema_slow'].iloc[i]
+            
+            prev_close = df['close'].iloc[i-1]
+            long_level = prev_close + atr * LEVEL_MULT
+            short_level = prev_close - atr * LEVEL_MULT
+            
+            broke_long_prev = df['high'].iloc[i-1] >= long_level
+            broke_short_prev = df['low'].iloc[i-1] <= short_level
+            
+            retest_long = broke_long_prev and (df['low'].iloc[i] <= long_level) and (close > long_level * 0.998)
+            retest_short = broke_short_prev and (df['high'].iloc[i] >= short_level) and (close < short_level * 1.002)
+            
+            vol_confirmed = volume >= vol_ma * 1.5
+            
+            if retest_long and vol_confirmed and ema_fast > ema_slow:
+                sl = long_level - atr * SL_ATR_MULT
+                risk_per_unit = (long_level - sl) * LEVERAGE
+                if risk_per_unit > 0 and sl > 0:
+                    qty = (balance * RISK_PCT) / risk_per_unit
+                    tp = long_level + atr * TP_ATR_MULT
+                    position = {
+                        'side': 'LONG',
+                        'entry': long_level,
+                        'tp': tp,
+                        'sl': sl,
+                        'qty': qty,
+                        'entry_time': df['timestamp'].iloc[i],
+                        'regime': regime
+                    }
+                    print(f"🟢 LONG @ {long_level:.4f} | SL: {sl:.4f} | TP: {tp:.4f}")
+            
+            elif retest_short and vol_confirmed and ema_fast < ema_slow:
+                sl = short_level + atr * SL_ATR_MULT
+                risk_per_unit = (sl - short_level) * LEVERAGE
+                if risk_per_unit > 0 and sl > 0:
+                    qty = (balance * RISK_PCT) / risk_per_unit
+                    tp = short_level - atr * TP_ATR_MULT
+                    position = {
+                        'side': 'SHORT',
+                        'entry': short_level,
+                        'tp': tp,
+                        'sl': sl,
+                        'qty': qty,
+                        'entry_time': df['timestamp'].iloc[i],
+                        'regime': regime
+                    }
+                    print(f"🔴 SHORT @ {short_level:.4f} | SL: {sl:.4f} | TP: {tp:.4f}")
+    
+    return trades
 
 def run_backtest_on_symbol(symbol):
     """Jalankan backtest pada satu simbol yang dipilih"""
