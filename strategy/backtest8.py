@@ -94,11 +94,12 @@ class MarketScanner:
             
             if response.status_code == 200:
                 data = response.json()
+                print(f"📊 Sentimen sosial untuk {symbol}: {data['name']}")
                 if 'market_data' in data:
                     # Gunakan metrik seperti market cap rank, volume change, dll
                     market_cap_rank = data['market_data'].get('market_cap_rank', 100)
                     print(f"📊 Sentimen sosial untuk {symbol}: Market Cap Rank: {market_cap_rank}")
-                    
+
                     return max(0, 100 - market_cap_rank)  # Skor sentimen sederhana
             return 50  # Nilai default jika error
         
