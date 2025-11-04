@@ -84,27 +84,72 @@ class MarketScanner:
         return default_symbols[:self.max_symbols]
     
     def get_social_sentiment(self, symbol):
-        """Ambil sentimen sosial dari API (opsional)"""
+        """Ambil sentimen sosial dari API (opsional) - FIXED VERSION"""
         try:
-            # Contoh integrasi dengan API sentimen (bisa diganti dengan yang lain)
-            # Ini contoh mockup - ganti dengan API real seperti LunarCrush, Santiment, dll
+            # Perbaikan 1: Hapus spasi di URL
             coin_id = symbol.split('/')[0].lower()
             url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-            response = requests.get(url, timeout=5)
             
-            if response.status_code == 200:
-                data = response.json()
-                print(f"📊 Sentimen sosial untuk {symbol}: {data['name']}")
-                if 'market_data' in data:
-                    # Gunakan metrik seperti market cap rank, volume change, dll
-                    market_cap_rank = data['market_data'].get('market_cap_rank', 100)
-                    print(f"📊 Sentimen sosial untuk {symbol}: Market Cap Rank: {market_cap_rank}")
-
-                    return max(0, 100 - market_cap_rank)  # Skor sentimen sederhana
-            return 50  # Nilai default jika error
-        
+            print(f"🔍 Mengambil sentimen untuk {symbol} dari: {url}")
+            response = requests.get(url, timeout=8, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+            
+            # Perbaikan 2: Cek status code secara eksplisit
+            if response.status_code != 200:
+                print(f"⚠️ API error untuk {symbol}: Status code {response.status_code}")
+                print(f"   Response: {response.text[:100]}...")
+                return 50  # Return default score
+            
+            data = response.json()
+            
+            # Perbaikan 3: Validasi struktur data sebelum akses
+            if 'market_data' not in data or 'market_cap_rank' not in data['market_data']:
+                print(f"⚠️ Data tidak lengkap untuk {symbol}: market_data tidak tersedia")
+                return 50
+            
+            # Perbaikan 4: Tambahkan metrics lain untuk sentimen
+            market_cap_rank = data['market_data'].get('market_cap_rank', 100)
+            sentiment_score = max(0, 100 - market_cap_rank)
+            
+            # Tambahkan skor berdasarkan popularitas developer
+            dev_score = 0
+            if 'developer_score' in data:
+                dev_score = data['developer_score'] * 10  # Skala 0-100
+            
+            # Tambahkan skor berdasarkan komunitas
+            community_score = 0
+            if 'community_score' in data:
+                community_score = data['community_score'] * 10
+            
+            # Gabungkan skor
+            final_score = min(100, sentiment_score + dev_score + community_score)
+            
+            print(f"✅ Berhasil mengambil sentimen {symbol}:")
+            print(f"   Market Cap Rank: #{market_cap_rank}")
+            print(f"   Developer Score: {dev_score:.1f}")
+            print(f"   Community Score: {community_score:.1f}")
+            print(f"   📊 FINAL SENTIMEN SCORE: {final_score:.1f}/100")
+            
+            return final_score
+            
+        except requests.exceptions.Timeout:
+            print(f"⏱️ Timeout mengambil sentimen untuk {symbol} (8 detik)")
+            return 50
+        except requests.exceptions.ConnectionError:
+            print(f"🌐 Koneksi gagal untuk {symbol} - cek internet Anda")
+            return 50
+        except requests.exceptions.RequestException as e:
+            print(f"📡 Error request untuk {symbol}: {str(e)}")
+            return 50
+        except ValueError as e:
+            print(f"❌ Error parsing JSON untuk {symbol}: {str(e)}")
+            return 50
         except Exception as e:
-            print(f"⚠️ Error mengambil sentimen untuk {symbol}: {e}")
+            print(f"🔥 Error tidak terduga untuk {symbol}: {str(e)}")
+            print(f"   Tipe error: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
             return 50
     
     def rank_symbols_by_activity(self, symbols):
