@@ -1,4 +1,4 @@
-# backtest_with_market_scanner.py
+# backtest_with_market_scanner.py (versi FIX)
 import pandas as pd
 import numpy as np
 import talib
@@ -14,10 +14,9 @@ LEVERAGE = 10
 TP_ATR_MULT = 3.0
 SL_ATR_MULT = 2.5
 LEVEL_MULT = 1.0
-SYMBOL = 'AVAX/USDT'  # Bisa ganti jadi 'BTC/USDT', 'ETH/USDT', dll
 TIMEFRAME = '5m'
 BARS_TO_FETCH = 1000  # Ambil 1000 candle terbaru
-MIN_SCAN_SCORE = 0.7  # Minimal score untuk aktifkan strategi
+MIN_SCAN_SCORE = 0.6  # Minimal score untuk aktifkan strategi
 
 # --- MARKET SCANNER CLASS ---
 class MarketScanner:
@@ -28,7 +27,7 @@ class MarketScanner:
         })
         self.min_volume_usd = 1000000  # Minimal volume 24 jam $1 juta
         self.min_24h_change = 2.0      # Minimal pergerakan 24 jam 2%
-        self.max_symbols = 10          # Maksimal aset yang discsean
+        self.max_symbols = 10          # Maksimal aset yang discan
         self.min_volatility_multiplier = 1.5
         self.min_volume_multiplier = 1.8
         self.min_adx_threshold = 18
@@ -94,7 +93,6 @@ class MarketScanner:
             response = requests.get(url, timeout=5)
             
             if response.status_code == 200:
-                print('berhasil ambil data coingecko')
                 data = response.json()
                 if 'market_data' in data:
                     # Gunakan metrik seperti market cap rank, volume change, dll
@@ -290,7 +288,7 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
         return df
     
     except Exception as e:
-        print(f"❌ Error mengambil data: {e}")
+        print(f"❌ Error mengambil data {symbol}: {e}")
         print("Fallback ke data dummy...")
         # Data dummy untuk testing
         dates = pd.date_range(end=datetime.now(), periods=limit, freq='5min')
@@ -338,181 +336,94 @@ def enhanced_trend_detection(row_idx, df):
         return "SIDEWAYS"
     else:
         return "MIXED"
-    
-def run_automatic_backtest():
-    """Backtest otomatis dengan pemilihan aset dinamis"""
-    print("🚀 SISTEM TRADING OTOMATIS - PEMILIHAN ASET DINAMIS")
-    print("=" * 70)
-    
-    # Inisialisasi pemilih aset otomatis
-    auto_selector = MarketScanner()
-    
-    # Dapatkan aset terbaik untuk trading
-    best_symbol = auto_selector.get_best_asset_for_trading()
-    
-    if best_symbol is None:
-        print("🚫 GAGAL MENDAPATKAN ASET - MENGGUNAKAN AVAX/USDT SEBAGAI DEFAULT")
-        best_symbol = 'AVAX/USDT'
-    
-    # Ambil data OHLCV untuk aset terbaik
-    print(f"\n📈 MENGAMBIL DATA {best_symbol} DARI BINANCE...")
-    df = fetch_ohlcv_data(best_symbol, '5m', 1000)
-    
-    # Jalankan market scanner dan backtest seperti sebelumnya
-    scanner = MarketScanner()
-    market_score = scanner.calculate_market_score(df)
-    
-    print(f"\n🔍 SKOR PASAR {best_symbol}: {market_score:.2f}")
-    
-    if market_score < MIN_SCAN_SCORE:
-        print(f"💡 Pasar kurang aktif (threshold: {MIN_SCAN_SCORE}), tapi tetap melanjutkan karena ini aset paling happening!")
-    
-    # Jalankan backtest di aset terpilih
-    print(f"\n⚔️ MENJALANKAN STRATEGI DI {best_symbol}...")
-    run_backtest(best_symbol, df)
 
 # --- MAIN PROGRAM ---
-def run_backtest(best_symbol, df):
-    """Jalankan backtest multi-aset dengan market scanner"""
-    print("🚀 MEMULAI BACKTEST MULTI-ASSET")
+def run_backtest_on_symbol(symbol):
+    """Jalankan backtest pada satu simbol yang dipilih"""
+    print(f"\n⚔️ MENJALANKAN BACKTEST PADA {symbol}...")
     print("=" * 50)
     
-    # 1. Ambil data BTC sebagai benchmark (wajib untuk korelasi)
+    # 1. Ambil data OHLCV
+    df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
+    
+    # 2. Ambil data BTC untuk korelasi (opsional)
     try:
         btc_df = fetch_ohlcv_data('BTC/USDT', TIMEFRAME, BARS_TO_FETCH)
-        print("✅ Data BTC/USDT berhasil diambil")
-    except Exception as e:
-        print(f"⚠️ Gagal mengambil data BTC: {e}")
+    except:
         btc_df = None
+        print("⚠️ BTC data tidak tersedia - skip korelasi")
     
-    # 2. Daftar aset yang akan di-scan
-    symbols = best_symbol
-    asset_data = {}
-    hot_assets = []
-   
-    # 3. Ambil data dan scan semua aset
-    print("\n🔍 SCANNING SEMUA ASET...")
+    # 3. Inisialisasi market scanner
     scanner = MarketScanner()
+    market_score = scanner.calculate_market_score(df, btc_df)
+    is_market_hot = scanner.is_market_hot(market_score)
     
-    for symbol in symbols:
-        try:
-            print(f"debug symbol: {symbol}")
-            df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
-            
-            # Hitung skor market
-            market_score = scanner.calculate_market_score(df, btc_df)
-            is_hot = scanner.is_market_hot(market_score)
-            
-            if is_hot:
-                hot_assets.append(symbol)
-                print(f"🔥 {symbol} - SKOR: {market_score:.2f} ✅ HOT (STRATEGI AKTIF)")
-            else:
-                print(f"❄️ {symbol} - SKOR: {market_score:.2f} ❌ COLD (STRATEGI NON-AKTIF)")
-            
-            # Simpan data untuk backtest nanti
-            asset_data[symbol] = {
-                'df': df,
-                'is_hot': is_hot,
-                'score': market_score
-            }
-            
-        except Exception as e:
-            print(f"❌ Error memproses {symbol}: {e}")
+    print(f"\n🎯 KEPUTUSAN MARKET SCANNER:")
+    if is_market_hot:
+        print(f"✅ PASAR '{symbol}' HOT! Skor: {market_score:.2f} - Strategi AKTIF")
+    else:
+        print(f"❌ PASAR '{symbol}' DINGIN! Skor: {market_score:.2f} - Strategi NON-AKTIF")
+        print("💡 Saran: Cari pair lain atau tunggu kondisi pasar lebih baik")
+        # Tetap jalankan tapi dengan warning
+        print("🔄 Tetap menjalankan strategi karena ini aset paling happening...")
     
-    if not hot_assets:
-        print("\n🚫 TIDAK ADA ASET YANG 'HOT' - BACKTEST DIBATALKAN")
-        print("💡 Saran: Turunkan MIN_SCAN_SCORE atau tunggu kondisi pasar lebih baik")
-        return
+    # 4. Siapkan data untuk backtest
+    print("\n🔧 Menyiapkan indikator...")
+    df['ema_fast'] = talib.EMA(df['close'], 20)
+    df['ema_slow'] = talib.EMA(df['close'], 50)
+    df['rsi'] = talib.RSI(df['close'], 14)
+    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+    df['plus_di'], df['minus_di'], df['adx'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14), \
+                                               talib.MINUS_DI(df['high'], df['low'], df['close'], 14), \
+                                               talib.ADX(df['high'], df['low'], df['close'], 14)
+    df['vol_ma'] = df['volume'].rolling(10).mean()
     
-    print(f"\n🎯 ASET YANG AKTIF: {', '.join(hot_assets)}")
+    # 5. Jalankan backtest
+    balance = INITIAL_BALANCE
+    position = None
+    trades = []
     
-    # 4. Persiapkan data untuk semua aset
-    print("\n🔧 MENYIAPKAN INDIKATOR UNTUK SEMUA ASET...")
-    for symbol in asset_data:
-        df = asset_data[symbol]['df']
-        
-        # Hitung indikator teknikal
-        df['ema_fast'] = talib.EMA(df['close'], 20)
-        df['ema_slow'] = talib.EMA(df['close'], 50)
-        df['rsi'] = talib.RSI(df['close'], 14)
-        df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-        df['plus_di'], df['minus_di'], df['adx'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14), \
-                                                   talib.MINUS_DI(df['high'], df['low'], df['close'], 14), \
-                                                   talib.ADX(df['high'], df['low'], df['close'], 14)
-        df['vol_ma'] = df['volume'].rolling(10).mean()
-        
-        asset_data[symbol]['df'] = df
-    
-    # 5. Simulasi multi-asset trading
-    print("\n⚔️ MEMULAI SIMULASI MULTI-ASSET TRADING...")
-    total_balance = INITIAL_BALANCE
-    positions = {}  # Simpan posisi per aset
-    all_trades = []
-    risk_per_asset = 0.02  # Risk 2% dari total balance per aset
-    
-    # Loop melalui semua waktu (gunakan timestamp BTC sebagai referensi)
-    timestamps = btc_df['timestamp'].tolist() if btc_df is not None else asset_data[hos_assets[0]]['df']['timestamp'].tolist()
-    
-    for i, timestamp in enumerate(timestamps):
-        if i < 30:  # Skip periode awal untuk indikator
-            continue
-        
-        # Periksa exit untuk semua posisi yang aktif
-        for symbol in list(positions.keys()):
-            position = positions[symbol]
-            current_price = asset_data[symbol]['df'].iloc[i]['close']
-            
+    for i in range(30, len(df)):
+        # Periksa posisi yang sedang berjalan
+        if position is not None:
+            current_price = df['close'].iloc[i]
             if position['side'] == 'LONG':
                 if current_price >= position['tp'] or current_price <= position['sl']:
                     pnl = (current_price - position['entry']) * position['qty'] * LEVERAGE
-                    total_balance += pnl
-                    
-                    trade_record = {
+                    balance += pnl
+                    trades.append({
                         'entry_time': position['entry_time'],
-                        'exit_time': timestamp,
+                        'exit_time': df['timestamp'].iloc[i],
                         'side': 'LONG',
                         'entry': position['entry'],
                         'exit': current_price,
                         'pnl': pnl,
-                        'balance': total_balance,
+                        'balance': balance,
                         'regime': position['regime'],
                         'symbol': symbol
-                    }
-                    all_trades.append(trade_record)
-                    
-                    print(f"✅ EXIT LONG {symbol} @ {current_price:.4f} | PnL: {pnl:.4f} | Balance: {total_balance:.4f}")
-                    del positions[symbol]
-            
-            elif position['side'] == 'SHORT':
+                    })
+                    position = None
+                    print(f"✅ EXIT LONG @ {current_price:.4f} | PnL: {pnl:.4f} | Balance: {balance:.4f}")
+            else:  # SHORT
                 if current_price <= position['tp'] or current_price >= position['sl']:
                     pnl = (position['entry'] - current_price) * position['qty'] * LEVERAGE
-                    total_balance += pnl
-                    
-                    trade_record = {
+                    balance += pnl
+                    trades.append({
                         'entry_time': position['entry_time'],
-                        'exit_time': timestamp,
+                        'exit_time': df['timestamp'].iloc[i],
                         'side': 'SHORT',
                         'entry': position['entry'],
                         'exit': current_price,
                         'pnl': pnl,
-                        'balance': total_balance,
+                        'balance': balance,
                         'regime': position['regime'],
                         'symbol': symbol
-                    }
-                    all_trades.append(trade_record)
-                    
-                    print(f"✅ EXIT SHORT {symbol} @ {current_price:.4f} | PnL: {pnl:.4f} | Balance: {total_balance:.4f}")
-                    del positions[symbol]
+                    })
+                    position = None
+                    print(f"✅ EXIT SHORT @ {current_price:.4f} | PnL: {pnl:.4f} | Balance: {balance:.4f}")
         
-        # Cari entry baru untuk aset yang 'hot' dan belum ada posisi
-        for symbol in hot_assets:
-            if symbol in positions:  # Sudah ada posisi aktif
-                continue
-            
-            df = asset_data[symbol]['df']
-            if i >= len(df):
-                continue
-            
+        # Cari entry baru jika tidak ada posisi
+        if position is None and i >= 1:
             # Gunakan regime detection
             regime = enhanced_trend_detection(i, df)
             if regime != "STRONG_TREND":
@@ -539,58 +450,47 @@ def run_backtest(best_symbol, df):
             retest_short = broke_short_prev and (df['high'].iloc[i] >= short_level) and (close < short_level * 1.002)
             
             # Konfirmasi volume
-            vol_confirmed = volume >= vol_ma * 1.5
+            vol_confirmed = volume >= vol_ma * 1.5  # Lebih realistis daripada 2x
             
             # Entry long
             if retest_long and vol_confirmed and ema_fast > ema_slow:
                 sl = long_level - atr * SL_ATR_MULT
                 risk_per_unit = (long_level - sl) * LEVERAGE
-                
                 if risk_per_unit > 0 and sl > 0:
-                    # Hitung position size berdasarkan risk management per aset
-                    risk_amount = total_balance * risk_per_asset
-                    qty = risk_amount / risk_per_unit
-                    
+                    qty = (balance * RISK_PCT) / risk_per_unit
                     tp = long_level + atr * TP_ATR_MULT
-                    positions[symbol] = {
+                    position = {
                         'side': 'LONG',
                         'entry': long_level,
                         'tp': tp,
                         'sl': sl,
                         'qty': qty,
-                        'entry_time': timestamp,
+                        'entry_time': df['timestamp'].iloc[i],
                         'regime': regime
                     }
-                    
-                    print(f"🟢 ENTRY LONG {symbol} @ {long_level:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Qty: {qty:.4f}")
-                    continue  # Skip ke aset berikutnya
+                    print(f"🟢 LONG entry @ {long_level:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Qty: {qty:.4f}")
             
             # Entry short
             elif retest_short and vol_confirmed and ema_fast < ema_slow:
                 sl = short_level + atr * SL_ATR_MULT
                 risk_per_unit = (sl - short_level) * LEVERAGE
-                
                 if risk_per_unit > 0 and sl > 0:
-                    # Hitung position size berdasarkan risk management per aset
-                    risk_amount = total_balance * risk_per_asset
-                    qty = risk_amount / risk_per_unit
-                    
+                    qty = (balance * RISK_PCT) / risk_per_unit
                     tp = short_level - atr * TP_ATR_MULT
-                    positions[symbol] = {
+                    position = {
                         'side': 'SHORT',
                         'entry': short_level,
                         'tp': tp,
                         'sl': sl,
                         'qty': qty,
-                        'entry_time': timestamp,
+                        'entry_time': df['timestamp'].iloc[i],
                         'regime': regime
                     }
-                    
-                    print(f"🔴 ENTRY SHORT {symbol} @ {short_level:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Qty: {qty:.4f}")
+                    print(f"🔴 SHORT entry @ {short_level:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Qty: {qty:.4f}")
     
-    # 6. Tampilkan hasil akhir
+    # 6. Tampilkan hasil
     print("\n" + "=" * 50)
-    trades_df = pd.DataFrame(all_trades)
+    trades_df = pd.DataFrame(trades)
     
     if not trades_df.empty:
         win_rate = len(trades_df[trades_df['pnl'] > 0]) / len(trades_df)
@@ -600,46 +500,58 @@ def run_backtest(best_symbol, df):
         print(f"📈 TOTAL TRADES: {len(trades_df)}")
         print(f"✅ WIN RATE: {win_rate:.2%}")
         print(f"💰 TOTAL PnL: {total_pnl:.4f} USDT ({(total_pnl/INITIAL_BALANCE)*100:.2f}%)")
-        print(f"🎯 FINAL BALANCE: {total_balance:.4f} USDT")
+        print(f"🎯 FINAL BALANCE: {balance:.4f} USDT")
         print(f"📊 PROFIT FACTOR: {profit_factor:.2f}")
         
-        # Analisis per aset
-        print("\n--- ANALISIS PER ASET ---")
-        print(trades_df.groupby('symbol').agg(
+        print("\n--- ANALISIS PER REGIME ---")
+        print(trades_df.groupby('regime').agg(
             total_trades=('pnl', 'count'),
             win_rate=('pnl', lambda x: (x > 0).mean()),
             avg_pnl=('pnl', 'mean'),
             total_pnl=('pnl', 'sum')
-        ).sort_values('total_pnl', ascending=False))
+        ))
         
         # Simpan hasil
-        filename = f"multi_asset_backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"backtest_results_{symbol.replace('/', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         trades_df.to_csv(filename, index=False)
         print(f"\n💾 Hasil disimpan ke: {filename}")
     else:
         print("❌ TIDAK ADA TRADE DIEKSEKUSI")
         print("💡 Saran: Turunkan threshold market scanner atau longgarkan filter entry")
 
+def run_automatic_backtest():
+    """Backtest otomatis dengan pemilihan aset dinamis"""
+    print("🚀 SISTEM TRADING OTOMATIS - PEMILIHAN ASET DINAMIS")
+    print("=" * 70)
+    
+    # Inisialisasi pemilih aset otomatis
+    auto_selector = MarketScanner()
+    
+    # Dapatkan aset terbaik untuk trading
+    best_symbol = auto_selector.get_best_asset_for_trading()
+    
+    if best_symbol is None:
+        print("🚫 GAGAL MENDAPATKAN ASET - MENGGUNAKAN AVAX/USDT SEBAGAI DEFAULT")
+        best_symbol = 'AVAX/USDT'
+    
+    # Jalankan backtest pada aset terpilih
+    run_backtest_on_symbol(best_symbol)
+
 if __name__ == "__main__":
-    # Install dependencies jika belum ada
+    # Install dependency jika belum ada
     try:
         import ccxt
-        import talib
     except ImportError:
-        print("📦 Menginstall dependencies yang dibutuhkan...")
+        print("📦 Menginstall dependency yang dibutuhkan...")
         import sys
         import subprocess
         subprocess.check_call([sys.executable, "-m", "pip", "install", "ccxt", "pandas", "numpy", "TA-Lib", "requests"])
         import ccxt
-        import talib
     
-    # Parameter
-    MIN_SCAN_SCORE = 0.6
-    
-    # Jalankan sistem otomatis
+    # Jalankan backtest
     start_time = time.time()
     run_automatic_backtest()
     elapsed_time = time.time() - start_time
     
-    print(f"\n⏰ Proses selesai dalam {elapsed_time:.2f} detik")
+    print(f"\n⏰ Backtest selesai dalam {elapsed_time:.2f} detik")
     print("=" * 70)
