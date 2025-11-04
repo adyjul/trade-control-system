@@ -617,20 +617,25 @@ def run_backtest(symbol, df):
         print("💡 Saran: Turunkan threshold market scanner atau longgarkan filter entry")
 
 if __name__ == "__main__":
-    # Install dependency jika belum ada
+    # Install dependencies jika belum ada
     try:
         import ccxt
+        import talib
     except ImportError:
-        print("📦 Menginstall dependency yang dibutuhkan...")
+        print("📦 Menginstall dependencies yang dibutuhkan...")
         import sys
         import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "ccxt", "pandas", "numpy", "TA-Lib"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "ccxt", "pandas", "numpy", "TA-Lib", "requests"])
         import ccxt
+        import talib
     
-    # Jalankan backtest
+    # Parameter
+    MIN_SCAN_SCORE = 0.6
+    
+    # Jalankan sistem otomatis
     start_time = time.time()
-    run_backtest()
+    run_automatic_backtest()
     elapsed_time = time.time() - start_time
     
-    print(f"\n⏰ Backtest selesai dalam {elapsed_time:.2f} detik")
-    print("=" * 50)
+    print(f"\n⏰ Proses selesai dalam {elapsed_time:.2f} detik")
+    print("=" * 70)
