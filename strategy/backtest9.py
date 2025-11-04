@@ -26,14 +26,33 @@ class MarketScanner:
             'enableRateLimit': True,
             'options': {'defaultType': 'spot'}
         })
-        self.min_volume_usd = 1000000  # Minimal volume 24 jam $1 juta
-        self.min_24h_change = 2.0      # Minimal pergerakan 24 jam 2%
-        self.max_symbols = 10          # Maksimal aset yang discan
+        self.min_volume_usd = 500000  # Minimal volume 24 jam $1 juta
+        self.min_24h_change = 1.5      # Minimal pergerakan 24 jam 2%
+        self.max_symbols = 15          # Maksimal aset yang discan
         self.min_volatility_multiplier = 1.5
         self.min_volume_multiplier = 1.8
         self.min_adx_threshold = 18
         self.btc_correlation_threshold = 0.25
+
+        # Setup untuk rate limiting protection
+        self.last_cg_request = 0      # FIX: Tambahkan ini
+        self.last_lunarcrush_request = 0
+        self.cg_request_delay = 15    # 15 detik antar request
+        self.lunarcrush_delay = 10    # 10 detik antar request
+        
+        # API Keys (isi dengan API key kamu)
+        self.cg_api_key = None        # CoinGecko free tier: 10-15 calls/menit
+        self.lunarcrush_api_key = 'qs7hohak0eetslo52l2jrgp238mhksb7szpqvg9bl'  # LunarCrush free tier: 100 calls/hari
+
+        # Fallback scores jika semua API error
+        self.fallback_scores = {
+            'BTC': 95, 'ETH': 90, 'SOL': 85, 'BNB': 80,
+            'AVAX': 75, 'DOGE': 80, 'SHIB': 75, 'XRP': 70,
+            'ADA': 65, 'MATIC': 70, 'LINK': 75, 'INJ': 80,
+            'TON': 85, 'PEPE': 85, 'ARB': 75, 'OP': 70
+        }
     
+
     def get_trending_symbols(self):
         """Ambil daftar aset trending dari Binance secara otomatis"""
         print("🔍 MENGAMBIL DAFTAR ASET TRENDING DARI BINANCE...")
@@ -86,105 +105,134 @@ class MarketScanner:
     
     @lru_cache(maxsize=100)  # Cache hasil request
     def get_social_sentiment(self, symbol):
-        """Ambil sentimen sosial dengan rate limiting handling"""
+        """Dapatkan sentimen dari multiple API dengan fallback system"""
+        coin_id = symbol.split('/')[0].lower()
+        
         try:
-            coin_id = symbol.split('/')[0].lower()
-            current_time = time.time()
+            # Coba LunarCrush dulu (lebih akurat untuk crypto sentiment)
+            if self.lunarcrush_api_key:
+                lunarcrush_score = self.get_lunarcrush_sentiment(coin_id)
+                if lunarcrush_score > 0:
+                    print(f"✅ LunarCrush sentiment untuk {symbol}: {lunarcrush_score:.1f}/100")
+                    return lunarcrush_score
             
-            # Rate limiting protection
-            if current_time - self.last_cg_request < self.cg_request_delay:
-                wait_time = self.cg_request_delay - (current_time - self.last_cg_request)
-                print(f"⏳ Menunggu {wait_time:.1f} detik sebelum request CoinGecko berikutnya...")
-                time.sleep(wait_time)
+            # Jika LunarCrush fail/error, coba CoinGecko
+            cg_score = self.get_coingecko_sentiment(coin_id)
+            if cg_score > 0:
+                print(f"✅ CoinGecko sentiment untuk {symbol}: {cg_score:.1f}/100")
+                return cg_score
             
-            # URL dengan API key jika tersedia
-            base_url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-            if self.cg_api_key:
-                url = f"{base_url}?x_cg_demo_api_key={self.cg_api_key}"
-            else:
-                url = base_url
+            # Semua API fail, gunakan fallback
+            return self.get_fallback_sentiment(symbol)
             
-            print(f"🔍 Mengambil sentimen untuk {symbol} dari: {url}")
+        except Exception as e:
+            print(f"🔥 Error mendapatkan sentimen untuk {symbol}: {str(e)}")
+            return self.get_fallback_sentiment(symbol)
+    
+    def get_lunarcrush_sentiment(self, coin_id):
+        """Ambil sentimen dari LunarCrush API"""
+        current_time = time.time()
+        
+        # Rate limiting protection
+        if current_time - self.last_lunarcrush_request < self.lunarcrush_delay:
+            wait_time = self.lunarcrush_delay - (current_time - self.last_lunarcrush_request)
+            print(f"⏳ Menunggu {wait_time:.1f} detik sebelum request LunarCrush berikutnya...")
+            time.sleep(wait_time)
+        
+        try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Authorization': f'Bearer {self.lunarcrush_api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            # LunarCrush API untuk sentimen
+            url = f"https://api.lunarcrush.com/v3/coins/{coin_id}/market?data=sentiment"
+            response = requests.get(url, headers=headers, timeout=8)
+            
+            self.last_lunarcrush_request = time.time()
+            
+            if response.status_code != 200:
+                print(f"⚠️ LunarCrush error: Status {response.status_code}")
+                return 0
+            
+            data = response.json()
+            if 'data' in data and 'sentiment' in data['data']:
+                # Konversi ke skala 0-100
+                raw_sentiment = data['data']['sentiment']
+                return min(100, max(0, raw_sentiment * 10))
+            
+            return 0
+            
+        except Exception as e:
+            print(f"🌙 Error LunarCrush: {str(e)}")
+            return 0
+    
+    def get_coingecko_sentiment(self, coin_id):
+        """Ambil sentimen dari CoinGecko API dengan rate limiting"""
+        current_time = time.time()
+        
+        # Rate limiting protection
+        if current_time - self.last_cg_request < self.cg_request_delay:
+            wait_time = self.cg_request_delay - (current_time - self.last_cg_request)
+            print(f"⏳ Menunggu {wait_time:.1f} detik sebelum request CoinGecko berikutnya...")
+            time.sleep(wait_time)
+        
+        try:
+            params = {}
+            if self.cg_api_key:
+                params['x_cg_demo_api_key'] = self.cg_api_key
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                 'Accept': 'application/json'
             }
             
-            response = requests.get(url, headers=headers, timeout=10)
-            self.last_cg_request = time.time()  # Update waktu request terakhir
+            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+            response = requests.get(url, params=params, headers=headers, timeout=10)
             
-            # Handle rate limiting
+            self.last_cg_request = time.time()
+            
             if response.status_code == 429:
                 retry_after = int(response.headers.get('Retry-After', 60))
-                print(f"⚠️ Rate limit tercapai! Menunggu {retry_after} detik...")
+                print(f"⚠️ Rate limit CoinGecko! Menunggu {retry_after} detik...")
                 time.sleep(retry_after)
-                return self.get_social_sentiment(symbol)  # Recursive call setelah delay
+                return self.get_coingecko_sentiment(coin_id)
             
             if response.status_code != 200:
-                print(f"⚠️ API error untuk {symbol}: Status code {response.status_code}")
-                print(f"   Response: {response.text[:100]}...")
-                return self.get_fallback_sentiment(symbol)
+                print(f"⚠️ CoinGecko error: Status {response.status_code}")
+                return 0
             
             data = response.json()
+            if 'market_data' not in data or 'market_cap_rank' not in data['market_data']:
+                return 0
             
-            # Validasi data
-            if 'market_data' not in data:
-                print(f"⚠️ Data tidak lengkap untuk {symbol}: market_data tidak tersedia")
-                return self.get_fallback_sentiment(symbol)
-            
-            # Hitung skor sentimen
+            # Hitung skor berdasarkan market cap rank
             market_cap_rank = data['market_data'].get('market_cap_rank', 100)
             sentiment_score = max(0, 100 - market_cap_rank)
             
-            # Tambahkan skor developer dan komunitas jika tersedia
+            # Tambahkan score berdasarkan data lain jika tersedia
             dev_score = 0
             community_score = 0
             
             if 'developer_score' in data:
-                dev_score = data['developer_score'] * 10
+                dev_score = min(10, data['developer_score']) * 5
             if 'community_score' in data:
-                community_score = data['community_score'] * 10
+                community_score = min(10, data['community_score']) * 5
             
-            final_score = min(100, sentiment_score + (dev_score * 0.3) + (community_score * 0.3))
-            
-            print(f"✅ Berhasil mengambil sentimen {symbol}:")
-            print(f"   Market Cap Rank: #{market_cap_rank}")
-            print(f"   Developer Score: {dev_score:.1f}")
-            print(f"   Community Score: {community_score:.1f}")
-            print(f"   📊 FINAL SENTIMEN SCORE: {final_score:.1f}/100")
-            
+            final_score = min(100, sentiment_score + dev_score + community_score)
             return final_score
             
-        except requests.exceptions.Timeout:
-            print(f"⏱️ Timeout mengambil sentimen untuk {symbol} (10 detik)")
-            return self.get_fallback_sentiment(symbol)
-        except requests.exceptions.ConnectionError:
-            print(f"🌐 Koneksi gagal untuk {symbol} - cek internet Anda")
-            return self.get_fallback_sentiment(symbol)
         except Exception as e:
-            print(f"🔥 Error tidak terduga untuk {symbol}: {str(e)}")
-            return self.get_fallback_sentiment(symbol)
+            print(f"🔄 Error CoinGecko: {str(e)}")
+            return 0
     
     def get_fallback_sentiment(self, symbol):
-        """Fallback method jika API error"""
+        """Fallback sentiment jika semua API gagal"""
         print(f"🔄 Menggunakan fallback sentimen untuk {symbol}")
+        base_symbol = symbol.split('/')[0].upper()
         
-        # Default score berdasarkan kapitalisasi pasar
-        default_scores = {
-            'BTC/USDT': 95,
-            'ETH/USDT': 90,
-            'SOL/USDT': 85,
-            'BNB/USDT': 80,
-            'AVAX/USDT': 75,
-            'XRP/USDT': 70,
-            'ADA/USDT': 65,
-            'DOGE/USDT': 80,  # High community sentiment
-            'SHIB/USDT': 75,  # High community sentiment
-            'MATIC/USDT': 70
-        }
-        
-        base_symbol = symbol.split('/')[0]
-        return default_scores.get(base_symbol, 60)  # Default 60 jika tidak dikenali
+        # Gunakan fallback score atau skor default
+        return self.fallback_scores.get(base_symbol, 60)
     
     def rank_symbols_by_activity(self, symbols):
         """Rangking aset berdasarkan aktivitas pasar terkini"""
