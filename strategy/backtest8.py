@@ -91,7 +91,7 @@ class MarketScanner:
             coin_id = symbol.split('/')[0].lower()
             url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
             response = requests.get(url, timeout=5)
-            print(f"📊 Mengambil sentimen sosial untuk {response}...")
+            
             if response.status_code == 200:
                 data = response.json()
                 print(f"📊 Sentimen sosial untuk {symbol}: {data['name']}")
@@ -340,6 +340,155 @@ def enhanced_trend_detection(row_idx, df):
         return "MIXED"
 
 # --- MAIN PROGRAM ---
+
+def run_multi_symbol_backtest():
+    """Jalankan backtest pada semua symbol yang 'hot'"""
+    print("🚀 SYSTEM TRADING OTOMATIS - MULTI-SYMBOL BACKTEST")
+    print("=" * 70)
+    
+    # Inisialisasi market scanner
+    scanner = MarketScanner()
+    
+    # 1. Dapatkan daftar aset trending
+    trending_symbols = scanner.get_trending_symbols()
+    print(f"\n🎯 DITEMUKAN {len(trending_symbols)} ASET TRENDING:")
+    for i, symbol in enumerate(trending_symbols):
+        print(f"  #{i+1} {symbol}")
+    
+    # 2. Cari aset yang benar-benar 'hot'
+    hot_assets = []
+    
+    # Ambil data BTC untuk korelasi
+    try:
+        btc_df = fetch_ohlcv_data('BTC/USDT', TIMEFRAME, BARS_TO_FETCH)
+    except:
+        btc_df = None
+        print("⚠️ BTC data tidak tersedia")
+    
+    print("\n🔥 MEN-CHECK KONDISI PASAR SETIAP ASET...")
+    for symbol in trending_symbols:
+        try:
+            # Ambil data OHLCV
+            df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
+            
+            # Hitung market score
+            market_score = scanner.calculate_market_score(df, btc_df)
+            
+            if market_score >= MIN_SCAN_SCORE:
+                hot_assets.append({
+                    'symbol': symbol,
+                    'score': market_score,
+                    'df': df
+                })
+                print(f"✅ {symbol} - SKOR: {market_score:.2f} - PANAS! 🔥")
+            else:
+                print(f"❌ {symbol} - SKOR: {market_score:.2f} - DINGIN")
+        
+        except Exception as e:
+            print(f"❌ Error memproses {symbol}: {e}")
+    
+    if not hot_assets:
+        print("\n🚫 TIDAK ADA ASET YANG 'HOT' - MENGURANGI THRESHOLD...")
+        # Coba dengan threshold lebih rendah
+        MIN_SCAN_SCORE_RELAXED = 0.5
+        hot_assets = []
+        
+        for symbol in trending_symbols[:5]:  # Coba 5 aset pertama
+            try:
+                df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
+                market_score = scanner.calculate_market_score(df, btc_df)
+                
+                if market_score >= MIN_SCAN_SCORE_RELAXED:
+                    hot_assets.append({
+                        'symbol': symbol,
+                        'score': market_score,
+                        'df': df
+                    })
+                    print(f"⚠️ {symbol} - SKOR: {market_score:.2f} - DIPAKSAKAN (Threshold: {MIN_SCAN_SCORE_RELAXED})")
+            except:
+                continue
+    
+    if not hot_assets:
+        print("\n🚫 MASIH TIDAK ADA ASET YANG COCOK - MENGGUNAKAN DEFAULT SYMBOLS")
+        default_symbols = ['AVAX/USDT', 'BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+        for symbol in default_symbols:
+            try:
+                df = fetch_ohlcv_data(symbol, TIMEFRAME, BARS_TO_FETCH)
+                hot_assets.append({
+                    'symbol': symbol,
+                    'score': 0.0,  # Score dummy
+                    'df': df
+                })
+                print(f"🔄 {symbol} - DITAMBAHKAN SEBAGAI DEFAULT")
+            except:
+                continue
+    
+    # 3. Jalankan backtest pada semua aset yang hot
+    print(f"\n⚔️ MENJALANKAN BACKTEST PADA {len(hot_assets)} ASET:")
+    all_trades = []
+    total_pnl = 0
+    total_trades = 0
+    
+    for asset in hot_assets:
+        symbol = asset['symbol']
+        df = asset['df']
+        
+        print(f"\n📊 PROCESSING: {symbol} (Score: {asset['score']:.2f})")
+        print("-" * 40)
+        
+        # Siapkan indikator
+        df['ema_fast'] = talib.EMA(df['close'], 20)
+        df['ema_slow'] = talib.EMA(df['close'], 50)
+        df['rsi'] = talib.RSI(df['close'], 14)
+        df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+        df['plus_di'], df['minus_di'], df['adx'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14), \
+                                                  talib.MINUS_DI(df['high'], df['low'], df['close'], 14), \
+                                                  talib.ADX(df['high'], df['low'], df['close'], 14)
+        df['vol_ma'] = df['volume'].rolling(10).mean()
+        
+        # Jalankan backtest untuk symbol ini
+        trades = run_single_symbol_backtest(symbol, df)
+        
+        if trades:
+            all_trades.extend(trades)
+            total_trades += len(trades)
+            total_pnl += sum(trade['pnl'] for trade in trades)
+    
+    # 4. Tampilkan hasil gabungan
+    print("\n" + "=" * 70)
+    print("📈 HASIL GABUNGAN SEMUA ASET")
+    print("=" * 70)
+    
+    if all_trades:
+        trades_df = pd.DataFrame(all_trades)
+        
+        # Hitung statistik gabungan
+        win_rate = len(trades_df[trades_df['pnl'] > 0]) / len(trades_df)
+        profit_factor = trades_df[trades_df['pnl'] > 0]['pnl'].sum() / abs(trades_df[trades_df['pnl'] < 0]['pnl'].sum()) if len(trades_df[trades_df['pnl'] < 0]) > 0 else float('inf')
+        
+        # Tampilkan hasil
+        print(f"💰 TOTAL PnL GABUNGAN: {total_pnl:.4f} USDT")
+        print(f"📊 TOTAL TRADE: {total_trades}")
+        print(f"✅ WIN RATE GABUNGAN: {win_rate:.2%}")
+        print(f"🎯 PROFIT FACTOR: {profit_factor:.2f}")
+        
+        # Analisis per symbol
+        print("\n--- ANALISIS PER SYMBOL ---")
+        print(trades_df.groupby('symbol').agg(
+            total_trades=('pnl', 'count'),
+            win_rate=('pnl', lambda x: (x > 0).mean()),
+            avg_pnl=('pnl', 'mean'),
+            total_pnl=('pnl', 'sum')
+        ).sort_values('total_pnl', ascending=False))
+        
+        # Simpan hasil gabungan
+        filename = f"multi_symbol_backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        trades_df.to_csv(filename, index=False)
+        print(f"\n💾 Hasil gabungan disimpan ke: {filename}")
+    else:
+        print("❌ TIDAK ADA TRADE DARI SEMUA ASET")
+        print("💡 Saran: Turunkan MIN_SCAN_SCORE atau longgarkan filter entry")
+
 def run_backtest_on_symbol(symbol):
     """Jalankan backtest pada satu simbol yang dipilih"""
     print(f"\n⚔️ MENJALANKAN BACKTEST PADA {symbol}...")
@@ -552,7 +701,7 @@ if __name__ == "__main__":
     
     # Jalankan backtest
     start_time = time.time()
-    run_automatic_backtest()
+    run_multi_symbol_backtest()
     elapsed_time = time.time() - start_time
     
     print(f"\n⏰ Backtest selesai dalam {elapsed_time:.2f} detik")
