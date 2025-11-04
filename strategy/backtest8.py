@@ -134,7 +134,7 @@ class MarketScanner:
                 
                 # Social sentiment (opsional)
                 sentiment_score = self.get_social_sentiment(symbol) / 10
-               
+                print(f"   Sentimen sosial: {sentiment_score:.1f}")
                 # Total score
                 activity_score = (
                     price_change_score * 0.4 +
