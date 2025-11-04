@@ -91,7 +91,7 @@ class MarketScanner:
             coin_id = symbol.split('/')[0].lower()
             url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
             response = requests.get(url, timeout=5)
-            
+            print(f"📊 Mengambil sentimen sosial untuk {response}...")
             if response.status_code == 200:
                 data = response.json()
                 print(f"📊 Sentimen sosial untuk {symbol}: {data['name']}")
