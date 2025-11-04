@@ -94,6 +94,7 @@ class MarketScanner:
             response = requests.get(url, timeout=5)
             
             if response.status_code == 200:
+                print('berhasil ambil data coingecko')
                 data = response.json()
                 if 'market_data' in data:
                     # Gunakan metrik seperti market cap rank, volume change, dll
