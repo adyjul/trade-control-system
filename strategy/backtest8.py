@@ -178,7 +178,7 @@ def enhanced_trend_detection(row_idx, df):
 
 # --- MAIN PROGRAM ---
 def run_backtest():
-   """Jalankan backtest multi-aset dengan market scanner"""
+    """Jalankan backtest multi-aset dengan market scanner"""
     print("🚀 MEMULAI BACKTEST MULTI-ASSET")
     print("=" * 50)
     
