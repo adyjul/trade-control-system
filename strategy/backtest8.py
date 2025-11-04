@@ -29,10 +29,10 @@ class MarketScanner:
         self.min_volume_usd = 1000000  # Minimal volume 24 jam $1 juta
         self.min_24h_change = 2.0      # Minimal pergerakan 24 jam 2%
         self.max_symbols = 10          # Maksimal aset yang discsean
-        # self.min_volatility_multiplier = 1.5
-        # self.min_volume_multiplier = 1.8
-        # self.min_adx_threshold = 18
-        # self.btc_correlation_threshold = 0.25
+        self.min_volatility_multiplier = 1.5
+        self.min_volume_multiplier = 1.8
+        self.min_adx_threshold = 18
+        self.btc_correlation_threshold = 0.25
     
     def get_trending_symbols(self):
         """Ambil daftar aset trending dari Binance secara otomatis"""
