@@ -4,6 +4,7 @@ import numpy as np
 import talib
 import ccxt
 from datetime import datetime, timedelta
+import requests
 import time
 
 # --- CONFIG UTAMA ---
@@ -21,11 +22,170 @@ MIN_SCAN_SCORE = 0.7  # Minimal score untuk aktifkan strategi
 # --- MARKET SCANNER CLASS ---
 class MarketScanner:
     def __init__(self):
+        self.exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'spot'}
+        })
+
         self.min_volatility_multiplier = 1.5
         self.min_volume_multiplier = 1.8
         self.min_adx_threshold = 18
         self.btc_correlation_threshold = 0.25
     
+    def get_trending_symbols(self):
+        """Ambil daftar aset trending dari Binance secara otomatis"""
+        print("🔍 MENGAMBIL DAFTAR ASET TRENDING DARI BINANCE...")
+        
+        try:
+            # Ambil semua ticker data
+            tickers = self.exchange.fetch_tickers()
+            
+            # Filter hanya USDT pairs yang aktif
+            usdt_pairs = {}
+            for symbol, data in tickers.items():
+                if (symbol.endswith('/USDT') and 
+                    'quoteVolume' in data and 
+                    data['quoteVolume'] > self.min_volume_usd and
+                    abs(data['percentage']) > self.min_24h_change):
+                    usdt_pairs[symbol] = data
+            
+            # Convert ke DataFrame untuk analisis
+            if not usdt_pairs:
+                print("⚠️ Tidak ada aset yang memenuhi kriteria volume dan pergerakan")
+                return self.get_default_symbols()
+            
+            df = pd.DataFrame.from_dict(usdt_pairs, orient='index')
+            df['symbol'] = df.index
+            df['volume_usd'] = df['quoteVolume']
+            df['change_24h'] = df['percentage']
+            
+            # Sortir by volume dan ambil top N
+            top_symbols = df.sort_values('volume_usd', ascending=False).head(self.max_symbols)
+            
+            print(f"✅ BERHASIL MENDAPATKAN {len(top_symbols)} ASET TRENDING:")
+            for i, (_, row) in enumerate(top_symbols.iterrows()):
+                print(f"   #{i+1} {row['symbol']} | Volume: ${row['volume_usd']:,.0f} | Change: {row['change_24h']:+.2f}%")
+            
+            return top_symbols['symbol'].tolist()
+            
+        except Exception as e:
+            print(f"❌ Error mengambil data dari Binance: {e}")
+            print("🔄 Menggunakan daftar aset default...")
+            return self.get_default_symbols()
+    
+    def get_default_symbols(self):
+        """Fallback ke daftar aset default jika API error"""
+        default_symbols = [
+            'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'AVAX/USDT',
+            'DOGE/USDT', 'XRP/USDT', 'ADA/USDT', 'MATIC/USDT', 'LINK/USDT',
+            'INJ/USDT', 'TON/USDT', 'PEPE/USDT', 'SHIB/USDT', 'ARB/USDT'
+        ]
+        return default_symbols[:self.max_symbols]
+    
+    def get_social_sentiment(self, symbol):
+        """Ambil sentimen sosial dari API (opsional)"""
+        try:
+            # Contoh integrasi dengan API sentimen (bisa diganti dengan yang lain)
+            # Ini contoh mockup - ganti dengan API real seperti LunarCrush, Santiment, dll
+            coin_id = symbol.split('/')[0].lower()
+            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+            response = requests.get(url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'market_data' in data:
+                    # Gunakan metrik seperti market cap rank, volume change, dll
+                    market_cap_rank = data['market_data'].get('market_cap_rank', 100)
+                    return max(0, 100 - market_cap_rank)  # Skor sentimen sederhana
+            return 50  # Nilai default jika error
+        
+        except Exception as e:
+            print(f"⚠️ Error mengambil sentimen untuk {symbol}: {e}")
+            return 50
+    
+    def rank_symbols_by_activity(self, symbols):
+        """Rangking aset berdasarkan aktivitas pasar terkini"""
+        print("\n⚡ MENGANALISIS AKTIVITAS PASAR TERKINI...")
+        ranked_symbols = []
+        
+        for symbol in symbols:
+            try:
+                print(f"📊 Menganalisis {symbol}...")
+                # Ambil data 1 jam terakhir (12 candle 5m)
+                ohlcv = self.exchange.fetch_ohlcv(symbol, '5m', limit=12)
+                
+                if len(ohlcv) < 12:
+                    continue
+                
+                df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                
+                # Hitung indikator aktivitas
+                df['price_change_pct'] = (df['close'] / df['close'].iloc[0] - 1) * 100
+                df['volume_ma'] = df['volume'].rolling(5).mean()
+                df['volume_spike'] = df['volume'] > df['volume_ma'] * 1.5
+                
+                # Skor aktivitas
+                price_change_score = abs(df['price_change_pct'].iloc[-1]) * 2
+                volume_score = (df['volume'].sum() / df['volume'].mean()) * 10
+                spike_count = df['volume_spike'].sum()
+                
+                # Social sentiment (opsional)
+                sentiment_score = self.get_social_sentiment(symbol) / 10
+                
+                # Total score
+                activity_score = (
+                    price_change_score * 0.4 +
+                    volume_score * 0.3 +
+                    spike_count * 2 * 0.2 +
+                    sentiment_score * 0.1
+                )
+                
+                ranked_symbols.append({
+                    'symbol': symbol,
+                    'activity_score': activity_score,
+                    'price_change': df['price_change_pct'].iloc[-1],
+                    'volume_total': df['volume'].sum(),
+                    'spike_count': spike_count
+                })
+                
+                print(f"   ✓ {symbol} - Skor Aktivitas: {activity_score:.1f} | Pergerakan: {df['price_change_pct'].iloc[-1]:+.2f}%")
+                
+            except Exception as e:
+                print(f"   ✗ Error menganalisis {symbol}: {e}")
+                continue
+        
+        # Urutkan berdasarkan skor aktivitas
+        ranked_symbols.sort(key=lambda x: x['activity_score'], reverse=True)
+        
+        print("\n🏆 HASIL PERINGKAT AKTIVITAS PASAR:")
+        for i, asset in enumerate(ranked_symbols[:5]):  # Tampilkan top 5
+            print(f"  #{i+1} {asset['symbol']:<10} | Skor: {asset['activity_score']:5.1f} | Pergerakan: {asset['price_change']:+6.2f}% | Volume Spike: {asset['spike_count']}")
+        
+        return ranked_symbols
+    
+    def get_best_asset_for_trading(self):
+        """Dapatkan aset terbaik untuk trading saat ini"""
+        # Langkah 1: Ambil daftar aset trending
+        trending_symbols = self.get_trending_symbols()
+        
+        # Langkah 2: Rangking berdasarkan aktivitas terkini
+        ranked_assets = self.rank_symbols_by_activity(trending_symbols)
+        
+        if not ranked_assets:
+            print("❌ Tidak ada aset yang bisa dianalisis!")
+            return None
+        
+        # Ambil aset dengan skor tertinggi
+        best_asset = ranked_assets[0]
+        
+        print(f"\n🎯 ASET TERBAIK UNTUK TRADING SAAT INI: {best_asset['symbol']}")
+        print(f"   Skor Aktivitas: {best_asset['activity_score']:.1f}")
+        print(f"   Pergerakan 1 Jam: {best_asset['price_change']:+.2f}%")
+        print(f"   Jumlah Volume Spike: {best_asset['spike_count']}")
+        
+        return best_asset['symbol']
+
     def calculate_market_score(self, df, btc_df=None):
         """Hitung skor pasar (0.0 - 1.0) untuk menentukan apakah strategi aktif"""
         if len(df) < 100:
@@ -175,9 +335,41 @@ def enhanced_trend_detection(row_idx, df):
         return "SIDEWAYS"
     else:
         return "MIXED"
+    
+def run_automatic_backtest():
+    """Backtest otomatis dengan pemilihan aset dinamis"""
+    print("🚀 SISTEM TRADING OTOMATIS - PEMILIHAN ASET DINAMIS")
+    print("=" * 70)
+    
+    # Inisialisasi pemilih aset otomatis
+    auto_selector = MarketScanner()
+    
+    # Dapatkan aset terbaik untuk trading
+    best_symbol = auto_selector.get_best_asset_for_trading()
+    
+    if best_symbol is None:
+        print("🚫 GAGAL MENDAPATKAN ASET - MENGGUNAKAN AVAX/USDT SEBAGAI DEFAULT")
+        best_symbol = 'AVAX/USDT'
+    
+    # Ambil data OHLCV untuk aset terbaik
+    print(f"\n📈 MENGAMBIL DATA {best_symbol} DARI BINANCE...")
+    df = fetch_ohlcv_data(best_symbol, '5m', 1000)
+    
+    # Jalankan market scanner dan backtest seperti sebelumnya
+    scanner = MarketScanner()
+    market_score = scanner.calculate_market_score(df)
+    
+    print(f"\n🔍 SKOR PASAR {best_symbol}: {market_score:.2f}")
+    
+    if market_score < MIN_SCAN_SCORE:
+        print(f"💡 Pasar kurang aktif (threshold: {MIN_SCAN_SCORE}), tapi tetap melanjutkan karena ini aset paling happening!")
+    
+    # Jalankan backtest di aset terpilih
+    print(f"\n⚔️ MENJALANKAN STRATEGI DI {best_symbol}...")
+    run_backtest(best_symbol, df)
 
 # --- MAIN PROGRAM ---
-def run_backtest():
+def run_backtest(symbol, df):
     """Jalankan backtest multi-aset dengan market scanner"""
     print("🚀 MEMULAI BACKTEST MULTI-ASSET")
     print("=" * 50)
