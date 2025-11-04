@@ -386,7 +386,7 @@ def run_backtest(symbol, df):
         btc_df = None
     
     # 2. Daftar aset yang akan di-scan
-    # symbols = ['AVAX/USDT', 'INJ/USDT', 'SOL/USDT', 'ENA/USDT', 'DOGE/USDT']
+    symbols = symbol
     asset_data = {}
     hot_assets = []
     
