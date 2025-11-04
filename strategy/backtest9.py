@@ -552,7 +552,7 @@ if __name__ == "__main__":
     
     # Jalankan backtest
     start_time = time.time()
-    run_backtest_on_symbol()
+    run_automatic_backtest()
     elapsed_time = time.time() - start_time
     
     print(f"\n⏰ Backtest selesai dalam {elapsed_time:.2f} detik")
