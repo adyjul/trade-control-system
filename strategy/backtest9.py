@@ -97,6 +97,126 @@ class MarketScanner:
             print("🔄 Menggunakan daftar aset default...")
             return self.get_default_symbols()
     
+    def get_asset_profile(self, symbol, df):
+        """Dapatkan profil karakteristik aset secara dinamis"""
+        if len(df) < 100:
+            return self.get_default_asset_profile(symbol)
+        
+        # 1. Hitung volatilitas historis (ATR%)
+        df['atr_pct'] = (df['atr'] / df['close']) * 100
+        avg_atr_pct = df['atr_pct'].rolling(100).mean().iloc[-1]
+        current_atr_pct = df['atr_pct'].iloc[-1]
+        
+        # 2. Hitung volume profile
+        avg_volume_20 = df['volume'].rolling(20).mean().iloc[-1]
+        avg_volume_100 = df['volume'].rolling(100).mean().iloc[-1]
+        volume_consistency = avg_volume_20 / avg_volume_100 if avg_volume_100 > 0 else 1.0
+        
+        # 3. Hitung price range characteristics
+        df['range_pct'] = ((df['high'] - df['low']) / df['close']) * 100
+        avg_range_pct = df['range_pct'].rolling(50).mean().iloc[-1]
+        
+        # 4. Klasifikasi aset berdasarkan data (bukan hardcode!)
+        asset_profile = {
+            'volatility_class': self.classify_volatility(avg_atr_pct),
+            'volume_class': self.classify_volume(volume_consistency, avg_volume_20),
+            'range_class': self.classify_range(avg_range_pct),
+            'avg_atr_pct': avg_atr_pct,
+            'avg_range_pct': avg_range_pct,
+            'volume_consistency': volume_consistency
+        }
+        
+        print(f"📈 {symbol} Asset Profile:")
+        print(f"   Volatilitas: {asset_profile['volatility_class']} ({avg_atr_pct:.3f}%)")
+        print(f"   Volume Profile: {asset_profile['volume_class']} (Consistency: {volume_consistency:.2f}x)")
+        print(f"   Rata-rata Range: {avg_range_pct:.3f}%")
+        
+        return asset_profile
+    
+
+    def classify_volatility(self, avg_atr_pct):
+        """Klasifikasi volatilitas berdasarkan data historis"""
+        if avg_atr_pct < 0.15:
+            return 'ULTRA_LOW'
+        elif avg_atr_pct < 0.25:
+            return 'LOW'
+        elif avg_atr_pct < 0.4:
+            return 'MODERATE'
+        elif avg_atr_pct < 0.6:
+            return 'HIGH'
+        else:
+            return 'EXTREME'
+
+    def classify_volume(self, volume_consistency, avg_volume):
+        """Klasifikasi volume berdasarkan konsistensi dan nilai absolut"""
+        if volume_consistency < 0.8:
+            return 'VOLATILE'
+        elif volume_consistency > 1.2:
+            return 'SPIKY'
+        else:
+            if avg_volume < 10000:
+                return 'LOW_LIQUIDITY'
+            elif avg_volume < 50000:
+                return 'MEDIUM_LIQUIDITY'
+            else:
+                return 'HIGH_LIQUIDITY'
+
+    def get_adaptive_parameters(self, asset_profile):
+        """Generate adaptive parameters berdasarkan asset profile"""
+        params = {}
+        
+        # 1. ATR Threshold - adaptif berdasarkan volatilitas
+        volatility_map = {
+            'ULTRA_LOW': 0.12,
+            'LOW': 0.18,
+            'MODERATE': 0.25,
+            'HIGH': 0.35,
+            'EXTREME': 0.45
+        }
+        params['atr_threshold'] = volatility_map.get(asset_profile['volatility_class'], 0.3)
+        
+        # 2. Volume Multiplier - adaptif berdasarkan volume characteristics
+        volume_map = {
+            'VOLATILE': 1.4,
+            'SPIKY': 1.6,
+            'LOW_LIQUIDITY': 2.0,
+            'MEDIUM_LIQUIDITY': 1.7,
+            'HIGH_LIQUIDITY': 1.5
+        }
+        params['volume_multiplier'] = volume_map.get(asset_profile['volume_class'], 1.8)
+        
+        # 3. Level Multiplier - adaptif berdasarkan range characteristics
+        range_map = {
+            'ULTRA_LOW': 0.6,
+            'LOW': 0.7,
+            'MODERATE': 0.8,
+            'HIGH': 0.9,
+            'EXTREME': 1.0
+        }
+        params['level_multiplier'] = range_map.get(asset_profile['range_class'], 0.8)
+        
+        # 4. ADX Threshold - adaptif
+        params['adx_threshold'] = 18 if asset_profile['volatility_class'] in ['LOW', 'ULTRA_LOW'] else 22
+        
+        # 5. Risk Adjustment - aset volatile butuh risk lebih kecil
+        risk_map = {
+            'EXTREME': 0.006,  # 0.6%
+            'HIGH': 0.007,    # 0.7%
+            'MODERATE': 0.008, # 0.8% (default)
+            'LOW': 0.009,     # 0.9%
+            'ULTRA_LOW': 0.010 # 1.0%
+        }
+        params['risk_pct'] = risk_map.get(asset_profile['volatility_class'], 0.008)
+        
+        print(f"⚙️ Adaptive Parameters:")
+        print(f"   ATR Threshold: {params['atr_threshold']:.3f}%")
+        print(f"   Volume Multiplier: {params['volume_multiplier']:.2f}x")
+        print(f"   Level Multiplier: {params['level_multiplier']:.2f}")
+        print(f"   ADX Threshold: {params['adx_threshold']}")
+        print(f"   Risk Percentage: {params['risk_pct']:.3f}%")
+        
+        return params
+
     def get_default_symbols(self):
         """Fallback ke daftar aset default jika API error"""
         default_symbols = [
@@ -377,6 +497,60 @@ class MarketScanner:
         except Exception as e:
             print(f"🔥 Error calculating market score: {e}")
             return 0.0
+        
+    def get_market_regime_adjustment(self, df, asset_profile):
+        """Adjust parameters berdasarkan market regime global"""
+        if len(df) < 200:
+            return 1.0
+        
+        # Deteksi market regime (bull/bear/sideways)
+        current_price = df['close'].iloc[-1]
+        ema_200 = df['close'].rolling(200).mean().iloc[-1]
+        
+        if current_price > ema_200 * 1.1:
+            market_regime = 'STRONG_BULL'
+        elif current_price > ema_200 * 0.95:
+            market_regime = 'BULL'
+        elif current_price < ema_200 * 0.9:
+            market_regime = 'STRONG_BEAR'
+        elif current_price < ema_200 * 1.05:
+            market_regime = 'BEAR'
+        else:
+            market_regime = 'SIDEWAYS'
+        
+        # Adjustment multiplier berdasarkan regime
+        regime_adjustments = {
+            'STRONG_BULL': {
+                'volume_multiplier': 0.9,   # Lebih mudah entry di bull market
+                'atr_threshold': 0.9,       # Threshold lebih longgar
+                'risk_pct': 1.1             # Risk lebih besar
+            },
+            'BULL': {
+                'volume_multiplier': 0.95,
+                'atr_threshold': 0.95,
+                'risk_pct': 1.05
+            },
+            'BEAR': {
+                'volume_multiplier': 1.05,  # Lebih ketat di bear market
+                'atr_threshold': 1.05,
+                'risk_pct': 0.95
+            },
+            'STRONG_BEAR': {
+                'volume_multiplier': 1.1,
+                'atr_threshold': 1.1,
+                'risk_pct': 0.9
+            },
+            'SIDEWAYS': {
+                'volume_multiplier': 1.2,   # Sangat ketat di sideways
+                'atr_threshold': 1.2,
+                'risk_pct': 0.8
+            }
+        }
+        
+        adjustment = regime_adjustments.get(market_regime, {})
+        print(f"📊 Market Regime: {market_regime} | Adjustments: {adjustment}")
+        
+        return adjustment
     
     def get_btc_correlation(self, symbol_df, btc_df, window=50):
         """Hitung korelasi dengan BTC - lebih robust"""
@@ -517,6 +691,31 @@ def enhanced_trend_detection(row_idx, df):
     except Exception as e:
         print(f"⚠️ Error dalam trend detection: {e}")
         return "SIDEWAYS"
+    
+
+def get_dynamic_atr_threshold(self, symbol, df):
+    """Return ATR% threshold berdasarkan karakteristik aset"""
+    if len(df) < 100:
+        return 0.3
+    
+    # Hitung rata-rata ATR% untuk 100 candle terakhir
+    df['atr_pct'] = (df['atr'] / df['close']) * 100
+    avg_atr_pct = df['atr_pct'].rolling(100).mean().iloc[-1]
+    
+    # Dynamic threshold based on asset class
+    asset_class = self.get_asset_class(symbol)
+    if asset_class == 'MAJOR':  # BTC, ETH
+        multiplier = 1.2
+    elif asset_class == 'MID_CAP':  # ICP, SOL, AVAX
+        multiplier = 0.9
+    elif asset_class == 'MEME':  # DOGE, SHIB, PEPE
+        multiplier = 1.5
+    else:
+        multiplier = 1.0
+    
+    # Minimum absolute threshold
+    dynamic_threshold = avg_atr_pct * multiplier
+    return max(0.15, min(0.5, dynamic_threshold))  # Clamp ke 0.15-0.5%
 
 # --- MAIN PROGRAM ---
 def run_backtest_on_symbol(symbol):
@@ -539,6 +738,20 @@ def run_backtest_on_symbol(symbol):
     scanner = MarketScanner()
     market_score = scanner.calculate_market_score(df, btc_df)
     is_market_hot = scanner.is_market_hot(market_score)
+    asset_profile = scanner.get_asset_profile(symbol, df)
+    adaptive_params = scanner.get_adaptive_parameters(asset_profile)
+
+    # GUNAKAN ADAPTIVE PARAMETERS
+    DYNAMIC_ATR_THRESHOLD = adaptive_params['atr_threshold']
+    DYNAMIC_VOLUME_MULTIPLIER = adaptive_params['volume_multiplier']
+    DYNAMIC_LEVEL_MULT = adaptive_params['level_multiplier']
+    DYNAMIC_ADX_THRESHOLD = adaptive_params['adx_threshold']
+    DYNAMIC_RISK_PCT = adaptive_params['risk_pct']
+    
+    print(f"\n🎯 STRATEGI DINAMIS UNTUK {symbol}:")
+    print(f"   Threshold ATR Dinamis: {DYNAMIC_ATR_THRESHOLD:.3f}%")
+    print(f"   Multiplier Volume Dinamis: {DYNAMIC_VOLUME_MULTIPLIER:.2f}x")
+    print(f"   Risk Percentage Dinamis: {DYNAMIC_RISK_PCT:.3f}%")
     
     print(f"\n🎯 KEPUTUSAN MARKET SCANNER:")
     if is_market_hot:
@@ -667,7 +880,7 @@ def run_backtest_on_symbol(symbol):
             
             # Entry long
             if (retest_long and vol_confirmed and atr_confirmed and 
-                ema_fast > ema_slow and adx > 20):
+                ema_fast > ema_slow and adx > DYNAMIC_ADX_THRESHOLD):
                 sl = long_level - atr * SL_ATR_MULT
                 tp = long_level + atr * TP_ATR_MULT
                 
@@ -680,7 +893,7 @@ def run_backtest_on_symbol(symbol):
                     continue
                 
                 # Position sizing dengan risk management
-                risk_amount = balance * RISK_PCT
+                risk_amount = balance * DYNAMIC_RISK_PCT
                 qty = risk_amount / risk_per_unit
                 
                 # Hard cap: maksimal 25% dari balance per trade
@@ -703,7 +916,7 @@ def run_backtest_on_symbol(symbol):
             
             # Entry short
             elif (retest_short and vol_confirmed and atr_confirmed and 
-                  ema_fast < ema_slow and adx > 20):
+                  ema_fast < ema_slow and adx > DYNAMIC_ADX_THRESHOLD):
                 sl = short_level + atr * SL_ATR_MULT
                 tp = short_level - atr * TP_ATR_MULT
                 
@@ -716,7 +929,7 @@ def run_backtest_on_symbol(symbol):
                     continue
                 
                 # Position sizing dengan risk management
-                risk_amount = balance * RISK_PCT
+                risk_amount = balance * DYNAMIC_RISK_PCT
                 qty = risk_amount / risk_per_unit
                 
                 # Hard cap: maksimal 25% dari balance per trade
