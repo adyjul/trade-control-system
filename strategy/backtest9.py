@@ -982,11 +982,12 @@ def run_backtest_on_symbol(symbol):
             # Volume confirmation - lebih realistis
             # vol_mul = 1.8
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
-            vol_confirmed = vol_ratio >= DYNAMIC_LEVEL_MULT
+            # vol_confirmed = vol_ratio >= DYNAMIC_LEVEL_MULT
+            vol_confirmed = vol_ratio >= 1.3
             
             # ATR minimal untuk menghindari false signals di sideways market
             atr_pct = (atr / close) * 100
-            atr_confirmed = atr_pct >= 0.3  # Minimal 0.3% per candle
+            atr_confirmed = atr_pct >= 0.15 # Minimal 0.3% per candle
             
             # Level breakout dari candle sebelumnya
             prev_close = df['close'].iloc[i-1]
