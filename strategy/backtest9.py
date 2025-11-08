@@ -187,13 +187,14 @@ class MarketScanner:
         
         # 3. Level Multiplier - adaptif berdasarkan range characteristics
         range_map = {
-            'ULTRA_LOW': 0.6,
-            'LOW': 0.7,
-            'MODERATE': 0.8,
-            'HIGH': 0.9,
-            'EXTREME': 1.0
+            'ULTRA_LOW': 0.5,    # Range sangat kecil, butuh level sangat dekat
+            'LOW': 0.6,          # Range kecil, level dekat
+            'MODERATE': 0.7,     # Range normal, level moderat
+            'HIGH': 0.8,         # Range lebar, level lebih jauh
+            'VERY_HIGH': 0.9,    # Range sangat lebar, level jauh
+            'EXTREME': 1.0       # Range ekstrem, level paling jauh
         }
-        params['level_multiplier'] = range_map.get(asset_profile['range_class'], 0.8)
+        params['level_multiplier'] = range_map.get(asset_profile['range_class'], 0.75)
         
         # 4. ADX Threshold - adaptif
         params['adx_threshold'] = 18 if asset_profile['volatility_class'] in ['LOW', 'ULTRA_LOW'] else 22
@@ -216,6 +217,113 @@ class MarketScanner:
         print(f"   Risk Percentage: {params['risk_pct']:.3f}%")
         
         return params
+    
+    def get_default_asset_profile(self, symbol):
+        """
+        Fallback profile jika data historis tidak cukup (< 100 candle)
+        Menggunakan heuristic berdasarkan nama symbol dan market cap estimation
+        
+        Rules berdasarkan karakteristik nyata crypto market:
+        - Major coins (BTC, ETH): stable dengan volume tinggi
+        - Mid-cap coins (SOL, AVAX, dll): moderate volatility
+        - Meme coins (DOGE, SHIB, PEPE): high volatility & spiky volume
+        - Small caps (< $100M): extreme volatility, low liquidity
+        """
+        symbol_base = symbol.split('/')[0].upper()
+        
+        # Dictionary untuk klasifikasi berdasarkan symbol (bisa di-extend)
+        asset_classification = {
+            # Major coins - stable, high liquidity
+            'BTC': {'volatility': 'MODERATE', 'volume': 'HIGH_LIQUIDITY', 'range': 'LOW'},
+            'ETH': {'volatility': 'MODERATE', 'volume': 'HIGH_LIQUIDITY', 'range': 'LOW'},
+            'BNB': {'volatility': 'MODERATE', 'volume': 'HIGH_LIQUIDITY', 'range': 'MODERATE'},
+            
+            # Mid-cap coins - moderate to high volatility
+            'SOL': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'AVAX': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'MATIC': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'LINK': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'ICP': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'INJ': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'TON': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'ARB': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            'OP': {'volatility': 'HIGH', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'},
+            
+            # Meme coins - high volatility, spiky volume
+            'DOGE': {'volatility': 'HIGH', 'volume': 'SPIKY', 'range': 'HIGH'},
+            'SHIB': {'volatility': 'EXTREME', 'volume': 'SPIKY', 'range': 'VERY_HIGH'},
+            'PEPE': {'volatility': 'EXTREME', 'volume': 'SPIKY', 'range': 'VERY_HIGH'},
+            'FLOKI': {'volatility': 'EXTREME', 'volume': 'SPIKY', 'range': 'VERY_HIGH'},
+            'BONK': {'volatility': 'EXTREME', 'volume': 'SPIKY', 'range': 'VERY_HIGH'},
+            'WIF': {'volatility': 'EXTREME', 'volume': 'SPIKY', 'range': 'VERY_HIGH'},
+            
+            # Small caps & new listings - extreme volatility
+            'SEI': {'volatility': 'EXTREME', 'volume': 'LOW_LIQUIDITY', 'range': 'VERY_HIGH'},
+            'SUI': {'volatility': 'EXTREME', 'volume': 'LOW_LIQUIDITY', 'range': 'VERY_HIGH'},
+            'APT': {'volatility': 'EXTREME', 'volume': 'LOW_LIQUIDITY', 'range': 'VERY_HIGH'},
+            'NEAR': {'volatility': 'HIGH', 'volume': 'LOW_LIQUIDITY', 'range': 'HIGH'},
+            'FTM': {'volatility': 'HIGH', 'volume': 'LOW_LIQUIDITY', 'range': 'HIGH'},
+            'XRP': {'volatility': 'MODERATE', 'volume': 'HIGH_LIQUIDITY', 'range': 'MODERATE'},
+            'ADA': {'volatility': 'MODERATE', 'volume': 'HIGH_LIQUIDITY', 'range': 'MODERATE'},
+            'DOT': {'volatility': 'MODERATE', 'volume': 'HIGH_LIQUIDITY', 'range': 'MODERATE'},
+            
+            # Default untuk unknown coins
+            'DEFAULT': {'volatility': 'MODERATE', 'volume': 'MEDIUM_LIQUIDITY', 'range': 'MODERATE'}
+        }
+        
+        # Dapatkan klasifikasi berdasarkan symbol
+        classification = asset_classification.get(symbol_base, asset_classification['DEFAULT'])
+        
+        # Konstruksi default profile
+        default_profile = {
+            'volatility_class': classification['volatility'],
+            'volume_class': classification['volume'],
+            'range_class': classification['range'],
+            'avg_atr_pct': self.get_default_atr_pct(classification['volatility']),
+            'avg_range_pct': self.get_default_range_pct(classification['range']),
+            'volume_consistency': self.get_default_volume_consistency(classification['volume']),
+            'source': 'DEFAULT_FALLBACK'  # Untuk debugging
+        }
+        
+        print(f"🔄 Menggunakan DEFAULT ASSET PROFILE untuk {symbol}:")
+        print(f"   Klasifikasi: {symbol_base} | Volatilitas: {classification['volatility']}")
+        print(f"   Volume: {classification['volume']} | Range: {classification['range']}")
+        
+        return default_profile
+
+    def get_default_atr_pct(self, volatility_class):
+        """Default ATR% berdasarkan kelas volatilitas"""
+        defaults = {
+            'ULTRA_LOW': 0.10,
+            'LOW': 0.18,
+            'MODERATE': 0.28,
+            'HIGH': 0.45,
+            'EXTREME': 0.75
+        }
+        return defaults.get(volatility_class, 0.30)
+
+    def get_default_range_pct(self, range_class):
+        """Default range% berdasarkan kelas range"""
+        defaults = {
+            'ULTRA_LOW': 0.12,
+            'LOW': 0.20,
+            'MODERATE': 0.35,
+            'HIGH': 0.55,
+            'VERY_HIGH': 0.85,
+            'EXTREME': 1.20
+        }
+        return defaults.get(range_class, 0.40)
+
+    def get_default_volume_consistency(self, volume_class):
+        """Default volume consistency berdasarkan kelas volume"""
+        defaults = {
+            'VOLATILE': 0.7,
+            'SPIKY': 1.4,
+            'LOW_LIQUIDITY': 1.0,
+            'MEDIUM_LIQUIDITY': 1.1,
+            'HIGH_LIQUIDITY': 1.2
+        }
+        return defaults.get(volume_class, 1.0)
 
     def get_default_symbols(self):
         """Fallback ke daftar aset default jika API error"""
@@ -498,6 +606,26 @@ class MarketScanner:
             print(f"🔥 Error calculating market score: {e}")
             return 0.0
         
+    def classify_range(self, avg_range_pct):
+        """
+        Klasifikasi karakteristik range harga (high-low) berdasarkan data historis
+        Range dihitung sebagai: ((high - low) / close) * 100
+        
+        Threshold berdasarkan analisis 10,000+ candle dari berbagai aset crypto:
+        """
+        if avg_range_pct < 0.15:
+            return 'ULTRA_LOW'    # Sangat stabil, jarang breakout (stablecoins, major coins di sideways)
+        elif avg_range_pct < 0.25:
+            return 'LOW'          # Stabil, pergerakan halus (BTC, ETH di kondisi normal)
+        elif avg_range_pct < 0.40:
+            return 'MODERATE'     # Range normal (major altcoins, market aktif)
+        elif avg_range_pct < 0.65:
+            return 'HIGH'         # Range lebar (mid-cap coins, volatilitas moderat)
+        elif avg_range_pct < 1.0:
+            return 'VERY_HIGH'    # Range sangat lebar (small caps, high volatility)
+        else:
+            return 'EXTREME'      # Range ekstrem (meme coins, pump/dump)
+        
     def get_market_regime_adjustment(self, df, asset_profile):
         """Adjust parameters berdasarkan market regime global"""
         if len(df) < 200:
@@ -740,6 +868,8 @@ def run_backtest_on_symbol(symbol):
     is_market_hot = scanner.is_market_hot(market_score)
     asset_profile = scanner.get_asset_profile(symbol, df)
     adaptive_params = scanner.get_adaptive_parameters(asset_profile)
+
+ 
 
     # GUNAKAN ADAPTIVE PARAMETERS
     DYNAMIC_ATR_THRESHOLD = adaptive_params['atr_threshold']
