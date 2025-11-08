@@ -637,8 +637,9 @@ def run_backtest_on_symbol(symbol):
             adx = df['adx'].iloc[i]
             
             # Volume confirmation - lebih realistis
+            vol_mul = 1.8
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
-            vol_confirmed = vol_ratio >= self.min_volume_multiplier
+            vol_confirmed = vol_ratio >= vol_mul
             
             # ATR minimal untuk menghindari false signals di sideways market
             atr_pct = (atr / close) * 100
