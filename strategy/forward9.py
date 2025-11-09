@@ -765,7 +765,7 @@ def run_forward_test():
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
             atr_pct = (atr / close) * 100 if close > 0 else 0
 
-            print(f"[{current_time.strftime('%H:%M:%S')}] Cek Entry - Regime: {regime} | Market Regime: {market_regime} | ATR%: {atr_pct:.3f}% | Vol Ratio: {vol_ratio:.2f}x | ADX: {adx:.1f}")
+            # print(f"[{current_time.strftime('%H:%M:%S')}] Cek Entry - Regime: {regime} | Market Regime: {market_regime} | ATR%: {atr_pct:.3f}% | Vol Ratio: {vol_ratio:.2f}x | ADX: {adx:.1f}")
             # ------------------------
             if regime in ["SIDEWAYS", "INSUFFICIENT_DATA"]:
                 continue
@@ -778,7 +778,7 @@ def run_forward_test():
             level_multiplier = dynamic_thresholds['level_multiplier']
             risk_pct = dynamic_thresholds['risk_pct']
 
-            print(f"[DEBUG] Volume Multiplier Dinamis: {volume_multiplier:.2f}x | Vol Ratio Saat Ini: {vol_ratio:.2f}x | Vol Confirmed: {vol_ratio >= volume_multiplier}")
+            # print(f"[DEBUG] Volume Multiplier Dinamis: {volume_multiplier:.2f}x | Vol Ratio Saat Ini: {vol_ratio:.2f}x | Vol Confirmed: {vol_ratio >= volume_multiplier}")
 
             vol_confirmed = vol_ratio >= volume_multiplier
             atr_confirmed = atr_pct >= atr_threshold
