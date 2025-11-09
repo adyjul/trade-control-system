@@ -778,6 +778,8 @@ def run_forward_test():
             level_multiplier = dynamic_thresholds['level_multiplier']
             risk_pct = dynamic_thresholds['risk_pct']
 
+            print(f"[DEBUG] Volume Multiplier Dinamis: {volume_multiplier:.2f}x | Vol Ratio Saat Ini: {vol_ratio:.2f}x | Vol Confirmed: {vol_ratio >= volume_multiplier}")
+
             vol_confirmed = vol_ratio >= volume_multiplier
             atr_confirmed = atr_pct >= atr_threshold
 
