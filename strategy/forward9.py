@@ -757,20 +757,21 @@ def run_forward_test():
             current_row = df.iloc[i]
 
             regime = enhanced_trend_detection(i, df)
-            if regime in ["SIDEWAYS", "INSUFFICIENT_DATA"]:
-                continue
-
             atr = current_row['atr']
             close = current_row['close']
             volume = current_row['volume']
             vol_ma = current_row['vol_ma']
-            ema_fast = current_row['ema_fast']
-            ema_slow = current_row['ema_slow']
             adx = current_row['adx']
-
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
             atr_pct = (atr / close) * 100 if close > 0 else 0
 
+            print(f"[{current_time.strftime('%H:%M:%S')}] Cek Entry - Regime: {regime} | Market Regime: {market_regime} | ATR%: {atr_pct:.3f}% | Vol Ratio: {vol_ratio:.2f}x | ADX: {adx:.1f}")
+            # ------------------------
+            if regime in ["SIDEWAYS", "INSUFFICIENT_DATA"]:
+                continue
+
+            ema_slow = current_row['ema_slow']
+            ema_fast = current_row['ema_fast']
             atr_threshold = dynamic_thresholds['atr_threshold']
             volume_multiplier = dynamic_thresholds['volume_multiplier']
             adx_threshold = dynamic_thresholds['adx_threshold']
