@@ -10,47 +10,41 @@ import json
 import os
 
 # --- CONFIG UTAMA (Gunakan konfig dari backtest sebagai base) ---
-# Impor atau definisikan ulang konstanta yang digunakan di backtest
 INITIAL_BALANCE = 20.0
 BASE_RISK_PCT = 0.01
 LEVERAGE = 10
 TP_ATR_MULT = 3.0
 SL_ATR_MULT = 2.5
 TIMEFRAME = '5m'
-BARS_TO_FETCH = 1000 # Jumlah candle untuk inisialisasi indikator, bisa disesuaikan
+BARS_TO_FETCH = 1000
 MIN_SCAN_SCORE = 0.5
 VOLATILITY_WINDOW = 50
 
 # --- CONFIG FORWARD TEST ---
-# Tambahkan konfig untuk forward test
 MODE = 'simulated'  # 'live' atau 'simulated'
-API_KEY = os.getenv('BINANCE_API_KEY', '') # Gunakan environment variable
-API_SECRET = os.getenv('BINANCE_API_SECRET', '') # Gunakan environment variable
-ORDER_TYPE = 'market'  # 'market' atau 'limit' (jika limit, perlu logika tambahan)
-ORDER_BOOK_DEPTH = 20 # Untuk estimasi harga market jika ORDER_TYPE='market' atau simulasi
+API_KEY = os.getenv('BINANCE_API_KEY', '')
+API_SECRET = os.getenv('BINANCE_API_SECRET', '')
+ORDER_TYPE = 'market'
+ORDER_BOOK_DEPTH = 20
+RESCAN_INTERVAL_MINUTES = 30  # Interval scanning ulang (menit)
+MIN_TIME_BETWEEN_SCANS = 15   # Minimal waktu antar scan (menit) untuk mencegah thrashing
 
 # --- MARKET SCANNER CLASS (diambil dari backtest) ---
-# Kita bisa memasukkan kelas MarketScanner dari file backtest secara langsung
-# Atau, jika file backtest disimpan sebagai modul, kita bisa import:
-# from backtest_with_market_scanner import MarketScanner
-# Untuk kejelasan dan satu file, kita masukkan kelasnya di sini (potongan krusial)
-
 class MarketScanner:
     def __init__(self):
-        # Gunakan exchange spot untuk fetch_tickers, OHLCV, dan orderbook
         if MODE == 'live':
             self.exchange = ccxt.binance({
                 'apiKey': API_KEY,
                 'secret': API_SECRET,
                 'enableRateLimit': True,
-                'options': {'defaultType': 'spot'} # Spot dulu, nanti bisa diganti ke 'future' jika leverage
+                'options': {'defaultType': 'spot'}
             })
-        else: # Simulated
+        else:
             self.exchange = ccxt.binance({
                 'enableRateLimit': True,
                 'options': {'defaultType': 'spot'}
             })
-
+        
         self.min_volume_usd = 300000
         self.min_24h_change = 1.0
         self.max_symbols = 20
@@ -85,7 +79,6 @@ class MarketScanner:
         ema_200 = df['close'].rolling(200).mean().iloc[-1]
         if pd.isna(ema_200) or ema_200 == 0:
             return "NEUTRAL"
-        price_vs_ema = current_price / ema_200
         if current_price > ema_200 * 1.15:
             return "STRONG_BULL"
         elif current_price > ema_200 * 1.05:
@@ -288,7 +281,6 @@ class MarketScanner:
             try:
                 print(f"📊 Menganalisis {symbol}...")
                 self._rate_limit()
-                # Ambil data 5m terbaru, jumlah bisa disesuaikan
                 ohlcv = self.exchange.fetch_ohlcv(symbol, TIMEFRAME, limit=25)
                 if len(ohlcv) < 15:
                     print(f"   ✗ {symbol}: Data tidak cukup ({len(ohlcv)} candle)")
@@ -429,7 +421,6 @@ def get_current_price(exchange, symbol):
         ticker = exchange.fetch_ticker(symbol)
         return ticker['last']
     except:
-        # Fallback ke orderbook mid-price
         try:
             ob = exchange.fetch_order_book(symbol, limit=1)
             bid = ob['bids'][0][0] if ob['bids'] else None
@@ -444,7 +435,6 @@ def get_current_price(exchange, symbol):
 def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balance, leverage):
     """Simulasikan eksekusi order market"""
     print(f"🎯 SIMULATED {side.upper()} Order @ {price:.4f} | Qty: {qty:.4f} | SL: {sl_price:.4f} | TP: {tp_price:.4f}")
-    # Simulasikan order fill di harga 'price'
     position_value = qty * price
     max_loss = abs((price - sl_price) * qty) * leverage
     max_profit = abs((tp_price - price) * qty) * leverage
@@ -457,18 +447,12 @@ def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balanc
         'entry_price': price,
         'sl_price': sl_price,
         'tp_price': tp_price,
-        'balance': balance - max_loss # Simulasi worst case (jika SL terkena)
+        'balance': balance - max_loss
     }
 
 def execute_order_live(exchange, symbol, side, qty, price, sl_price, tp_price):
     """Eksekusi order live ke exchange (gunakan leverage jika perlu)"""
-    # Peringatan: Implementasi live order harus sangat hati-hati
-    # Gunakan leverage dan margin type (ISOLATED/ONEWAY) sesuai konfigurasi
-    # Disini hanya contoh dasar untuk market order
     print(f"⚠️ LIVE ORDER: {side.upper()} {qty:.4f} {symbol.split('/')[0]} @ {price:.4f}")
-    # order = exchange.create_order(symbol, 'market', side.lower(), qty, params={'type': 'MARKET'})
-    # print(f"   📦 Order ID: {order['id']} - Status: {order['status']}")
-    # Untuk saat ini, kita hanya print dan tidak benar-benar kirim order untuk keamanan
     print("   🚨 LIVE ORDER DICEGAH UNTUK KEAMANAN - HAPUS KOMENTAR UNTUK EKSEKUSI SEBENARNYA")
     return {
         'status': 'pending',
@@ -496,7 +480,7 @@ def check_exit_conditions(position, current_price, exchange):
         elif current_price <= position['tp_price']:
             print(f"🟢 SIMULATED SHORT TP HIT @ {current_price:.4f} | Entry: {position['entry_price']:.4f}")
             return 'TP_HIT'
-    return None # Belum exit
+    return None
 
 def enhanced_trend_detection(row_idx, df):
     """Deteksi regime pasar - diambil dari backtest"""
@@ -559,18 +543,22 @@ def calculate_professional_position_size(balance, entry_price, sl_price, risk_pc
         position_size = round(position_size, 4)
     return max(0, position_size)
 
-# --- FUNGSI UTAMA FORWARD TEST ---
+# --- FUNGSI UTAMA FORWARD TEST DENGAN SCANNING ULANG ---
 def run_forward_test():
-    """Jalankan Forward Test Loop"""
-    print(f"🚀 MULAI FORWARD TEST - MODE: {MODE.upper()}")
+    """Jalankan Forward Test Loop dengan scanning ulang otomatis"""
+    print(f"🚀 MULAI FORWARD TEST - MODE: {MODE.upper()} | INTERVAL SCAN: {RESCAN_INTERVAL_MINUTES} MENIT")
     print("=" * 70)
 
     scanner = MarketScanner()
     balance = INITIAL_BALANCE
     active_position = None
     trade_log = []
+    current_symbol = None
+    last_scan_time = datetime.now()
+    last_switch_time = datetime.now()
+    last_exit_time = None
 
-    # Ambil aset awal
+    print("🔄 MENCARI ASET TERBAIK UNTUK TRADING AWAL...")
     current_symbol = scanner.get_best_asset_for_trading()
     if not current_symbol:
         print("❌ Gagal mendapatkan aset awal, keluar.")
@@ -606,44 +594,120 @@ def run_forward_test():
     last_data_time = df['timestamp'].iloc[-1]
 
     print(f"✅ Forward Test Siap - {current_symbol} | Regime: {market_regime} | Aset: {asset_profile.get('asset_class', 'N/A')}")
-    print("🔄 Memulai Loop Forward Test... (Tekan Ctrl+C untuk berhenti)")
+    print("🔄 Memulai Loop Forward Test dengan SCANNING ULANG OTOMATIS... (Tekan Ctrl+C untuk berhenti)")
 
     try:
         while True:
             current_time = datetime.now()
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
 
+            # --- LOGIKA SCANNING ULANG OTOMATIS ---
+            should_rescan = False
+            
+            # Kondisi 1: Interval waktu tercapai
+            if (current_time - last_scan_time).total_seconds() >= RESCAN_INTERVAL_MINUTES * 60:
+                print(f"⏰ [{current_time.strftime('%H:%M:%S')}] WAKTU SCAN ULANG TERJANGKAU ({RESCAN_INTERVAL_MINUTES} MENIT)")
+                should_rescan = True
+            
+            # Kondisi 2: Setelah exit posisi (tunggu minimal MIN_TIME_BETWEEN_SCANS menit)
+            if last_exit_time and (current_time - last_exit_time).total_seconds() >= MIN_TIME_BETWEEN_SCANS * 60:
+                print(f"✅ [{current_time.strftime('%H:%M:%S')}] SCANNING ULANG SETELAH EXIT POSISI")
+                should_rescan = True
+                last_exit_time = None  # Reset agar tidak terus menerus scan
+            
+            # Kondisi 3: Tidak ada sinyal entry dalam waktu lama (opsional, bisa ditambahkan)
+            # ...
+
+            if should_rescan:
+                print("\n" + "="*50)
+                print(f"🔍 MEMULAI PROSES SCANNING ULANG...")
+                print("="*50)
+                
+                new_symbol = scanner.get_best_asset_for_trading()
+                if new_symbol:
+                    if new_symbol != current_symbol:
+                        # Cek apakah minimal waktu antar switch terpenuhi
+                        if (current_time - last_switch_time).total_seconds() < MIN_TIME_BETWEEN_SCANS * 60:
+                            print(f"⏳ [{current_time.strftime('%H:%M:%S')}] TERLALU CEPAT UNTUK GANTI ASET! Tunggu {MIN_TIME_BETWEEN_SCANS} menit sejak switch terakhir")
+                            print(f"   Tetap di {current_symbol} untuk sekarang")
+                        else:
+                            print(f"🎯 [{current_time.strftime('%H:%M:%S')}] ASET BARU DITEMUKAN: {new_symbol} (sebelumnya: {current_symbol})")
+                            
+                            # Simpan data jika ada posisi aktif
+                            if active_position:
+                                print(f"⚠️ [{current_time.strftime('%H:%M:%S')}] MASIH ADA POSISI AKTIF DI {current_symbol}, TIDAK BISA GANTI ASET")
+                                print(f"   Tunggu posisi selesai atau tutup manual terlebih dahulu")
+                            else:
+                                # Ganti ke aset baru
+                                current_symbol = new_symbol
+                                last_switch_time = current_time
+                                
+                                # Reset data untuk aset baru
+                                print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {current_symbol}...")
+                                df = fetch_ohlcv_data(current_symbol, TIMEFRAME, BARS_TO_FETCH)
+                                if df is not None and len(df) >= BARS_TO_FETCH * 0.7:
+                                    # Hitung ulang indikator
+                                    df['ema_fast'] = talib.EMA(df['close'], 20)
+                                    df['ema_slow'] = talib.EMA(df['close'], 50)
+                                    df['ema_200'] = talib.EMA(df['close'], 200)
+                                    df['rsi'] = talib.RSI(df['close'], 14)
+                                    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+                                    df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
+                                    df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
+                                    df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
+                                    df['vol_ma'] = df['volume'].rolling(10).mean()
+                                    
+                                    # Update profil aset dan regime
+                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
+                                    market_regime = scanner.detect_market_regime(df)
+                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
+                                    
+                                    last_data_time = df['timestamp'].iloc[-1]
+                                    print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
+                                else:
+                                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {current_symbol}, TETAP DI {current_symbol}")
+                    else:
+                        print(f"🔄 [{current_time.strftime('%H:%M:%S')}] ASET TERBAIK MASIH SAMA: {current_symbol}")
+                else:
+                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL MENDAPATKAN ASET BARU, TETAP DI {current_symbol}")
+                
+                last_scan_time = current_time
+                print("="*50 + "\n")
+
             # Ambil data baru jika cukup waktu
             if (current_time - last_update_time).seconds >= 300: # 5 menit
-                new_ohlcv = scanner.exchange.fetch_ohlcv(current_symbol, TIMEFRAME, limit=2) # Ambil 2 candle terbaru
-                new_df = pd.DataFrame(new_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-                new_df['timestamp'] = pd.to_datetime(new_df['timestamp'], unit='ms')
-                new_df = new_df.sort_values('timestamp').reset_index(drop=True)
+                try:
+                    new_ohlcv = scanner.exchange.fetch_ohlcv(current_symbol, TIMEFRAME, limit=2)
+                    new_df = pd.DataFrame(new_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    new_df['timestamp'] = pd.to_datetime(new_df['timestamp'], unit='ms')
+                    new_df = new_df.sort_values('timestamp').reset_index(drop=True)
 
-                latest_candle_time = new_df['timestamp'].iloc[-1]
+                    latest_candle_time = new_df['timestamp'].iloc[-1]
 
-                if latest_candle_time > last_data_time:
-                    # Update DataFrame
-                    df = pd.concat([df, new_df.iloc[1:]], ignore_index=True) # Ambil candle terbaru (abaikan overlap)
-                    df = df.iloc[-BARS_TO_FETCH:] # Jaga ukuran tetap BARS_TO_FETCH
+                    if latest_candle_time > last_data_time:
+                        df = pd.concat([df, new_df.iloc[1:]], ignore_index=True)
+                        df = df.iloc[-BARS_TO_FETCH:]
 
-                    # Update indikator (bisa dioptimalkan dengan rolling calculation)
-                    df['ema_fast'] = talib.EMA(df['close'], 20)
-                    df['ema_slow'] = talib.EMA(df['close'], 50)
-                    df['ema_200'] = talib.EMA(df['close'], 200)
-                    df['rsi'] = talib.RSI(df['close'], 14)
-                    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-                    df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-                    df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-                    df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-                    df['vol_ma'] = df['volume'].rolling(10).mean()
+                        # Update indikator dengan rolling calculation yang lebih efisien
+                        df['ema_fast'] = talib.EMA(df['close'], 20)
+                        df['ema_slow'] = talib.EMA(df['close'], 50)
+                        df['ema_200'] = talib.EMA(df['close'], 200)
+                        df['rsi'] = talib.RSI(df['close'], 14)
+                        df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+                        df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
+                        df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
+                        df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
+                        df['vol_ma'] = df['volume'].rolling(10).mean()
 
-                    last_data_time = latest_candle_time
-                    last_update_time = current_time
+                        last_data_time = latest_candle_time
+                        last_update_time = current_time
 
-                    print(f"[{latest_candle_time.strftime('%Y-%m-%d %H:%M:%S')}] Data {current_symbol} diperbarui.")
-                else:
-                    print(f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] Data belum update, menunggu candle baru...")
+                        print(f"[{latest_candle_time.strftime('%Y-%m-%d %H:%M:%S')}] Data {current_symbol} diperbarui.")
+                    else:
+                        print(f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] Data belum update, menunggu candle baru...")
+                except Exception as e:
+                    print(f"⚠️ Error mengambil data baru untuk {current_symbol}: {e}")
+                    continue
 
             # Ambil harga real-time untuk cek exit
             current_price = get_current_price(scanner.exchange, current_symbol)
@@ -655,26 +719,41 @@ def run_forward_test():
             if active_position is not None:
                 exit_reason = check_exit_conditions(active_position, current_price, scanner.exchange)
                 if exit_reason:
+                    # Hitung PnL sesuai arah posisi
+                    if active_position['side'] == 'LONG':
+                        pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
+                    else:  # SHORT
+                        pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
+                    
+                    # Update balance
+                    balance = balance + pnl
+                    
                     # Log trade exit
                     trade_result = {
                         'exit_time': datetime.now(),
                         'exit_reason': exit_reason,
                         'exit_price': current_price,
-                        'pnl': 0, # Akan dihitung berdasarkan simulated execution
-                        'balance_after_exit': balance
+                        'pnl': pnl,
+                        'balance_after_exit': balance,
+                        'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60  # dalam menit
                     }
                     trade_log.append({**active_position, **trade_result})
+                    
                     print(f"📋 Trade Log: {active_position['side']} {active_position['symbol']} exit on {exit_reason}")
+                    print(f"   💰 PnL: {pnl:+.4f} USDT | Balance: {balance:.4f} USDT | Hold Time: {trade_result['hold_time']:.1f} menit")
+                    
                     active_position = None
-                    # Reset symbol dan ambil yang baru?
-                    # Bisa ditambahkan logika untuk mengecek aset baru setelah exit
-                    # Misalnya, jika winrate bagus di aset ini, tetap di sana, jika tidak, cari yang baru.
-                    # Untuk sementara, kita tetap di aset yang sama.
-                continue # Jika ada posisi aktif, skip entry check
+                    last_exit_time = datetime.now()  # Trigger scanning ulang setelah exit
 
             # --- CEK ENTRY BARU (hanya jika tidak ada posisi aktif) ---
+            if active_position is not None:
+                continue  # Lewati jika ada posisi aktif
+
             # Gunakan bar terakhir dari df yang diperbarui
             i = len(df) - 1
+            if i < 50:
+                continue  # Data tidak cukup untuk analisis
+
             current_row = df.iloc[i]
 
             regime = enhanced_trend_detection(i, df)
@@ -729,16 +808,21 @@ def run_forward_test():
                     continue
                 qty = calculate_professional_position_size(balance, long_level, sl, risk_pct, LEVERAGE)
                 if qty > 0:
-                    print(f"🔍 Sinyal LONG DETECTED untuk {current_symbol} @ {long_level:.4f}")
+                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal LONG DETECTED untuk {current_symbol} @ {long_level:.4f}")
+                    print(f"   📊 ATR%: {atr_pct:.3f}% (Threshold: {atr_threshold:.3f}%) | Volume Ratio: {vol_ratio:.2f}x (Threshold: {volume_multiplier:.2f}x)")
+                    print(f"   📈 Market Regime: {market_regime} | Trend Regime: {regime}")
+                    
                     if MODE == 'simulated':
                         active_position = execute_order_simulated(current_symbol, 'LONG', qty, long_level, sl, tp, balance, LEVERAGE)
-                        balance = active_position['balance'] # Update balance simulasi
-                        active_position['entry_time'] = datetime.now() # Timestamp entry
+                        balance = active_position['balance'] 
+                        active_position['entry_time'] = datetime.now()
+                        active_position['regime'] = regime
+                        active_position['market_regime'] = market_regime
                     elif MODE == 'live':
                         active_position = execute_order_live(scanner.exchange, current_symbol, 'LONG', qty, long_level, sl, tp)
                         active_position['entry_time'] = datetime.now()
-                        # Dalam mode live, Anda perlu melacak posisi dari exchange, bukan dari variabel ini.
-                        # Misalnya, dengan fetch_positions atau order status.
+                        active_position['regime'] = regime
+                        active_position['market_regime'] = market_regime
 
             elif (retest_short and vol_confirmed and atr_confirmed and
                   ema_fast < ema_slow and adx > adx_threshold and allow_short):
@@ -748,27 +832,63 @@ def run_forward_test():
                     continue
                 qty = calculate_professional_position_size(balance, short_level, sl, risk_pct, LEVERAGE)
                 if qty > 0:
-                    print(f"🔍 Sinyal SHORT DETECTED untuk {current_symbol} @ {short_level:.4f}")
+                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal SHORT DETECTED untuk {current_symbol} @ {short_level:.4f}")
+                    print(f"   📊 ATR%: {atr_pct:.3f}% (Threshold: {atr_threshold:.3f}%) | Volume Ratio: {vol_ratio:.2f}x (Threshold: {volume_multiplier:.2f}x)")
+                    print(f"   📉 Market Regime: {market_regime} | Trend Regime: {regime}")
+                    
                     if MODE == 'simulated':
                         active_position = execute_order_simulated(current_symbol, 'SHORT', qty, short_level, sl, tp, balance, LEVERAGE)
-                        balance = active_position['balance'] # Update balance simulasi
+                        balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
+                        active_position['regime'] = regime
+                        active_position['market_regime'] = market_regime
                     elif MODE == 'live':
                         active_position = execute_order_live(scanner.exchange, current_symbol, 'SHORT', qty, short_level, sl, tp)
                         active_position['entry_time'] = datetime.now()
+                        active_position['regime'] = regime
+                        active_position['market_regime'] = market_regime
 
     except KeyboardInterrupt:
         print("\n🛑 Forward Test dihentikan oleh pengguna.")
         if active_position:
             print(f"⚠️ Masih ada posisi aktif: {active_position}")
-            # Log posisi open jika dihentikan
-            trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': 'MANUAL_STOP', 'exit_price': current_price, 'pnl': 'N/A', 'balance_after_exit': balance})
-        # Simpan log trade jika ada
+            current_price = get_current_price(scanner.exchange, current_symbol)
+            if current_price:
+                exit_reason = check_exit_conditions(active_position, current_price, scanner.exchange)
+                if exit_reason:
+                    if active_position['side'] == 'LONG':
+                        pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
+                    else:
+                        pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
+                    balance = balance + pnl
+                    trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': exit_reason, 'exit_price': current_price, 'pnl': pnl, 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
+                else:
+                    trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': 'MANUAL_STOP', 'exit_price': current_price, 'pnl': 'N/A', 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
         if trade_log:
             log_df = pd.DataFrame(trade_log)
             filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             log_df.to_csv(filename, index=False)
             print(f"💾 Log Forward Test disimpan ke: {filename}")
+            
+            # Tampilkan ringkasan performa
+            if not log_df.empty:
+                completed_trades = log_df[log_df['exit_reason'].isin(['SL_HIT', 'TP_HIT'])]
+                if not completed_trades.empty:
+                    win_rate = len(completed_trades[completed_trades['pnl'] > 0]) / len(completed_trades)
+                    total_pnl = completed_trades['pnl'].sum()
+                    avg_hold_time = completed_trades['hold_time'].mean()
+                    
+                    print("\n" + "="*50)
+                    print("📊 RINGKASAN PERFORMA FORWARD TEST")
+                    print("="*50)
+                    print(f"   Total Trade: {len(completed_trades)}")
+                    print(f"   Win Rate: {win_rate:.2%}")
+                    print(f"   Total PnL: {total_pnl:+.4f} USDT")
+                    print(f"   Final Balance: {balance:.4f} USDT")
+                    print(f"   Rata-rata Hold Time: {avg_hold_time:.1f} menit")
+                    print(f"   Aset yang diperdagangkan: {', '.join(completed_trades['symbol'].unique())}")
+                    print("="*50)
+        
         print(f"💰 Balance Akhir (Simulated): {balance:.4f}")
 
 # --- FUNGSI FETCH DATA ---
