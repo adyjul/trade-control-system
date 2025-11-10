@@ -912,7 +912,7 @@ def run_forward_test():
             allow_long = True
             allow_short = True
 
-            print(f"\n🔍 [{current_time.strftime('%H:%M:%S')}] Multi-Timeframe Analysis untuk {current_symbol}...")
+            # print(f"\n🔍 [{current_time.strftime('%H:%M:%S')}] Multi-Timeframe Analysis untuk {current_symbol}...")
             mtf_score, mtf_direction = get_multi_timeframe_confirmation(scanner.exchange, current_symbol)
 
             MTF_MIN_SCORE = 0.4    # Minimal score untuk konfirmasi
