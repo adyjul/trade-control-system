@@ -427,7 +427,7 @@ def get_current_price(exchange, symbol):
     """Ambil harga terakhir dari ticker atau orderbook"""
     try:
         ticker = exchange.fetch_ticker(symbol)
-        print(f"💰 Harga terakhir: {ticker['last']:.4f}")
+        # print(f"💰 Harga terakhir: {ticker['last']:.4f}")
         return ticker['last']
     except:
         try:
