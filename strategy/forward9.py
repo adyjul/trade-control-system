@@ -441,6 +441,88 @@ def get_current_price(exchange, symbol):
         except:
             return None
 
+def get_multi_timeframe_confirmation(exchange, symbol):
+    """Dapatkan konfirmasi tren dari multiple timeframe"""
+    higher_timeframes = {
+        '15m': '15m',
+        '1h': '1h'
+    }
+    
+    trend_scores = []
+    trend_directions = []
+    
+    for tf_name, tf_value in higher_timeframes.items():
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol, tf_value, limit=50)
+            if len(ohlcv) < 30:
+                continue
+                
+            tf_df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            tf_df['timestamp'] = pd.to_datetime(tf_df['timestamp'], unit='ms')
+            
+            # Hitung indikator dasar
+            tf_df['ema20'] = talib.EMA(tf_df['close'], 20)
+            tf_df['ema50'] = talib.EMA(tf_df['close'], 50)
+            tf_df['adx'] = talib.ADX(tf_df['high'], tf_df['low'], tf_df['close'], 14)
+            tf_df['plus_di'] = talib.PLUS_DI(tf_df['high'], tf_df['low'], tf_df['close'], 14)
+            tf_df['minus_di'] = talib.MINUS_DI(tf_df['high'], tf_df['low'], tf_df['close'], 14)
+            
+            last_row = tf_df.iloc[-1]
+            adx = last_row['adx']
+            plus_di = last_row['plus_di']
+            minus_di = last_row['minus_di']
+            
+            # Hitung score tren untuk timeframe ini
+            tf_score = 0
+            tf_direction = 0  # 1 = bull, -1 = bear, 0 = neutral
+            
+            # 1. Kekuatan tren (ADX)
+            if adx > 25:
+                tf_score += 0.4
+            elif adx > 20:
+                tf_score += 0.3
+            elif adx > 15:
+                tf_score += 0.2
+                
+            # 2. Arah tren (DI+ vs DI-)
+            if plus_di > minus_di + 5 and plus_di > 20:
+                tf_score += 0.3
+                tf_direction = 1
+            elif minus_di > plus_di + 5 and minus_di > 20:
+                tf_score += 0.3
+                tf_direction = -1
+                
+            # 3. EMA alignment
+            if last_row['ema20'] > last_row['ema50']:
+                tf_score += 0.2
+                if tf_direction == 0:
+                    tf_direction = 1
+            elif last_row['ema20'] < last_row['ema50']:
+                tf_score += 0.2
+                if tf_direction == 0:
+                    tf_direction = -1
+                    
+            trend_scores.append(tf_score)
+            trend_directions.append(tf_direction)
+            
+            # print(f"   📈 {tf_name.upper()}: Score={tf_score:.2f} | Arah={tf_direction} | ADX={adx:.1f} | DI+={plus_di:.1f}/DI-={minus_di:.1f}")
+            
+        except Exception as e:
+            # print(f"   ⚠️ Error {tf_name}: {e}")
+            continue
+    
+    if not trend_scores:
+        return 0.5, 0  # Default neutral
+    
+    # Hitung average score dan konsensus arah
+    avg_score = sum(trend_scores) / len(trend_scores)
+    direction_consensus = sum(trend_directions) / len(trend_directions) if trend_directions else 0
+    
+    # Normalisasi direction consensus (-1 to 1)
+    direction_consensus = max(-1, min(1, direction_consensus))
+    
+    return avg_score, direction_consensus
+
 def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balance, leverage):
     """Simulasikan eksekusi order market"""
     print(f"🎯 SIMULATED {side.upper()} Order @ {price:.4f} | Qty: {qty:.4f} | SL: {sl_price:.4f} | TP: {tp_price:.4f}")
@@ -803,26 +885,74 @@ def run_forward_test():
 
             broke_long_prev = df['high'].iloc[i-1] >= long_level
             broke_short_prev = df['low'].iloc[i-1] <= short_level
-            retest_long = (broke_long_prev and
-                          df['low'].iloc[i] <= long_level * 1.003 and
-                          close > long_level * 0.997)
-            retest_short = (broke_short_prev and
-                           df['high'].iloc[i] >= short_level * 0.997 and
-                           close < short_level * 1.003)
+
+            # retest_long = (broke_long_prev and
+            #               df['low'].iloc[i] <= long_level * 1.003 and
+            #               close > long_level * 0.997)
+            # retest_short = (broke_short_prev and
+            #                df['high'].iloc[i] >= short_level * 0.997 and
+            #                close < short_level * 1.003)
+
+            ENTRY_ZONE_BUFFER = 0.015 
+
+            long_zone_start = long_level - (atr * 0.8 * level_multiplier)
+            long_zone_end = long_level + (atr * 1.2 * level_multiplier)
+
+            short_zone_start = short_level - (atr * 1.2 * level_multiplier)
+            short_zone_end = short_level + (atr * 0.8 * level_multiplier)
+
+            price_in_long_zone = (df['low'].iloc[i] <= long_zone_end) and (close >= long_zone_start)
+            price_in_short_zone = (df['high'].iloc[i] >= short_zone_start) and (close <= short_zone_end)
+
+            plus_di = current_row['plus_di']
+            minus_di = current_row['minus_di']
+            momentum_strength = abs(plus_di - minus_di) / max(plus_di, minus_di, 1)
+            strong_momentum = momentum_strength > 0.25  # Minimal 25% perbedaan DI
 
             allow_long = True
             allow_short = True
+
+            print(f"\n🔍 [{current_time.strftime('%H:%M:%S')}] Multi-Timeframe Analysis untuk {current_symbol}...")
+            mtf_score, mtf_direction = get_multi_timeframe_confirmation(scanner.exchange, current_symbol)
+
+            MTF_MIN_SCORE = 0.4    # Minimal score untuk konfirmasi
+            MTF_DIRECTION_THRESHOLD = 0.2  # Minimal consensus direction
+
+            print(f"🎯 MTF Result: Score={mtf_score:.2f} | Direction={mtf_direction:.2f}")
+            print(f"   {'✅ BULLISH' if mtf_direction > 0.3 else '✅ BEARISH' if mtf_direction < -0.3 else '🟡 NEUTRAL'} di timeframe lebih tinggi")
+
             if market_regime in ['STRONG_BULL', 'BULL']:
                 allow_short = False
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
                 allow_long = False
 
-            if (retest_long and vol_confirmed and atr_confirmed and
-                ema_fast > ema_slow and adx > adx_threshold and allow_long):
+            high_quality_long = (broke_long_prev and price_in_long_zone and 
+                                vol_confirmed and atr_confirmed and 
+                                ema_fast > ema_slow and adx > adx_threshold and 
+                                strong_momentum and allow_long and mtf_direction >= MTF_DIRECTION_THRESHOLD)
+
+            high_quality_short = (broke_short_prev and price_in_short_zone and 
+                                vol_confirmed and atr_confirmed and 
+                                ema_fast < ema_slow and adx > adx_threshold and 
+                                strong_momentum and allow_short and mtf_direction <= -MTF_DIRECTION_THRESHOLD)
+            
+            if price_in_long_zone or price_in_short_zone:
+                print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
+                print(f"   🔵 LONG Zone: {long_zone_start:.6f} - {long_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_long_zone}")
+                print(f"   🔴 SHORT Zone: {short_zone_start:.6f} - {short_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_short_zone}")
+                print(f"   💪 Momentum Strength: {momentum_strength:.3f} | Strong: {strong_momentum} | DI+: {plus_di:.1f} | DI-: {minus_di:.1f}")
+
+
+            # if (retest_long and vol_confirmed and atr_confirmed and
+            #     ema_fast > ema_slow and adx > adx_threshold and allow_long):
+            #     sl = long_level - atr * SL_ATR_MULT
+            #     tp = long_level + atr * TP_ATR_MULT
+            if high_quality_long:
                 sl = long_level - atr * SL_ATR_MULT
                 tp = long_level + atr * TP_ATR_MULT
                 if sl <= 0 or tp <= long_level or sl >= long_level:
                     continue
+                
                 qty = calculate_professional_position_size(balance, long_level, sl, risk_pct, LEVERAGE)
                 if qty > 0:
                     print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal LONG DETECTED untuk {current_symbol} @ {long_level:.4f}")
@@ -841,12 +971,16 @@ def run_forward_test():
                         active_position['regime'] = regime
                         active_position['market_regime'] = market_regime
 
-            elif (retest_short and vol_confirmed and atr_confirmed and
-                  ema_fast < ema_slow and adx > adx_threshold and allow_short):
+            # elif (retest_short and vol_confirmed and atr_confirmed and
+            #       ema_fast < ema_slow and adx > adx_threshold and allow_short):
+            #     sl = short_level + atr * SL_ATR_MULT
+            #     tp = short_level - atr * TP_ATR_MULT
+            elif high_quality_short:
                 sl = short_level + atr * SL_ATR_MULT
                 tp = short_level - atr * TP_ATR_MULT
                 if sl <= short_level or tp >= short_level or sl <= 0:
                     continue
+
                 qty = calculate_professional_position_size(balance, short_level, sl, risk_pct, LEVERAGE)
                 if qty > 0:
                     print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal SHORT DETECTED untuk {current_symbol} @ {short_level:.4f}")
