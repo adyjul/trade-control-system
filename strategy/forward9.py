@@ -929,12 +929,14 @@ def run_forward_test():
             high_quality_long = (broke_long_prev and price_in_long_zone and 
                                 vol_confirmed and atr_confirmed and 
                                 ema_fast > ema_slow and adx > adx_threshold and 
-                                strong_momentum and allow_long and mtf_direction >= MTF_DIRECTION_THRESHOLD)
+                                strong_momentum and allow_long and
+                                mtf_score >= MTF_MIN_SCORE and mtf_direction >= MTF_DIRECTION_THRESHOLD)
 
             high_quality_short = (broke_short_prev and price_in_short_zone and 
                                 vol_confirmed and atr_confirmed and 
                                 ema_fast < ema_slow and adx > adx_threshold and 
-                                strong_momentum and allow_short and mtf_direction <= -MTF_DIRECTION_THRESHOLD)
+                                strong_momentum and allow_short and 
+                                mtf_score >= MTF_MIN_SCORE and mtf_direction <= -MTF_DIRECTION_THRESHOLD)
             
             if price_in_long_zone or price_in_short_zone:
                 print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
