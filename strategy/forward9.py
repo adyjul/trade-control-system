@@ -210,6 +210,14 @@ class MarketScanner:
             'adx_threshold': base_thresholds['adx_threshold'] * regime_adjustment['adx_threshold'],
             'risk_pct': base_thresholds['risk_pct']
         }
+
+        print(f"⚙️ Dynamic Thresholds untuk {asset_profile['symbol_base']} di {market_regime}:")
+        print(f"   ATR Threshold: {thresholds['atr_threshold']:.3f}%")
+        print(f"   Volume Multiplier: {thresholds['volume_multiplier']:.2f}x")
+        print(f"   Level Multiplier: {thresholds['level_multiplier']:.2f}")
+        print(f"   ADX Threshold: {thresholds['adx_threshold']:.1f}")
+        print(f"   Risk Percentage: {thresholds['risk_pct']:.3f}%")
+        
         return thresholds
 
     def get_trending_symbols(self):
