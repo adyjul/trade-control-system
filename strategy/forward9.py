@@ -777,7 +777,7 @@ def run_forward_test():
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
             atr_pct = (atr / close) * 100 if close > 0 else 0
 
-            print(f"[{current_time.strftime('%H:%M:%S')}] [DEBUG] ATR%: {atr_pct:.3f}% (Thres: {dynamic_thresholds['atr_threshold']:.3f}%) | ADX: {adx:.1f} (Thres: {dynamic_thresholds['adx_threshold']:.1f}) | VolRatio: {vol_ratio:.2f}x (Thres: {dynamic_thresholds['volume_multiplier']:.2f}x) | EMA: F{current_row['ema_fast']:.4f} vs S{current_row['ema_slow']:.4f}")
+            # print(f"[{current_time.strftime('%H:%M:%S')}] [DEBUG] ATR%: {atr_pct:.3f}% (Thres: {dynamic_thresholds['atr_threshold']:.3f}%) | ADX: {adx:.1f} (Thres: {dynamic_thresholds['adx_threshold']:.1f}) | VolRatio: {vol_ratio:.2f}x (Thres: {dynamic_thresholds['volume_multiplier']:.2f}x) | EMA: F{current_row['ema_fast']:.4f} vs S{current_row['ema_slow']:.4f}")
 
             # print(f"[{current_time.strftime('%H:%M:%S')}] Cek Entry - Regime: {regime} | Market Regime: {market_regime} | ATR%: {atr_pct:.3f}% | Vol Ratio: {vol_ratio:.2f}x | ADX: {adx:.1f}")
             # ------------------------
