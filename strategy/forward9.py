@@ -427,6 +427,7 @@ def get_current_price(exchange, symbol):
     """Ambil harga terakhir dari ticker atau orderbook"""
     try:
         ticker = exchange.fetch_ticker(symbol)
+        print(f"💰 Harga terakhir: {ticker['last']:.4f}")
         return ticker['last']
     except:
         try:
@@ -695,6 +696,9 @@ def run_forward_test():
                     if latest_candle_time > last_data_time:
                         df = pd.concat([df, new_df.iloc[1:]], ignore_index=True)
                         df = df.iloc[-BARS_TO_FETCH:]
+
+                        if df[['open', 'high', 'low', 'close', 'volume']].isna().any().any():
+                            print(f"⚠️ Data baru ({current_symbol}) mengandung NaN. Melewati pembaruan indikator.")
 
                         # Update indikator dengan rolling calculation yang lebih efisien
                         df['ema_fast'] = talib.EMA(df['close'], 20)
