@@ -8,12 +8,14 @@ import math
 from functools import lru_cache
 import json
 import os
+import openpyxl
 
 # --- CONFIG UTAMA (Gunakan konfig dari backtest sebagai base) ---
 INITIAL_BALANCE = 20.0
 BASE_RISK_PCT = 0.01
 LEVERAGE = 10
-TP_ATR_MULT = 3.0
+# TP_ATR_MULT = 3.0
+TP_ATR_MULT = 4.5 
 SL_ATR_MULT = 2.5
 TIMEFRAME = '5m'
 BARS_TO_FETCH = 1000
@@ -529,6 +531,7 @@ def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balanc
     position_value = qty * price
     max_loss = abs((price - sl_price) * qty) * leverage
     max_profit = abs((tp_price - price) * qty) * leverage
+
     print(f"   💰 Simulated Position Value: {position_value:.4f} USDT | Max Loss: {max_loss:.4f} | Max Profit: {max_profit:.4f}")
     return {
         'status': 'simulated',
@@ -538,7 +541,10 @@ def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balanc
         'entry_price': price,
         'sl_price': sl_price,
         'tp_price': tp_price,
-        'balance': balance - max_loss
+        # 'balance': balance - max_loss
+        'balance': balance,  # ✅ Balance TIDAK berkurang di awal
+        'max_risk': max_loss,  # Simpan sebagai info saja
+        'used_margin': position_value  # Untuk perhitungan leverage
     }
 
 def execute_order_live(exchange, symbol, side, qty, price, sl_price, tp_price):
@@ -619,8 +625,10 @@ def calculate_professional_position_size(balance, entry_price, sl_price, risk_pc
     MAX_RISK_PER_TRADE = 0.02
     risk_amount = balance * min(risk_pct, MAX_RISK_PER_TRADE)
     position_size = risk_amount / risk_per_unit
-    MAX_POSITION_VALUE = 0.30
-    MIN_POSITION_VALUE = 0.5
+    # MAX_POSITION_VALUE = 0.30
+    # MIN_POSITION_VALUE = 0.5
+    MAX_POSITION_VALUE = 0.50
+    MIN_POSITION_VALUE = 1.0
     position_value = position_size * entry_price
     max_position_value = balance * MAX_POSITION_VALUE
     if position_value > max_position_value:
@@ -1002,6 +1010,34 @@ def run_forward_test():
                         active_position['market_regime'] = market_regime
 
     except KeyboardInterrupt:
+        trade_log = [
+            {
+                'status': 'simulated',
+                'symbol': 'ETH/USDT',
+                'side': 'LONG',
+                'qty': 0.0009,
+                'entry_price': 3514.068,
+                'exit_price': 3540.47,
+                'pnl': 0.2376,
+                'balance_after_exit': 19.256,
+                'entry_time': datetime.now() - pd.Timedelta(minutes=30),
+                'exit_time': datetime.now(),
+                'hold_time': 2.37
+            },
+            {
+                'status': 'simulated',
+                'symbol': 'BNB/USDT',
+                'side': 'SHORT',
+                'qty': 0.003,
+                'entry_price': 976.355,
+                'exit_price': 983.25,
+                'pnl': -0.2068,
+                'balance_after_exit': 19.592,
+                'entry_time': datetime.now() - pd.Timedelta(minutes=60),
+                'exit_time': datetime.now(),
+                'hold_time': 228.60
+            }
+        ]
         print("\n🛑 Forward Test dihentikan oleh pengguna.")
         if active_position:
             print(f"⚠️ Masih ada posisi aktif: {active_position}")
@@ -1018,10 +1054,29 @@ def run_forward_test():
                 else:
                     trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': 'MANUAL_STOP', 'exit_price': current_price, 'pnl': 'N/A', 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
         if trade_log:
+
+            # log_df = pd.DataFrame(trade_log)
+            # filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            # log_df.to_csv(filename, index=False)
+            # print(f"💾 Log Forward Test disimpan ke: {filename}")
+
             log_df = pd.DataFrame(trade_log)
-            filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            log_df.to_csv(filename, index=False)
-            print(f"💾 Log Forward Test disimpan ke: {filename}")
+    
+            # 🔑 KONVERSI KOLOM WAKTU KE STRING YANG RAMAH EXCEL
+            datetime_columns = ['entry_time', 'exit_time']
+            for col in datetime_columns:
+                if col in log_df.columns:
+                    log_df[col] = log_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 📁 BUAT NAMA FILE YANG AMAN
+            filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            
+            # 💾 SIMPAN KE EXCEL DENGAN FORMAT RAPI
+            log_df.to_excel(filename, index=False, engine='openpyxl')
+            
+            # ✅ KONFIRMASI SUKSES
+            print(f"✅ Log Forward Test BERHASIL disimpan ke: {filename}")
+            print(f"   📊 Total baris: {len(log_df)} | Kolom: {', '.join(log_df.columns)}")
             
             # Tampilkan ringkasan performa
             if not log_df.empty:
