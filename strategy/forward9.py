@@ -1010,36 +1010,6 @@ def run_forward_test():
                         active_position['market_regime'] = market_regime
 
     except KeyboardInterrupt:
-        trade_log = [
-            {
-                'status': 'simulated',
-                'symbol': 'ETH/USDT',
-                'side': 'LONG',
-                'qty': 0.0009,
-                'entry_price': 3514.068,
-                'exit_price': 3540.47,
-                'pnl': 0.2376,
-                'balance_after_exit': 19.256,
-                'entry_time': datetime.now() - pd.Timedelta(minutes=30),
-                'exit_time': datetime.now(),
-                'hold_time': 2.37,
-                'exit_reason' : 'TP'
-            },
-            {
-                'status': 'simulated',
-                'symbol': 'BNB/USDT',
-                'side': 'SHORT',
-                'qty': 0.003,
-                'entry_price': 976.355,
-                'exit_price': 983.25,
-                'pnl': -0.2068,
-                'balance_after_exit': 19.592,
-                'entry_time': datetime.now() - pd.Timedelta(minutes=60),
-                'exit_time': datetime.now(),
-                'hold_time': 228.60,
-                'exit_reason' : 'TP'
-            }
-        ]
         print("\n🛑 Forward Test dihentikan oleh pengguna.")
         if active_position:
             print(f"⚠️ Masih ada posisi aktif: {active_position}")
