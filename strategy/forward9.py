@@ -1022,7 +1022,8 @@ def run_forward_test():
                 'balance_after_exit': 19.256,
                 'entry_time': datetime.now() - pd.Timedelta(minutes=30),
                 'exit_time': datetime.now(),
-                'hold_time': 2.37
+                'hold_time': 2.37,
+                'exit_reason' : 'TP'
             },
             {
                 'status': 'simulated',
@@ -1036,6 +1037,7 @@ def run_forward_test():
                 'entry_time': datetime.now() - pd.Timedelta(minutes=60),
                 'exit_time': datetime.now(),
                 'hold_time': 228.60
+                'exit_reason' : 'TP'
             }
         ]
         print("\n🛑 Forward Test dihentikan oleh pengguna.")
