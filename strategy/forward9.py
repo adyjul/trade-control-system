@@ -1041,25 +1041,6 @@ def run_forward_test():
             }
         ]
         print("\n🛑 Forward Test dihentikan oleh pengguna.")
-
-        log_df = pd.DataFrame(trade_log)
-
-        # 🔑 KONVERSI KOLOM WAKTU KE STRING YANG RAMAH EXCEL
-        datetime_columns = ['entry_time', 'exit_time']
-        for col in datetime_columns:
-            if col in log_df.columns:
-                log_df[col] = log_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        # 📁 BUAT NAMA FILE YANG AMAN
-        filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        
-        # 💾 SIMPAN KE EXCEL DENGAN FORMAT RAPI
-        log_df.to_excel(filename, index=False, engine='openpyxl')
-        
-        # ✅ KONFIRMASI SUKSES
-        print(f"✅ Log Forward Test BERHASIL disimpan ke: {filename}")
-        print(f"   📊 Total baris: {len(log_df)} | Kolom: {', '.join(log_df.columns)}")
-        return
         if active_position:
             print(f"⚠️ Masih ada posisi aktif: {active_position}")
             current_price = get_current_price(scanner.exchange, current_symbol)
