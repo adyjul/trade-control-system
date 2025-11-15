@@ -838,7 +838,7 @@ def run_backtest_on_symbol(symbol):
             
             # Entry long
             if (retest_long and vol_confirmed and atr_confirmed and 
-                ema_fast > ema_slow and adx > adx_threshold and allow_long ):
+                ema_fast > ema_slow and adx > adx_threshold and allow_long and rsi_long_ok):
                 sl = long_level - atr * SL_ATR_MULT
                 tp = long_level + atr * TP_ATR_MULT
                 
@@ -862,7 +862,7 @@ def run_backtest_on_symbol(symbol):
             
             # Entry short
             elif (retest_short and vol_confirmed and atr_confirmed and 
-                  ema_fast < ema_slow and adx > adx_threshold and allow_short):
+                  ema_fast < ema_slow and adx > adx_threshold and allow_short and rsi_short_ok):
                 sl = short_level + atr * SL_ATR_MULT
                 tp = short_level - atr * TP_ATR_MULT
                 
