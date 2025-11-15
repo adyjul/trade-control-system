@@ -823,6 +823,7 @@ def run_forward_test():
     df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
     df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
     df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
+    df['volume_ma20'] = df['volume'].rolling(20).mean()
     df['vol_ma'] = df['volume'].rolling(10).mean()
 
     # Ambil profil aset dan regime pasar
@@ -1022,6 +1023,7 @@ def run_forward_test():
             close = current_row['close']
             volume = current_row['volume']
             vol_ma = current_row['vol_ma']
+            volume_ma20 = current_row['volume_ma20']
             adx = current_row['adx']
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
             atr_pct = (atr / close) * 100 if close > 0 else 0
@@ -1053,16 +1055,15 @@ def run_forward_test():
             broke_long_prev = df['high'].iloc[i-1] >= long_level
             broke_short_prev = df['low'].iloc[i-1] <= short_level
 
-            # retest_long = (broke_long_prev and
-            #               df['low'].iloc[i] <= long_level * 1.003 and
-            #               close > long_level * 0.997)
-            # retest_short = (broke_short_prev and
-            #                df['high'].iloc[i] >= short_level * 0.997 and
-            #                close < short_level * 1.003)
+            retest_long = (broke_long_prev and
+                          df['low'].iloc[i] <= long_level * 1.003 and
+                          close > long_level * 0.997)
+            retest_short = (broke_short_prev and
+                           df['high'].iloc[i] >= short_level * 0.997 and
+                           close < short_level * 1.003)
 
             ENTRY_ZONE_BUFFER = 0.015 
                 
-
             if TIMEFRAME == '15m':
                 # Zona entry lebih longgar
                 long_zone_start = long_level - (atr * ZONE_START_FACTOR * level_multiplier)
@@ -1104,22 +1105,24 @@ def run_forward_test():
             # print(f"   {'✅ BULLISH' if mtf_direction > 0.3 else '✅ BEARISH' if mtf_direction < -0.3 else '🟡 NEUTRAL'} di timeframe lebih tinggi")
 
             rsi = current_row['rsi']
-            rsi_long_ok = rsi < 70  # RSI < 70 untuk long
-            rsi_short_ok = rsi > 30 # RSI > 30 untuk short
+            volume_ratio = volume / volume_ma20
+
+            rsi_long_ok = (rsi < 70) and (rsi > 30) and (volume_ratio > 1.5)  # RSI < 70 untuk long
+            rsi_short_ok = (rsi > 30) and (rsi < 70) and (volume_ratio > 1.5) # RSI > 30 untuk short
 
             if market_regime in ['STRONG_BULL', 'BULL']:
                 allow_short = False
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
                 allow_long = False
 
-            high_quality_long = (broke_long_prev and price_in_long_zone and 
+            high_quality_long = (retest_long and 
                                 vol_confirmed and atr_confirmed and 
                                 ema_fast > ema_slow and adx > adx_threshold and 
                                 strong_momentum and allow_long and
                                 mtf_score >= MTF_MIN_SCORE and mtf_direction >= MTF_DIRECTION_THRESHOLD
                                 and rsi_long_ok)
 
-            high_quality_short = (broke_short_prev and price_in_short_zone and 
+            high_quality_short = (retest_short and 
                                 vol_confirmed and atr_confirmed and 
                                 ema_fast < ema_slow and adx > adx_threshold and 
                                 strong_momentum and allow_short and 
