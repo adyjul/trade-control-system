@@ -21,6 +21,8 @@ TIMEFRAME = '5m'
 BARS_TO_FETCH = 1000
 MIN_SCAN_SCORE = 0.5
 VOLATILITY_WINDOW = 50
+SLIPPAGE_RATE = 0.0005  # 0.05%
+MAX_SLIPPAGE_RATE = 0.001  # 0.1%
 
 # --- CONFIG FORWARD TEST ---
 MODE = 'simulated'  # 'live' atau 'simulated'
@@ -525,27 +527,111 @@ def get_multi_timeframe_confirmation(exchange, symbol):
     
     return avg_score, direction_consensus
 
-def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balance, leverage):
+def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balance, leverage,exchange):
     """Simulasikan eksekusi order market"""
     print(f"🎯 SIMULATED {side.upper()} Order @ {price:.4f} | Qty: {qty:.4f} | SL: {sl_price:.4f} | TP: {tp_price:.4f}")
     position_value = qty * price
     max_loss = abs((price - sl_price) * qty) * leverage
     max_profit = abs((tp_price - price) * qty) * leverage
 
+    realistic_price = get_realistic_execution_price(exchange, symbol, side, qty)
+    slippage_pct = abs(realistic_price - price) / price
+
+    # margin_required = position_value / leverage
+
+    print(f"🎯 SIMULATED {side.upper()} Order @ {realistic_price:.4f} (Request: {price:.4f}) | Qty: {qty:.4f} | SL: {sl_price:.4f} | TP: {tp_price:.4f}")
+    print(f"   📊 Slippage: {slippage_pct:.4%} | Arah: {'LONG' if side == 'LONG' else 'SHORT'}")
     print(f"   💰 Simulated Position Value: {position_value:.4f} USDT | Max Loss: {max_loss:.4f} | Max Profit: {max_profit:.4f}")
+
+
     return {
         'status': 'simulated',
         'symbol': symbol,
         'side': side,
         'qty': qty,
-        'entry_price': price,
+        'entry_price': realistic_price,
         'sl_price': sl_price,
         'tp_price': tp_price,
-        # 'balance': balance - max_loss
         'balance': balance,  # ✅ Balance TIDAK berkurang di awal
         'max_risk': max_loss,  # Simpan sebagai info saja
-        'used_margin': position_value  # Untuk perhitungan leverage
+        'used_margin': position_value,  # Untuk perhitungan leverage
+        'slippage_pct': slippage_pct
     }
+
+
+def get_realistic_execution_price(exchange, symbol, side, qty):
+    """Simulasi eksekusi harga realistis dengan slippage"""
+    try:
+        ob = exchange.fetch_order_book(symbol, limit=ORDER_BOOK_DEPTH)
+        if 'asks' not in ob or 'bids' not in ob:
+            print(f"⚠️ Format order book tidak valid untuk {symbol}")
+            return price * 1.001 if side == 'LONG' else price * 0.999
+        
+        if side == 'LONG':
+            asks = ob['asks']
+            filled_price = 0
+            remaining_qty = qty
+            
+            # Simulasi isi dari order book
+            for price, volume in asks:
+                take_qty = min(remaining_qty, volume)
+                filled_price += price * take_qty
+                remaining_qty -= take_qty
+                if remaining_qty <= 0:
+                    break
+            
+            if remaining_qty > 0:  # Tidak semua terisi
+                filled_price += (price * 1.001) * remaining_qty  # Slippage tambahan
+            
+            avg_price = filled_price / qty
+            return avg_price * 1.0005  # Tambahan slippage
+        
+        else:  # SHORT
+            bids = ob['bids']
+            filled_price = 0
+            remaining_qty = qty
+            
+            for price, volume in bids:
+                take_qty = min(remaining_qty, volume)
+                filled_price += price * take_qty
+                remaining_qty -= take_qty
+                if remaining_qty <= 0:
+                    break
+            
+            if remaining_qty > 0:
+                filled_price += (price * 1.001) * remaining_qty
+            
+            avg_price = filled_price / qty
+            return avg_price * 1.0005  # Tambahan slippage
+    
+    except Exception as e:
+        print(f"⚠️ Error simulating execution: {e}")
+        # Fallback ke harga ticker dengan slippage
+        ticker = exchange.fetch_ticker(symbol)
+        if side == 'LONG':
+            return ticker['ask'] * 1.001
+        else:
+            return ticker['bid'] * 0.999
+
+def calculate_market_impact(exchange, symbol, qty, position_value):
+    """Estimasi market impact berdasarkan volume harian"""
+    try:
+        ticker = exchange.fetch_ticker(symbol)
+        daily_volume = ticker['quoteVolume']  # Volume dalam USDT
+        
+        if daily_volume == 0:
+            return 0.001  # Default 0.1%
+        
+        # Formula sederhana: impact = (position_value / daily_volume) * impact_factor
+        impact_factor = 0.3  # Faktor empiris untuk spot market
+        impact_pct = (position_value / daily_volume) * impact_factor
+        return max(0.0005, min(0.01, impact_pct))  # Batasi 0.05% - 1%
+    
+    except Exception as e:
+        print(f"⚠️ Error calculating market impact for {symbol}: {e}")
+        return 0.001  # Default 0.1%
+
+        
 
 def execute_order_live(exchange, symbol, side, qty, price, sl_price, tp_price):
     """Eksekusi order live ke exchange (gunakan leverage jika perlu)"""
@@ -826,20 +912,38 @@ def run_forward_test():
                         pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
                     else:  # SHORT
                         pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
+
+                    position_value = active_position['entry_price'] * active_position['qty']
+                    fee_cost = position_value * 0.001 * 2  # 0.1% per trade × 2 (entry+exit)
+                    slippage_cost = position_value * SLIPPAGE_RATE * LEVERAGE  # 0.05% slippage
+                    market_impact = calculate_market_impact(scanner.exchange, active_position['symbol'], active_position['qty'], position_value)
+                    impact_cost = position_value * market_impact
                     
-                    # Update balance
-                    balance = balance + pnl
+                    net_pnl = pnl - fee_cost - slippage_cost - impact_cost
+                    balance = balance + net_pnl
+                    
+                    print(f"💰 Gross PnL: {pnl:+.4f} | Biaya: Fee {fee_cost:.4f} + Slippage {slippage_cost:.4f} + Impact {impact_cost:.4f} | Net: {net_pnl:+.4f}")
+        
                     
                     # Log trade exit
                     trade_result = {
                         'exit_time': datetime.now(),
                         'exit_reason': exit_reason,
                         'exit_price': current_price,
-                        'pnl': pnl,
+                        'gross_pnl': pnl,
+                        'fee_cost': fee_cost,
+                        'slippage_cost': slippage_cost,
+                        'impact_cost': impact_cost,
+                        # 'pnl': pnl,
+                        'net_pnl': net_pnl,
                         'balance_after_exit': balance,
                         'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60  # dalam menit
                     }
-                    trade_log.append({**active_position, **trade_result})
+                    
+                    trade_log.append({
+                        **active_position, 
+                        **trade_result
+                    })
                     
                     print(f"📋 Trade Log: {active_position['side']} {active_position['symbol']} exit on {exit_reason}")
                     print(f"   💰 PnL: {pnl:+.4f} USDT | Balance: {balance:.4f} USDT | Hold Time: {trade_result['hold_time']:.1f} menit")
@@ -970,7 +1074,7 @@ def run_forward_test():
                     print(f"   📈 Market Regime: {market_regime} | Trend Regime: {regime}")
                     
                     if MODE == 'simulated':
-                        active_position = execute_order_simulated(current_symbol, 'LONG', qty, long_level, sl, tp, balance, LEVERAGE)
+                        active_position = execute_order_simulated(current_symbol, 'LONG', qty, long_level, sl, tp, balance, LEVERAGE, scanner.exchange)
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
@@ -988,8 +1092,10 @@ def run_forward_test():
             elif high_quality_short:
                 sl = short_level + atr * SL_ATR_MULT
                 tp = short_level - atr * TP_ATR_MULT
-                if sl <= short_level or tp >= short_level or sl <= 0:
+                if sl <= short_level or tp >= short_level or sl <= 0 or tp <= 0:
                     continue
+                # if sl <= short_level or tp >= short_level or sl <= 0:
+                #     continue
 
                 qty = calculate_professional_position_size(balance, short_level, sl, risk_pct, LEVERAGE)
                 if qty > 0:
@@ -998,7 +1104,7 @@ def run_forward_test():
                     print(f"   📉 Market Regime: {market_regime} | Trend Regime: {regime}")
                     
                     if MODE == 'simulated':
-                        active_position = execute_order_simulated(current_symbol, 'SHORT', qty, short_level, sl, tp, balance, LEVERAGE)
+                        active_position = execute_order_simulated(current_symbol, 'SHORT', qty, short_level, sl, tp, balance, LEVERAGE,scanner.exchange)
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
@@ -1021,10 +1127,32 @@ def run_forward_test():
                         pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
                     else:
                         pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
-                    balance = balance + pnl
-                    trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': exit_reason, 'exit_price': current_price, 'pnl': pnl, 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
+                    
+                    position_value = active_position['entry_price'] * active_position['qty']
+                    fee_cost = position_value * 0.001 * 2  # 0.1% per trade × 2 (entry+exit)
+                    slippage_cost = position_value * 0.0005 * LEVERAGE  # 0.05% slippage
+                    market_impact = calculate_market_impact(scanner.exchange, current_symbol, active_position['qty'], position_value)
+                    impact_cost = position_value * market_impact
+                    net_pnl = pnl - fee_cost - slippage_cost - impact_cost
+                    balance = balance + net_pnl
+
+                    print(f"💰 Gross PnL: {pnl:+.4f} | Biaya: Fee {fee_cost:.4f} + Slippage {slippage_cost:.4f} + Impact {impact_cost:.4f} | Net: {net_pnl:+.4f}")
+
+                    trade_log.append(
+                        {
+                            **active_position, 
+                            'exit_time': datetime.now(), 
+                            'exit_reason': exit_reason, 
+                            'exit_price': current_price, 
+                            'net_pnl': net_pnl, 
+                            'balance_after_exit': balance, 
+                            'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60
+                        }
+                    )
+
                 else:
-                    trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': 'MANUAL_STOP', 'exit_price': current_price, 'pnl': 'N/A', 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
+                    trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': 'MANUAL_STOP', 'exit_price': current_price, 'net_pnl': 'N/A', 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
+
         if trade_log:
 
             # log_df = pd.DataFrame(trade_log)
@@ -1038,7 +1166,11 @@ def run_forward_test():
             datetime_columns = ['entry_time', 'exit_time']
             for col in datetime_columns:
                 if col in log_df.columns:
-                    log_df[col] = log_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    if pd.api.types.is_datetime64_any_dtype(log_df[col]):
+                        log_df[col] = log_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    elif log_df[col].dtype == 'object':  # Sudah string
+                        # Opsional: validasi format string
+                        pass
             
             # 📁 BUAT NAMA FILE YANG AMAN
             filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -1052,10 +1184,25 @@ def run_forward_test():
             
             # Tampilkan ringkasan performa
             if not log_df.empty:
-                completed_trades = log_df[log_df['exit_reason'].isin(['SL_HIT', 'TP_HIT'])]
+                # completed_trades = log_df[log_df['exit_reason'].isin(['SL_HIT', 'TP_HIT'])]
+                completed_trades = log_df[
+                    (log_df['exit_reason'].isin(['SL_HIT', 'TP_HIT'])) & 
+                    (log_df['net_pnl'] != 'N/A') &
+                    (pd.to_numeric(log_df['net_pnl'], errors='coerce').notnull())
+                ]
+                
+                if len(completed_trades) > 0:
+                    completed_trades['net_pnl'] = pd.to_numeric(completed_trades['net_pnl'])
+                    win_rate = len(completed_trades[completed_trades['net_pnl'] > 0]) / len(completed_trades)
+                    total_pnl = completed_trades['net_pnl'].sum()     
+                else:
+                    print("⚠️ Tidak ada trade yang selesai dengan SL/TP hit")
+
+                
+
                 if not completed_trades.empty:
-                    win_rate = len(completed_trades[completed_trades['pnl'] > 0]) / len(completed_trades)
-                    total_pnl = completed_trades['pnl'].sum()
+                    win_rate = len(completed_trades[completed_trades['net_pnl'] > 0]) / len(completed_trades)
+                    total_pnl = completed_trades['net_pnl'].sum()
                     avg_hold_time = completed_trades['hold_time'].mean()
                     
                     print("\n" + "="*50)
