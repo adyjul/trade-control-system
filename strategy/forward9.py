@@ -1033,6 +1033,10 @@ def run_forward_test():
             # print(f"🎯 MTF Result: Score={mtf_score:.2f} | Direction={mtf_direction:.2f}")
             # print(f"   {'✅ BULLISH' if mtf_direction > 0.3 else '✅ BEARISH' if mtf_direction < -0.3 else '🟡 NEUTRAL'} di timeframe lebih tinggi")
 
+            rsi = current_row['rsi']
+            rsi_long_ok = rsi < 70  # RSI < 70 untuk long
+            rsi_short_ok = rsi > 30 # RSI > 30 untuk short
+
             if market_regime in ['STRONG_BULL', 'BULL']:
                 allow_short = False
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
