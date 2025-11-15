@@ -12,17 +12,65 @@ import openpyxl
 
 # --- CONFIG UTAMA (Gunakan konfig dari backtest sebagai base) ---
 INITIAL_BALANCE = 20.0
-BASE_RISK_PCT = 0.01
 LEVERAGE = 10
 # TP_ATR_MULT = 3.0
-TP_ATR_MULT = 4.5 
-SL_ATR_MULT = 2.5
-TIMEFRAME = '5m'
-BARS_TO_FETCH = 1000
-MIN_SCAN_SCORE = 0.5
-VOLATILITY_WINDOW = 50
-SLIPPAGE_RATE = 0.0005  # 0.05%
-MAX_SLIPPAGE_RATE = 0.001  # 0.1%
+TIMEFRAME = '15m'
+
+if TIMEFRAME == '15m':
+    ATR_WINDOW = 14
+    VOLATILITY_ADJUSTMENT = 1.8  # Faktor peningkatan volatilitas
+    
+    # Entry & Exit
+    TP_ATR_MULT = 5.5
+    SL_ATR_MULT = 3.0
+    ZONE_START_FACTOR = 1.0
+    ZONE_END_FACTOR = 1.8
+    ENTRY_ZONE_BUFFER = 0.025  # 2.5%
+    ZONE_BUFFER_MULTIPLIER = 1.5
+    
+    # Risk Management
+    BASE_RISK_PCT = 0.0075
+    MAX_RISK_PER_TRADE = 0.015
+    MAX_POSITION_VALUE = 0.35
+    MIN_POSITION_VALUE = 1.5
+    
+    # MTF Confirmation
+    MTF_MIN_SCORE = 0.3
+    MTF_DIRECTION_THRESHOLD = 0.1
+    
+    # Interval Timing
+    DATA_UPDATE_INTERVAL = 900  # 15 menit
+    RESCAN_INTERVAL_MINUTES = 60
+    MIN_TIME_BETWEEN_SCANS = 30
+    
+    # Volume & Momentum
+    VOLUME_WINDOW = 10  # Lebih panjang untuk smoothing
+    MIN_MOMENTUM_STRENGTH = 0.20  # Lebih longgar
+
+    BARS_TO_FETCH = 300
+    VOLATILITY_WINDOW = 75
+    MIN_SCAN_SCORE = 0.45
+    SLIPPAGE_RATE = 0.0007
+    MAX_SLIPPAGE_RATE = 0.0015 
+
+else:  # 5m
+    TP_ATR_MULT = 4.5
+    SL_ATR_MULT = 2.5
+    ATR_WINDOW = 14
+    BASE_RISK_PCT = 0.01
+    MAX_RISK_PER_TRADE = 0.02
+    MAX_POSITION_VALUE = 0.50
+    MIN_POSITION_VALUE = 1.0
+    ZONE_START_FACTOR = 0.8
+    ZONE_END_FACTOR = 1.2
+    ZONE_BUFFER_MULTIPLIER = 1.5
+    RESCAN_INTERVAL_MINUTES = 30 
+    BARS_TO_FETCH = 500
+    VOLATILITY_WINDOW = 50
+    MIN_SCAN_SCORE = 0.5
+    SLIPPAGE_RATE = 0.0005  # 0.05%
+    MAX_SLIPPAGE_RATE = 0.001  # 0.1%
+
 
 # --- CONFIG FORWARD TEST ---
 MODE = 'simulated'  # 'live' atau 'simulated'
@@ -30,7 +78,7 @@ API_KEY = os.getenv('BINANCE_API_KEY', '')
 API_SECRET = os.getenv('BINANCE_API_SECRET', '')
 ORDER_TYPE = 'market'
 ORDER_BOOK_DEPTH = 20
-RESCAN_INTERVAL_MINUTES = 30  # Interval scanning ulang (menit)
+ # Interval scanning ulang (menit)
 MIN_TIME_BETWEEN_SCANS = 15   # Minimal waktu antar scan (menit) untuk mencegah thrashing
 
 # --- MARKET SCANNER CLASS (diambil dari backtest) ---
@@ -149,12 +197,20 @@ class MarketScanner:
         return profile
 
     def classify_volatility(self, avg_atr_pct):
-        if avg_atr_pct < 0.15: return 'ULTRA_LOW'
-        elif avg_atr_pct < 0.25: return 'LOW'
-        elif avg_atr_pct < 0.40: return 'MODERATE'
-        elif avg_atr_pct < 0.60: return 'HIGH'
-        elif avg_atr_pct < 0.85: return 'VERY_HIGH'
-        else: return 'EXTREME'
+        if TIMEFRAME == '15m':
+            if avg_atr_pct < 0.25: return 'ULTRA_LOW'
+            elif avg_atr_pct < 0.40: return 'LOW'
+            elif avg_atr_pct < 0.70: return 'MODERATE'
+            elif avg_atr_pct < 1.10: return 'HIGH'
+            elif avg_atr_pct < 1.50: return 'VERY_HIGH'
+            else: return 'EXTREME'
+        else:  # 5m
+            if avg_atr_pct < 0.15: return 'ULTRA_LOW'
+            elif avg_atr_pct < 0.25: return 'LOW'
+            elif avg_atr_pct < 0.40: return 'MODERATE'
+            elif avg_atr_pct < 0.60: return 'HIGH'
+            elif avg_atr_pct < 0.85: return 'VERY_HIGH'
+            else: return 'EXTREME'
 
     def classify_volume(self, volume_consistency, avg_volume):
         if volume_consistency < 0.7: return 'VOLATILE'
@@ -293,7 +349,7 @@ class MarketScanner:
             try:
                 print(f"📊 Menganalisis {symbol}...")
                 self._rate_limit()
-                ohlcv = self.exchange.fetch_ohlcv(symbol, TIMEFRAME, limit=25)
+                ohlcv = self.exchange.fetch_ohlcv(symbol, TIMEFRAME, limit=15)
                 if len(ohlcv) < 15:
                     print(f"   ✗ {symbol}: Data tidak cukup ({len(ohlcv)} candle)")
                     continue
@@ -448,8 +504,8 @@ def get_current_price(exchange, symbol):
 def get_multi_timeframe_confirmation(exchange, symbol):
     """Dapatkan konfirmasi tren dari multiple timeframe"""
     higher_timeframes = {
-        '15m': '15m',
-        '1h': '1h'
+        '1h': '1h',
+        '4h' : '4h',
     }
     
     trend_scores = []
@@ -708,13 +764,12 @@ def calculate_professional_position_size(balance, entry_price, sl_price, risk_pc
     risk_per_unit = abs(entry_price - sl_price) * leverage
     if risk_per_unit <= 0:
         return 0
-    MAX_RISK_PER_TRADE = 0.02
+
     risk_amount = balance * min(risk_pct, MAX_RISK_PER_TRADE)
     position_size = risk_amount / risk_per_unit
     # MAX_POSITION_VALUE = 0.30
     # MIN_POSITION_VALUE = 0.5
-    MAX_POSITION_VALUE = 0.50
-    MIN_POSITION_VALUE = 1.0
+    
     position_value = position_size * entry_price
     max_position_value = balance * MAX_POSITION_VALUE
     if position_value > max_position_value:
@@ -860,7 +915,7 @@ def run_forward_test():
                 print("="*50 + "\n")
 
             # Ambil data baru jika cukup waktu
-            if (current_time - last_update_time).seconds >= 300: # 5 menit
+            if (current_time - last_update_time).seconds >= DATA_UPDATE_INTERVAL: # dinamis
                 try:
                     new_ohlcv = scanner.exchange.fetch_ohlcv(current_symbol, TIMEFRAME, limit=2)
                     new_df = pd.DataFrame(new_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -1006,12 +1061,21 @@ def run_forward_test():
             #                close < short_level * 1.003)
 
             ENTRY_ZONE_BUFFER = 0.015 
+                
 
-            long_zone_start = long_level - (atr * 0.8 * level_multiplier)
-            long_zone_end = long_level + (atr * 1.2 * level_multiplier)
-
-            short_zone_start = short_level - (atr * 1.2 * level_multiplier)
-            short_zone_end = short_level + (atr * 0.8 * level_multiplier)
+            if TIMEFRAME == '15m':
+                # Zona entry lebih longgar
+                long_zone_start = long_level - (atr * ZONE_START_FACTOR * level_multiplier)
+                long_zone_end = long_level + (atr * ZONE_END_FACTOR * level_multiplier)
+                short_zone_start = short_level - (atr * ZONE_END_FACTOR * level_multiplier)
+                short_zone_end = short_level + (atr * ZONE_START_FACTOR * level_multiplier)
+            else:
+                # Konfigurasi default untuk 5m
+                long_zone_start = long_level - (atr * 0.8 * level_multiplier)
+                long_zone_end = long_level + (atr * 1.2 * level_multiplier)
+                short_zone_start = short_level - (atr * 1.2 * level_multiplier)
+                short_zone_end = short_level + (atr * 0.8 * level_multiplier)
+        
 
             price_in_long_zone = (df['low'].iloc[i] <= long_zone_end) and (close >= long_zone_start)
             price_in_short_zone = (df['high'].iloc[i] >= short_zone_start) and (close <= short_zone_end)
@@ -1019,7 +1083,7 @@ def run_forward_test():
             plus_di = current_row['plus_di']
             minus_di = current_row['minus_di']
             momentum_strength = abs(plus_di - minus_di) / max(plus_di, minus_di, 1)
-            strong_momentum = momentum_strength > 0.25  # Minimal 25% perbedaan DI
+            strong_momentum = momentum_strength > (0.20 if TIMEFRAME == '15m' else 0.25)
 
             allow_long = True
             allow_short = True
@@ -1027,8 +1091,14 @@ def run_forward_test():
             # print(f"\n🔍 [{current_time.strftime('%H:%M:%S')}] Multi-Timeframe Analysis untuk {current_symbol}...")
             mtf_score, mtf_direction = get_multi_timeframe_confirmation(scanner.exchange, current_symbol)
 
-            MTF_MIN_SCORE = 0.4    # Minimal score untuk konfirmasi
-            MTF_DIRECTION_THRESHOLD = 0.2  # Minimal consensus direction
+            if TIMEFRAME == '15m':
+                MTF_MIN_SCORE = 0.3    # Lebih longgar (30%)
+                MTF_DIRECTION_THRESHOLD = 0.1  # Minimal consensus
+                MTF_WEIGHT = 0.8       # Bobot lebih tinggi karena lebih reliable
+            else:  # 5m
+                MTF_MIN_SCORE = 0.4
+                MTF_DIRECTION_THRESHOLD = 0.2
+                MTF_WEIGHT = 0.6
 
             # print(f"🎯 MTF Result: Score={mtf_score:.2f} | Direction={mtf_direction:.2f}")
             # print(f"   {'✅ BULLISH' if mtf_direction > 0.3 else '✅ BEARISH' if mtf_direction < -0.3 else '🟡 NEUTRAL'} di timeframe lebih tinggi")
@@ -1046,13 +1116,15 @@ def run_forward_test():
                                 vol_confirmed and atr_confirmed and 
                                 ema_fast > ema_slow and adx > adx_threshold and 
                                 strong_momentum and allow_long and
-                                mtf_score >= MTF_MIN_SCORE and mtf_direction >= MTF_DIRECTION_THRESHOLD)
+                                mtf_score >= MTF_MIN_SCORE and mtf_direction >= MTF_DIRECTION_THRESHOLD
+                                and rsi_long_ok)
 
             high_quality_short = (broke_short_prev and price_in_short_zone and 
                                 vol_confirmed and atr_confirmed and 
                                 ema_fast < ema_slow and adx > adx_threshold and 
                                 strong_momentum and allow_short and 
-                                mtf_score >= MTF_MIN_SCORE and mtf_direction <= -MTF_DIRECTION_THRESHOLD)
+                                mtf_score >= MTF_MIN_SCORE and mtf_direction <= -MTF_DIRECTION_THRESHOLD
+                                and rsi_short_ok)
             
             # if price_in_long_zone or price_in_short_zone:
             #     print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
