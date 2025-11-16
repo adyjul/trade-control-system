@@ -823,8 +823,8 @@ def run_forward_test():
     df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
     df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
     df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-    df['volume_ma20'] = df['volume'].rolling(20).mean()
     df['vol_ma'] = df['volume'].rolling(10).mean()
+    df['volume_ma20'] = df['volume'].rolling(20).mean()
 
     # Ambil profil aset dan regime pasar
     asset_profile = scanner.get_asset_profile(current_symbol, df)
@@ -897,6 +897,7 @@ def run_forward_test():
                                     df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
                                     df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
                                     df['vol_ma'] = df['volume'].rolling(10).mean()
+                                    df['volume_ma20'] = df['volume'].rolling(20).mean()
                                     
                                     # Update profil aset dan regime
                                     asset_profile = scanner.get_asset_profile(current_symbol, df)
@@ -942,6 +943,7 @@ def run_forward_test():
                         df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
                         df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
                         df['vol_ma'] = df['volume'].rolling(10).mean()
+                        df['volume_ma20'] = df['volume'].rolling(20).mean()
 
                         last_data_time = latest_candle_time
                         last_update_time = current_time
@@ -1023,7 +1025,6 @@ def run_forward_test():
             close = current_row['close']
             volume = current_row['volume']
             vol_ma = current_row['vol_ma']
-            volume_ma20 = current_row['volume_ma20']
             adx = current_row['adx']
             vol_ratio = volume / vol_ma if vol_ma > 0 else 0
             atr_pct = (atr / close) * 100 if close > 0 else 0
@@ -1105,7 +1106,7 @@ def run_forward_test():
             # print(f"   {'✅ BULLISH' if mtf_direction > 0.3 else '✅ BEARISH' if mtf_direction < -0.3 else '🟡 NEUTRAL'} di timeframe lebih tinggi")
 
             rsi = current_row['rsi']
-            volume_ratio = volume / volume_ma20
+            volume_ratio = volume / current_row['volume_ma20']
 
             rsi_long_ok = (rsi < 70) and (rsi > 30) and (volume_ratio > 1.5)  # RSI < 70 untuk long
             rsi_short_ok = (rsi > 30) and (rsi < 70) and (volume_ratio > 1.5) # RSI > 30 untuk short
