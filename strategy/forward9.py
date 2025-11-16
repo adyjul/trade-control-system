@@ -52,6 +52,7 @@ if TIMEFRAME == '15m':
     MIN_SCAN_SCORE = 0.45
     SLIPPAGE_RATE = 0.0007
     MAX_SLIPPAGE_RATE = 0.0015 
+    ORDER_BOOK_DEPTH = 25
 
 else:  # 5m
     TP_ATR_MULT = 4.5
@@ -70,6 +71,9 @@ else:  # 5m
     MIN_SCAN_SCORE = 0.5
     SLIPPAGE_RATE = 0.0005  # 0.05%
     MAX_SLIPPAGE_RATE = 0.001  # 0.1%
+    MIN_TIME_BETWEEN_SCANS = 15
+    ORDER_BOOK_DEPTH = 20 
+
 
 
 # --- CONFIG FORWARD TEST ---
@@ -77,9 +81,8 @@ MODE = 'simulated'  # 'live' atau 'simulated'
 API_KEY = os.getenv('BINANCE_API_KEY', '')
 API_SECRET = os.getenv('BINANCE_API_SECRET', '')
 ORDER_TYPE = 'market'
-ORDER_BOOK_DEPTH = 20
- # Interval scanning ulang (menit)
-MIN_TIME_BETWEEN_SCANS = 15   # Minimal waktu antar scan (menit) untuk mencegah thrashing
+ORDER_BOOK_DEPTH = 20 # Interval scanning ulang (menit)
+# MIN_TIME_BETWEEN_SCANS = 15   # Minimal waktu antar scan (menit) untuk mencegah thrashing
 
 # --- MARKET SCANNER CLASS (diambil dari backtest) ---
 class MarketScanner:
