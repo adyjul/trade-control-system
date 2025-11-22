@@ -1311,8 +1311,8 @@ def run_forward_test():
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
-                        ['market_regime'] = market_regime
-
+                        active_position['market_regime'] = market_regime
+                        
                         log_entry_to_excel(active_position)
 
                         send_telegram_message(f"📊 <b>ENTRY</b>\n"
@@ -1323,7 +1323,7 @@ def run_forward_test():
                           f"SL: {active_position['sl_price']:.4f}\n"
                           f"TP: {active_position['tp_price']:.4f}\n"
                           f"Time: {active_position['entry_time'].strftime('%H:%M:%S')}")
-                        
+
                     elif MODE == 'live':
                         active_position = execute_order_live(scanner.exchange, current_symbol, 'LONG', qty, long_level, sl, tp)
                         active_position['entry_time'] = datetime.now()
