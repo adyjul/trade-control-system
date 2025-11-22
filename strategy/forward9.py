@@ -870,7 +870,7 @@ def run_forward_test():
                 test_atr = df['atr'].iloc[-1]
                 sl = test_price - test_atr * SL_ATR_MULT
                 tp = test_price + test_atr * TP_ATR_MULT
-                qty = calculate_professional_position_size(balance, test_price, sl, BASE_RISK_PCT, LEVERAGE)
+                qty = 1
                 
                 if qty > 0:
                     active_position = execute_order_simulated(
