@@ -9,12 +9,20 @@ from functools import lru_cache
 import json
 import os
 import openpyxl
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- CONFIG UTAMA (Gunakan konfig dari backtest sebagai base) ---
 INITIAL_BALANCE = 20.0
 LEVERAGE = 10
 # TP_ATR_MULT = 3.0
 TIMEFRAME = '15m'
+
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '') 
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')  
+ENABLE_TELEGRAM = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 
 if TIMEFRAME == '15m':
     ATR_WINDOW = 14
@@ -39,7 +47,7 @@ if TIMEFRAME == '15m':
     MTF_DIRECTION_THRESHOLD = 0.1
     
     # Interval Timing
-    DATA_UPDATE_INTERVAL = 900  # 15 menit
+    DATA_UPDATE_INTERVAL = 900 
     RESCAN_INTERVAL_MINUTES = 60
     MIN_TIME_BETWEEN_SCANS = 30
     
@@ -92,12 +100,12 @@ class MarketScanner:
                 'apiKey': API_KEY,
                 'secret': API_SECRET,
                 'enableRateLimit': True,
-                'options': {'defaultType': 'spot'}
+                'options': {'defaultType': 'swap'}
             })
         else:
             self.exchange = ccxt.binance({
                 'enableRateLimit': True,
-                'options': {'defaultType': 'spot'}
+                'options': {'defaultType': 'swap'}
             })
         
         self.min_volume_usd = 300000
@@ -282,6 +290,7 @@ class MarketScanner:
         print(f"   Risk Percentage: {thresholds['risk_pct']:.3f}%")
         
         return thresholds
+    
 
     def get_trending_symbols(self):
         print("🔍 MENGAMBIL DAFTAR ASET TRENDING DARI BINANCE...")
@@ -603,7 +612,7 @@ def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balanc
     print(f"   💰 Simulated Position Value: {position_value:.4f} USDT | Max Loss: {max_loss:.4f} | Max Profit: {max_profit:.4f}")
 
 
-    return {
+    position_info = {
         'status': 'simulated',
         'symbol': symbol,
         'side': side,
@@ -616,6 +625,18 @@ def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balanc
         'used_margin': position_value,  # Untuk perhitungan leverage
         'slippage_pct': slippage_pct
     }
+
+    log_entry_to_excel(position_info)
+
+    send_telegram_message(f"📊 <b>ENTRY</b>\n"
+                          f"Coin: {symbol}\n"
+                          f"Arah: {side}\n"
+                          f"Harga: {realistic_price:.4f}\n"
+                          f"Qty: {qty:.4f}\n"
+                          f"SL: {sl_price:.4f}\n"
+                          f"TP: {tp_price:.4f}\n"
+                          f"Time: {position_info['entry_time'].strftime('%H:%M:%S')}")
+
 
 
 def get_realistic_execution_price(exchange, symbol, side, qty):
@@ -800,6 +821,11 @@ def run_forward_test():
     last_scan_time = datetime.now()
     last_switch_time = datetime.now()
     last_exit_time = None
+    last_oi = None
+    last_oi_update = datetime.now()
+    OI_MIN_CHANGE_THRESHOLD = 2.0
+    oi_confirmed_long = False
+    oi_confirmed_short = False
 
     print("🔄 MENCARI ASET TERBAIK UNTUK TRADING AWAL...")
     current_symbol = scanner.get_best_asset_for_trading()
@@ -845,6 +871,76 @@ def run_forward_test():
             current_time = datetime.now()
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
 
+            if not hasattr(run_forward_test, 'test_done'):
+                print("🧪 MEMULAI FORCED TEST ENTRY/EXIT...")
+                # Simulasi entry LONG
+                test_symbol = current_symbol
+                test_price = df['close'].iloc[-1]
+                test_atr = df['atr'].iloc[-1]
+                sl = test_price - test_atr * SL_ATR_MULT
+                tp = test_price + test_atr * TP_ATR_MULT
+                qty = calculate_professional_position_size(balance, test_price, sl, BASE_RISK_PCT, LEVERAGE)
+                
+                if qty > 0:
+                    active_position = execute_order_simulated(
+                        test_symbol, 'LONG', qty, test_price, sl, tp, balance, LEVERAGE, scanner.exchange
+                    )
+                    active_position['entry_time'] = datetime.now()
+                    active_position['regime'] = 'TEST'
+                    active_position['market_regime'] = 'TEST'
+                    balance = active_position['balance']
+                    print("✅ FORCED ENTRY LONG DIBUAT UNTUK TESTING")
+                else:
+                    print("❌ Gagal buat posisi test (qty = 0)")
+                
+                # Tandai agar tidak diulang
+                run_forward_test.test_done = True
+                time.sleep(8)  # Tunggu 8 detik sebelum exit
+
+                # Simulasi exit (TP HIT)
+                if active_position:
+                    current_price = tp  # Paksakan harga ke TP
+                    exit_reason = 'TP_HIT'
+                    pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
+                    position_value = active_position['entry_price'] * active_position['qty']
+                    fee_cost = position_value * 0.001 * 2
+                    slippage_cost = position_value * SLIPPAGE_RATE * LEVERAGE
+                    market_impact = calculate_market_impact(scanner.exchange, active_position['symbol'], active_position['qty'], position_value)
+                    impact_cost = position_value * market_impact
+                    net_pnl = pnl - fee_cost - slippage_cost - impact_cost
+                    balance += net_pnl
+
+                    print(f"💰 Gross PnL: {pnl:+.4f} | Net: {net_pnl:+.4f}")
+
+                    trade_result = {
+                        'exit_time': datetime.now(),
+                        'exit_reason': exit_reason,
+                        'exit_price': current_price,
+                        'gross_pnl': pnl,
+                        'fee_cost': fee_cost,
+                        'slippage_cost': slippage_cost,
+                        'impact_cost': impact_cost,
+                        'net_pnl': net_pnl,
+                        'balance_after_exit': balance,
+                        'hold_time': 0.13  # ~8 detik
+                    }
+                    trade_log.append({**active_position, **trade_result})
+
+                    # 🔔 Kirim notifikasi Telegram & simpan ke Excel
+                    log_exit_to_excel(trade_log)  # Pastikan fungsi ini ada
+                    send_telegram_message(
+                        f"🧪 <b>TEST EXIT</b>\n"
+                        f"Coin: {active_position['symbol']}\n"
+                        f"Arah: {active_position['side']}\n"
+                        f"Exit: {exit_reason}\n"
+                        f"PnL: {net_pnl:+.4f}\n"
+                        f"Waktu: {datetime.now().strftime('%H:%M:%S')}"
+                    )
+
+                    print("✅ FORCED EXIT DILAKUKAN — CEK TELEGRAM & FILE EXCEL!")
+                    active_position = None
+                continue  # Lewati sisa loop setelah test
+
             # --- LOGIKA SCANNING ULANG OTOMATIS ---
             should_rescan = False
             
@@ -858,6 +954,43 @@ def run_forward_test():
                 print(f"✅ [{current_time.strftime('%H:%M:%S')}] SCANNING ULANG SETELAH EXIT POSISI")
                 should_rescan = True
                 last_exit_time = None  # Reset agar tidak terus menerus scan
+
+            if (current_time - last_oi_update).total_seconds() >= 60:
+                # Ambil harga terakhir untuk deteksi arah
+                if len(df) >= 2:
+                    prev_close = df['close'].iloc[-2]
+                    current_close = df['close'].iloc[-1]
+                    price_change_pct = ((current_close - prev_close) / prev_close) * 100
+                else:
+                    price_change_pct = 0.0
+
+                # Ambil Open Interest saat ini
+                current_oi = get_open_interest(scanner.exchange, current_symbol)
+                # oi_confirmed_long = False
+                # oi_confirmed_short = False
+
+                if current_oi is not None and last_oi is not None and last_oi > 0:
+
+                    oi_change_pct = ((current_oi - last_oi) / last_oi) * 100
+
+                    if oi_change_pct >= OI_MIN_CHANGE_THRESHOLD:
+                        if price_change_pct > 0:
+                            oi_confirmed_long = True
+                            print(f"📈 OI ↑ {oi_change_pct:+.2f}% + Harga ↑ → Konfirmasi LONG")
+                        elif price_change_pct < 0:
+                            oi_confirmed_short = True
+                            print(f"📉 OI ↑ {oi_change_pct:+.2f}% + Harga ↓ → Konfirmasi SHORT")
+                        else:
+                            print(f"↔️ OI ↑ tapi harga flat → Abaikan")
+                    else:
+                        print(f"📊 OI stabil/perubahan kecil: {oi_change_pct:+.2f}%")
+                else:
+                    print("ℹ️ Tunggu data OI sebelumnya atau gagal ambil OI")
+                
+                if current_oi is not None:
+                    last_oi = current_oi
+                
+                last_oi_update = current_time
             
             # Kondisi 3: Tidak ada sinyal entry dalam waktu lama (opsional, bisa ditambahkan)
             # ...
@@ -883,13 +1016,13 @@ def run_forward_test():
                                 print(f"   Tunggu posisi selesai atau tutup manual terlebih dahulu")
                             else:
                                 # Ganti ke aset baru
-                                current_symbol = new_symbol
-                                last_switch_time = current_time
-                                
-                                # Reset data untuk aset baru
-                                print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {current_symbol}...")
-                                df = fetch_ohlcv_data(current_symbol, TIMEFRAME, BARS_TO_FETCH)
-                                if df is not None and len(df) >= BARS_TO_FETCH * 0.7:
+                                print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {new_symbol}...")
+                                new_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, BARS_TO_FETCH)
+                                if new_df is not None and len(new_df) >= BARS_TO_FETCH * 0.7:
+                                    # Data baru berhasil diambil, ganti aset
+                                    current_symbol = new_symbol
+                                    last_switch_time = current_time
+                                    df = new_df # Ganti df dengan data baru
                                     # Hitung ulang indikator
                                     df['ema_fast'] = talib.EMA(df['close'], 20)
                                     df['ema_slow'] = talib.EMA(df['close'], 50)
@@ -901,16 +1034,23 @@ def run_forward_test():
                                     df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
                                     df['vol_ma'] = df['volume'].rolling(10).mean()
                                     df['volume_ma20'] = df['volume'].rolling(20).mean()
-                                    
                                     # Update profil aset dan regime
                                     asset_profile = scanner.get_asset_profile(current_symbol, df)
                                     market_regime = scanner.detect_market_regime(df)
                                     dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                    
                                     last_data_time = df['timestamp'].iloc[-1]
                                     print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
                                 else:
-                                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {current_symbol}, TETAP DI {current_symbol}")
+                                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {new_symbol}, TETAP DI {current_symbol}")
+                                    # Jika gagal mengambil data untuk aset baru, kita tetap di aset lama
+                                    # Tidak perlu mengganti current_symbol atau df
+                                    # Perbarui profil dan regime untuk aset lama (current_symbol) jika perlu
+                                    print(f"🔄 [{current_time.strftime('%H:%M:%S')}] Memperbarui profil dan regime untuk aset lama: {current_symbol}")
+                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
+                                    market_regime = scanner.detect_market_regime(df)
+                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
+                                    # last_data_time dan df tetap sama
+                                    # last_switch_time TIDAK diupdate karena kita tidak benar-benar pindah
                     else:
                         print(f"🔄 [{current_time.strftime('%H:%M:%S')}] ASET TERBAIK MASIH SAMA: {current_symbol}")
                 else:
@@ -957,6 +1097,13 @@ def run_forward_test():
                 except Exception as e:
                     print(f"⚠️ Error mengambil data baru untuk {current_symbol}: {e}")
                     continue
+
+
+            # Pastikan df tidak None sebelum melanjutkan ke logika utama
+            if df is None or len(df) < BARS_TO_FETCH * 0.7:
+                 print(f"❌ [{current_time.strftime('%Y-%m-%d %H:%M:%S')}] Data untuk {current_symbol} tidak valid (None atau tidak cukup), menunggu pembaruan atau scan ulang...")
+                 continue # Tunggu pembaruan data atau scan ulang
+
 
             # Ambil harga real-time untuk cek exit
             current_price = get_current_price(scanner.exchange, current_symbol)
@@ -1005,6 +1152,16 @@ def run_forward_test():
                         **active_position, 
                         **trade_result
                     })
+
+                    log_exit_to_excel(trade_log)
+
+                    send_telegram_message(f"❌ <b>EXIT</b>\n"
+                                          f"Coin: {active_position['symbol']}\n"
+                                          f"Arah: {active_position['side']}\n"
+                                          f"Exit Reason: {exit_reason}\n"
+                                          f"Harga: {current_price:.4f}\n"
+                                          f"PnL Net: {net_pnl:+.4f}\n"
+                                          f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     
                     print(f"📋 Trade Log: {active_position['side']} {active_position['symbol']} exit on {exit_reason}")
                     print(f"   💰 PnL: {pnl:+.4f} USDT | Balance: {balance:.4f} USDT | Hold Time: {trade_result['hold_time']:.1f} menit")
@@ -1059,12 +1216,12 @@ def run_forward_test():
             broke_long_prev = df['high'].iloc[i-1] >= long_level
             broke_short_prev = df['low'].iloc[i-1] <= short_level
 
-            retest_long = (broke_long_prev and
-                          df['low'].iloc[i] <= long_level * 1.003 and
-                          close > long_level * 0.997)
-            retest_short = (broke_short_prev and
-                           df['high'].iloc[i] >= short_level * 0.997 and
-                           close < short_level * 1.003)
+            # retest_long = (broke_long_prev and
+            #               df['low'].iloc[i] <= long_level * 1.003 and
+            #               close > long_level * 0.997)
+            # retest_short = (broke_short_prev and
+            #                df['high'].iloc[i] >= short_level * 0.997 and
+            #                close < short_level * 1.003)
 
             ENTRY_ZONE_BUFFER = 0.015 
                 
@@ -1119,15 +1276,17 @@ def run_forward_test():
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
                 allow_long = False
 
-            high_quality_long = (retest_long and 
+            high_quality_long = (broke_long_prev and price_in_long_zone and
                                 vol_confirmed and atr_confirmed and 
+                                oi_confirmed_long and
                                 ema_fast > ema_slow and adx > adx_threshold and 
                                 strong_momentum and allow_long and
                                 mtf_score >= MTF_MIN_SCORE and mtf_direction >= MTF_DIRECTION_THRESHOLD
                                 and rsi_long_ok)
 
-            high_quality_short = (retest_short and 
+            high_quality_short = (broke_short_prev and price_in_short_zone and 
                                 vol_confirmed and atr_confirmed and 
+                                oi_confirmed_short and
                                 ema_fast < ema_slow and adx > adx_threshold and 
                                 strong_momentum and allow_short and 
                                 mtf_score >= MTF_MIN_SCORE and mtf_direction <= -MTF_DIRECTION_THRESHOLD
@@ -1304,11 +1463,13 @@ def run_forward_test():
 # --- FUNGSI FETCH DATA ---
 def fetch_ohlcv_data(symbol, timeframe, limit):
     """Ambil data OHLCV dari exchange"""
-    exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})
+    exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
     try:
+        # Tambahkan sleep kecil untuk membantu menghindari rate limit
+        time.sleep(0.1) 
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         if len(ohlcv) < limit * 0.7:
-            print(f"⚠️ Data tidak lengkap: {len(ohlcv)}/{limit} candle")
+            print(f"⚠️ Data tidak lengkap: {len(ohlcv)}/{limit} candle untuk {symbol}")
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.sort_values('timestamp').reset_index(drop=True)
@@ -1316,6 +1477,112 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
     except Exception as e:
         print(f"❌ Error mengambil data {symbol}: {e}")
         return None
+
+def send_telegram_message(message):
+    """Kirim pesan ke chat Telegram"""
+    if not ENABLE_TELEGRAM:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'text': message,
+            'parse_mode': 'HTML' # Untuk format HTML opsional
+        }
+        response = requests.post(url, data=payload)
+        if response.status_code != 200:
+            print(f"❌ Gagal kirim Telegram: {response.text}")
+    except Exception as e:
+        print(f"⚠️ Error kirim Telegram: {e}")
+
+
+def log_entry_to_excel(entry_data):
+    """Simpan data entry ke file Excel"""
+    filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
+    df_entry = pd.DataFrame([{
+        'entry_time': entry_data['entry_time'].strftime('%Y-%m-%d %H:%M:%S'), # Konversi ke string
+        'exit_time': '', # Kosongkan untuk entry
+        'symbol': entry_data['symbol'],
+        'side': entry_data['side'],
+        'entry_price': entry_data['entry_price'],
+        'exit_price': '', # Kosongkan untuk entry
+        'qty': entry_data['qty'],
+        'sl_price': entry_data['sl_price'],
+        'tp_price': entry_data['tp_price'],
+        'exit_reason': '', # Kosongkan untuk entry
+        'gross_pnl': '', # Kosongkan untuk entry
+        'fee_cost': '', # Kosongkan untuk entry
+        'slippage_cost': '', # Kosongkan untuk entry
+        'impact_cost': '', # Kosongkan untuk entry
+        'net_pnl': '', # Kosongkan untuk entry
+        'balance_after_exit': entry_data['balance'], # Balance saat entry
+        'hold_time': '' # Kosongkan untuk entry
+    }])
+
+    try:
+        # Coba baca file yang sudah ada
+        existing_df = pd.read_excel(filename, engine='openpyxl')
+        # Gabungkan data baru
+        updated_df = pd.concat([existing_df, df_entry], ignore_index=True)
+    except FileNotFoundError:
+        # Jika file belum ada, gunakan data baru sebagai awal
+        updated_df = df_entry
+
+    # Simpan kembali ke file
+    updated_df.to_excel(filename, index=False, engine='openpyxl')
+    print(f"✅ Entry log disimpan ke: {filename}")
+
+def log_exit_to_excel(exit_data):
+    """Simpan data exit ke file Excel yang sama dengan entry"""
+    filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
+    df_exit = pd.DataFrame([{
+        'entry_time': exit_data['entry_time'].strftime('%Y-%m-%d %H:%M:%S'), # Konversi ke string
+        'exit_time': exit_data['exit_time'], # Sudah string
+        'symbol': exit_data['symbol'],
+        'side': exit_data['side'],
+        'entry_price': exit_data['entry_price'],
+        'exit_price': exit_data['exit_price'],
+        'qty': exit_data['qty'],
+        'sl_price': exit_data['sl_price'],
+        'tp_price': exit_data['tp_price'],
+        'exit_reason': exit_data['exit_reason'],
+        'gross_pnl': exit_data['gross_pnl'],
+        'fee_cost': exit_data['fee_cost'],
+        'slippage_cost': exit_data['slippage_cost'],
+        'impact_cost': exit_data['impact_cost'],
+        'net_pnl': exit_data['net_pnl'],
+        'balance_after_exit': exit_data['balance_after_exit'],
+        'hold_time': exit_data['hold_time']
+    }])
+
+    try:
+        # Coba baca file yang sudah ada
+        existing_df = pd.read_excel(filename, engine='openpyxl')
+        # Gabungkan data baru
+        updated_df = pd.concat([existing_df, df_exit], ignore_index=True)
+    except FileNotFoundError:
+        # Jika file belum ada, gunakan data baru sebagai awal
+        updated_df = df_exit
+
+    # Simpan kembali ke file
+    updated_df.to_excel(filename, index=False, engine='openpyxl')
+    print(f"✅ Exit log disimpan ke: {filename}")
+
+def get_open_interest(exchange, symbol):
+        """Ambil Open Interest dari Binance Futures"""
+        try:
+            # Contoh: 'BTC/USDT:USDT' → 'BTCUSDT'
+            clean_symbol = symbol.replace('/USDT:USDT', '').replace('/', '')
+            oi = exchange.fapiPublicGetOpenInterest({'symbol': clean_symbol})
+            return float(oi['openInterest'])
+        except Exception as e:
+            print(f"⚠️ Error ambil OI untuk {symbol}: {e}")
+            return None
+
+def calculate_oi_change(current_oi, previous_oi):
+    if previous_oi is None or previous_oi == 0:
+        return 0.0
+    return ((current_oi - previous_oi) / previous_oi) * 100
 
 # --- MAIN ---
 if __name__ == "__main__":
