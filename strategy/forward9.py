@@ -918,7 +918,7 @@ def run_forward_test():
                     trade_log.append({**active_position, **trade_result})
 
                     # 🔔 Kirim notifikasi Telegram & simpan ke Excel
-                    log_exit_to_excel(trade_log)  # Pastikan fungsi ini ada
+                    log_exit_to_excel(trade_log[-1])  # Pastikan fungsi ini ada
                     send_telegram_message(
                         f"🧪 <b>TEST EXIT</b>\n"
                         f"Coin: {active_position['symbol']}\n"
@@ -1144,7 +1144,7 @@ def run_forward_test():
                         **trade_result
                     })
 
-                    log_exit_to_excel(trade_log)
+                    log_exit_to_excel(trade_log[-1])
 
                     send_telegram_message(f"❌ <b>EXIT</b>\n"
                                           f"Coin: {active_position['symbol']}\n"
