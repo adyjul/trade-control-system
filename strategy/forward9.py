@@ -61,6 +61,7 @@ if TIMEFRAME == '15m':
     SLIPPAGE_RATE = 0.0007
     MAX_SLIPPAGE_RATE = 0.0015 
     ORDER_BOOK_DEPTH = 25
+    OI_UPDATE_INTERVAL = 900
 
 else:  # 5m
     TP_ATR_MULT = 4.5
@@ -81,6 +82,7 @@ else:  # 5m
     MAX_SLIPPAGE_RATE = 0.001  # 0.1%
     MIN_TIME_BETWEEN_SCANS = 15
     ORDER_BOOK_DEPTH = 20 
+    OI_UPDATE_INTERVAL = 300
 
 
 
@@ -815,8 +817,14 @@ def run_forward_test():
     last_oi = None
     last_oi_update = datetime.now()
     OI_MIN_CHANGE_THRESHOLD = 2.0
-    oi_confirmed_long = False
-    oi_confirmed_short = False
+    # oi_confirmed_long = False
+    # oi_confirmed_short = False
+    oi_state = {
+                    'last_oi': None,
+                    'long': False,
+                    'short': False,
+                    'threshold': 2.0 
+                }
 
     print("🔄 MENCARI ASET TERBAIK UNTUK TRADING AWAL...")
     current_symbol = scanner.get_best_asset_for_trading()
@@ -874,43 +882,6 @@ def run_forward_test():
                 print(f"✅ [{current_time.strftime('%H:%M:%S')}] SCANNING ULANG SETELAH EXIT POSISI")
                 should_rescan = True
                 last_exit_time = None  # Reset agar tidak terus menerus scan
-
-            if (current_time - last_oi_update).total_seconds() >= 60:
-                # Ambil harga terakhir untuk deteksi arah
-                if len(df) >= 2:
-                    prev_close = df['close'].iloc[-2]
-                    current_close = df['close'].iloc[-1]
-                    price_change_pct = ((current_close - prev_close) / prev_close) * 100
-                else:
-                    price_change_pct = 0.0
-
-                # Ambil Open Interest saat ini
-                current_oi = get_open_interest(scanner.exchange, current_symbol)
-                # oi_confirmed_long = False
-                # oi_confirmed_short = False
-
-                if current_oi is not None and last_oi is not None and last_oi > 0:
-
-                    oi_change_pct = ((current_oi - last_oi) / last_oi) * 100
-
-                    if oi_change_pct >= OI_MIN_CHANGE_THRESHOLD:
-                        if price_change_pct > 0:
-                            oi_confirmed_long = True
-                            print(f"📈 OI ↑ {oi_change_pct:+.2f}% + Harga ↑ → Konfirmasi LONG")
-                        elif price_change_pct < 0:
-                            oi_confirmed_short = True
-                            print(f"📉 OI ↑ {oi_change_pct:+.2f}% + Harga ↓ → Konfirmasi SHORT")
-                        else:
-                            print(f"↔️ OI ↑ tapi harga flat → Abaikan")
-                    else:
-                        print(f"📊 OI stabil/perubahan kecil: {oi_change_pct:+.2f}%")
-                else:
-                    print("ℹ️ Tunggu data OI sebelumnya atau gagal ambil OI")
-                
-                if current_oi is not None:
-                    last_oi = current_oi
-                
-                last_oi_update = current_time
             
             # Kondisi 3: Tidak ada sinyal entry dalam waktu lama (opsional, bisa ditambahkan)
             # ...
@@ -954,6 +925,19 @@ def run_forward_test():
                                     df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
                                     df['vol_ma'] = df['volume'].rolling(10).mean()
                                     df['volume_ma20'] = df['volume'].rolling(20).mean()
+
+                                    # reset OI
+                                    oi_state['last_oi'] = None
+                                    oi_state['long'] = False
+                                    oi_state['short'] = False
+
+                                    symbol_base = current_symbol.split('/')[0]
+                                    asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
+                                    threshold_map = {'MAJOR': 0.8, 'MID_CAP': 1.0, 'SMALL_CAP': 1.5, 'MEME': 2.0, 'DEFAULT': 1.8}
+                                    oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
+                                    # end reset OI 
+
+                                    
                                     # Update profil aset dan regime
                                     asset_profile = scanner.get_asset_profile(current_symbol, df)
                                     market_regime = scanner.detect_market_regime(df)
@@ -995,6 +979,43 @@ def run_forward_test():
 
                         if df[['open', 'high', 'low', 'close', 'volume']].isna().any().any():
                             print(f"⚠️ Data baru ({current_symbol}) mengandung NaN. Melewati pembaruan indikator.")
+                        
+                        # memulai perhitungan OI
+                        if len(df) < 2:
+                            return
+                        
+                        symbol_base = current_symbol.split('/')[0]
+                        asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
+                        threshold_map = {'MAJOR': 0.8, 'MID_CAP': 1.0, 'SMALL_CAP': 1.5, 'MEME': 2.0, 'DEFAULT': 1.8}
+                        oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
+
+                        prev_close = df['close'].iloc[-2]
+                        current_close = df['close'].iloc[-1]
+                        price_change_pct = ((current_close - prev_close) / prev_close) * 100 if prev_close else 0
+
+                        current_oi = get_open_interest(scanner.exchange, current_symbol)
+                        
+                        if current_oi is not None and oi_state['last_oi'] is not None and oi_state['last_oi'] > 0:
+                            oi_change_pct = ((current_oi - oi_state['last_oi']) / oi_state['last_oi']) * 100
+                            if oi_change_pct >= oi_state['threshold']:
+                                if price_change_pct > 0:
+                                    oi_state['long'] = True
+                                    print(f"📈 OI ↑ {oi_change_pct:+.2f}% + Harga ↑ → Konfirmasi LONG")
+                                elif price_change_pct < 0:
+                                    oi_state['short'] = True
+                                    print(f"📉 OI ↑ {oi_change_pct:+.2f}% + Harga ↓ → Konfirmasi SHORT")
+                            else:
+                                print(f"📊 OI stabil/perubahan kecil: {oi_change_pct:+.2f}%")
+                        else:
+                            print("ℹ️ Tunggu data OI sebelumnya atau gagal ambil OI")
+
+                        if current_oi is not None:
+                            oi_state['last_oi'] = current_oi
+
+                        oi_confirmed_long = oi_state['long']
+                        oi_confirmed_short = oi_state['short']
+
+                        # hasil perhitungan OI 
 
                         # Update indikator dengan rolling calculation yang lebih efisien
                         df['ema_fast'] = talib.EMA(df['close'], 20)
