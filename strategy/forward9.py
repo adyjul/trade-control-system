@@ -984,8 +984,8 @@ def run_forward_test():
                             print(f"⚠️ Data baru ({current_symbol}) mengandung NaN. Melewati pembaruan indikator.")
                         
                         # memulai perhitungan OI
-                        if len(df) < 2:
-                            return
+                        # if len(df) < 2:
+                        #     return
                         
                         symbol_base = current_symbol.split('/')[0]
                         asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
