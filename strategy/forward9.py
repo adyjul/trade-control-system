@@ -867,9 +867,21 @@ def run_forward_test():
 
     try:
         while True:
+
             current_time = datetime.now()
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
             # --- LOGIKA SCANNING ULANG OTOMATIS ---
+
+            if TIMEFRAME == '15m':
+                minute = current_time.minute
+                second = current_time.second
+                # Cek apakah kita berada di menit 00, 15, 30, atau 45
+                if minute % 15 != 0:
+                    continue  # Skip kalau bukan menit kelipatan 15
+                if second < 2:  # Tunggu minimal 2 detik setelah tepat menit
+                    continue
+            
+
             oi_confirmed_long = oi_state['long']
             oi_confirmed_short = oi_state['short']
 
@@ -939,7 +951,6 @@ def run_forward_test():
                                     threshold_map = {'MAJOR': 0.8, 'MID_CAP': 1.0, 'SMALL_CAP': 1.5, 'MEME': 2.0, 'DEFAULT': 1.8}
                                     oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
                                     # end reset OI 
-
 
                                     # Update profil aset dan regime
                                     asset_profile = scanner.get_asset_profile(current_symbol, df)
@@ -1110,10 +1121,10 @@ def run_forward_test():
                 continue  # Lewati jika ada posisi aktif
 
             # Gunakan bar terakhir dari df yang diperbarui
-            i = len(df) - 1
-            if i < 50:
-                continue  # Data tidak cukup untuk analisis
-
+            if len(df) < 52:
+                continue # Data tidak cukup untuk analisis
+            
+            i = len(df) - 2
             current_row = df.iloc[i]
 
             regime = enhanced_trend_detection(i, df)
