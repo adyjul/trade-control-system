@@ -870,6 +870,9 @@ def run_forward_test():
             current_time = datetime.now()
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
             # --- LOGIKA SCANNING ULANG OTOMATIS ---
+            oi_confirmed_long = oi_state['long']
+            oi_confirmed_short = oi_state['short']
+
             should_rescan = False
             
             # Kondisi 1: Interval waktu tercapai
@@ -937,7 +940,7 @@ def run_forward_test():
                                     oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
                                     # end reset OI 
 
-                                    
+
                                     # Update profil aset dan regime
                                     asset_profile = scanner.get_asset_profile(current_symbol, df)
                                     market_regime = scanner.detect_market_regime(df)
