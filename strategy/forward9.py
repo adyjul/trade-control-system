@@ -994,29 +994,19 @@ def run_forward_test():
 
                         prev_close = df['close'].iloc[-2]
                         current_close = df['close'].iloc[-1]
-                        price_change_pct = ((current_close - prev_close) / prev_close) * 100 if prev_close else 0
-
                         current_oi = get_open_interest(scanner.exchange, current_symbol)
-                        
-                        if current_oi is not None and oi_state['last_oi'] is not None and oi_state['last_oi'] > 0:
-                            oi_change_pct = ((current_oi - oi_state['last_oi']) / oi_state['last_oi']) * 100
-                            if oi_change_pct >= oi_state['threshold']:
-                                if price_change_pct > 0:
-                                    oi_state['long'] = True
-                                    print(f"📈 OI ↑ {oi_change_pct:+.2f}% + Harga ↑ → Konfirmasi LONG")
-                                elif price_change_pct < 0:
-                                    oi_state['short'] = True
-                                    print(f"📉 OI ↑ {oi_change_pct:+.2f}% + Harga ↓ → Konfirmasi SHORT")
-                            else:
-                                print(f"📊 OI stabil/perubahan kecil: {oi_change_pct:+.2f}%")
-                        else:
-                            print("ℹ️ Tunggu data OI sebelumnya atau gagal ambil OI")
+                        atr_value = df['atr'].iloc[-1]  
+                        long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value)
+
+                        oi_state['long'] = long_confirm
+                        oi_state['short'] = short_confirm
 
                         if current_oi is not None:
                             oi_state['last_oi'] = current_oi
-
-                        oi_confirmed_long = oi_state['long']
-                        oi_confirmed_short = oi_state['short']
+                            print('data OI belum lengkap')
+                        
+                        oi_confirmed_long = long_confirm
+                        oi_confirmed_short = short_confirm
 
                         # hasil perhitungan OI 
 
@@ -1525,14 +1515,12 @@ def log_exit_to_excel(exit_data):
     print(f"✅ Exit log disimpan ke: {filename}")
 
 def get_open_interest(exchange, symbol):
-        """Ambil Open Interest dari Binance Futures"""
         try:
             base = symbol.split('/')[0]
             MULTIPLIER_SYMBOLS = {
                 'PEPE': '100PEPE',
                 'SHIB': '1000SHIB',
                 'FLOKI': '1000FLOKI',
-                # Tambahkan lainnya jika perlu
             }
     
             if base in MULTIPLIER_SYMBOLS:
@@ -1551,6 +1539,38 @@ def calculate_oi_change(current_oi, previous_oi):
     if previous_oi is None or previous_oi == 0:
         return 0.0
     return ((current_oi - previous_oi) / previous_oi) * 100
+
+def get_oi_confirmation(df, current_oi, last_oi, atr):
+    if last_oi is None or current_oi is None:
+        return False, False
+
+    oi_change_pct = ((current_oi - last_oi) / last_oi) * 100
+    candle_body = abs(df['close'].iloc[-1] - df['open'].iloc[-1])
+    big_candle = candle_body > (0.30 * atr)
+
+    price_up = df['close'].iloc[-1] > df['open'].iloc[-1]
+    price_down = df['close'].iloc[-1] < df['open'].iloc[-1]
+
+    # Default -> no OI signal
+    long_confirm = False
+    short_confirm = False
+
+    # RULE 1: OI naik + big candle = valid breakout
+    if oi_change_pct > 1.0 and big_candle:
+        if price_up:
+            long_confirm = True
+            print(f"🟢 OI naik {oi_change_pct:.2f}% dan big candle, konfirmasi long")
+        if price_down:
+            short_confirm = True
+            print(f"🟢 OI naik {oi_change_pct:.2f}% dan big candle, konfirmasi short")
+
+    # RULE 2: OI turun = jangan entry apapun (liquidation close)
+    if oi_change_pct < -1.0:
+        long_confirm = False
+        short_confirm = False
+        print(f"🔴 OI turun {oi_change_pct:.2f}%, jangan entry apapun (liquidation close)")
+
+    return long_confirm, short_confirm
 
 # --- MAIN ---
 if __name__ == "__main__":
