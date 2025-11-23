@@ -1503,10 +1503,22 @@ def log_exit_to_excel(exit_data):
 def get_open_interest(exchange, symbol):
         """Ambil Open Interest dari Binance Futures"""
         try:
-            # Contoh: 'BTC/USDT:USDT' → 'BTCUSDT'
-            clean_symbol = symbol.replace('/USDT:USDT', '').replace('/', '')
-            oi = exchange.fapiPublicGetOpenInterest({'symbol': clean_symbol})
-            return float(oi['openInterest'])
+            base = symbol.split('/')[0]
+            MULTIPLIER_SYMBOLS = {
+                'PEPE': '100PEPE',
+                'SHIB': '1000SHIB',
+                'FLOKI': '1000FLOKI',
+                # Tambahkan lainnya jika perlu
+            }
+    
+            if base in MULTIPLIER_SYMBOLS:
+                futures_symbol = MULTIPLIER_SYMBOLS[base] + 'USDT'
+            else:
+                futures_symbol = base + 'USDT'
+            oi_data = exchange.fapiPublicGetOpenInterest({'symbol': futures_symbol})
+            oi = float(oi_data['openInterest'])
+            print(f"✅ OI untuk {symbol}: {oi:,.0f}")
+            return oi
         except Exception as e:
             print(f"⚠️ Error ambil OI untuk {symbol}: {e}")
             return None
