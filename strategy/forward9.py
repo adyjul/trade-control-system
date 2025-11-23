@@ -1422,7 +1422,7 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
     exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
     try:
         # Tambahkan sleep kecil untuk membantu menghindari rate limit
-        time.sleep(0.1) 
+        # time.sleep(0.1) 
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         if len(ohlcv) < limit * 0.7:
             print(f"⚠️ Data tidak lengkap: {len(ohlcv)}/{limit} candle untuk {symbol}")
