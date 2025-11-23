@@ -1003,6 +1003,8 @@ def run_forward_test():
 
                         if current_oi is not None:
                             oi_state['last_oi'] = current_oi
+                            print(f"OI terbaru untuk {current_symbol}: {current_oi}")
+                        else:
                             print('data OI belum lengkap')
                         
                         oi_confirmed_long = long_confirm
