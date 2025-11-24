@@ -1559,7 +1559,7 @@ def get_oi_confirmation(df, current_oi, last_oi, atr):
 
     oi_change_pct = ((current_oi - last_oi) / last_oi) * 100
     candle_body = abs(df['close'].iloc[-1] - df['open'].iloc[-1])
-    big_candle = candle_body > (0.30 * atr)
+    big_candle = candle_body > (0.20 * atr)
 
     price_up = df['close'].iloc[-1] > df['open'].iloc[-1]
     price_down = df['close'].iloc[-1] < df['open'].iloc[-1]
@@ -1569,7 +1569,7 @@ def get_oi_confirmation(df, current_oi, last_oi, atr):
     short_confirm = False
 
     # RULE 1: OI naik + big candle = valid breakout
-    if oi_change_pct > 1.0 and big_candle:
+    if oi_change_pct > 0.3 and big_candle:
         if price_up:
             long_confirm = True
             print(f"🟢 OI naik {oi_change_pct:.2f}% dan big candle, konfirmasi long")
@@ -1578,7 +1578,7 @@ def get_oi_confirmation(df, current_oi, last_oi, atr):
             print(f"🟢 OI naik {oi_change_pct:.2f}% dan big candle, konfirmasi short")
 
     # RULE 2: OI turun = jangan entry apapun (liquidation close)
-    if oi_change_pct < -1.0:
+    if oi_change_pct < -0.5:
         long_confirm = False
         short_confirm = False
         print(f"🔴 OI turun {oi_change_pct:.2f}%, jangan entry apapun (liquidation close)")
