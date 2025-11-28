@@ -494,9 +494,17 @@ class MarketScanner:
             return best_asset['symbol']
         
         # Fallback: jika tidak ada setup probabilitas tinggi, gunakan aset dengan activity score tertinggi
-        best_asset = qualified_assets[0]
-        print(f"\n🎯 TIDAK ADA HIGH PROBABILITY SETUP - Menggunakan aset dengan activity score tertinggi: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
-        return best_asset['symbol']
+        # best_asset = qualified_assets[0]
+        # print(f"\n🎯 TIDAK ADA HIGH PROBABILITY SETUP - Menggunakan aset dengan activity score tertinggi: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
+        # return best_asset['symbol']
+        if qualified_assets:
+            best_asset = qualified_assets[0]
+            print(f"🎯 ASET TERBAIK: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
+            return best_asset['symbol']
+        else:
+            best_asset = ranked_assets[0]
+            print(f"⚠️ Tidak ada aset qualified, menggunakan: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
+            return best_asset['symbol']
         
 
     def has_high_probability_setup(self, df, directional_bias):
