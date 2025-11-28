@@ -443,9 +443,11 @@ class MarketScanner:
             print("❌ Tidak ada aset yang bisa dianalisis!")
             return None
         
+        print(f"🔍 Menganalisis {(ranked_assets)} aset untuk high probability setup...")
         # Filter aset dengan skor minimum (40.0) dan ambil maksimal 5 aset teratas
         qualified_assets = [asset for asset in ranked_assets if asset['activity_score'] >= 40.0][:5]
         print(f"🔍 Menganalisis {len(qualified_assets)} aset qualified untuk high probability setup...")
+
         if not qualified_assets:
             # Fallback: gunakan aset teratas meskipun skornya rendah
             best_asset = ranked_assets[0]
