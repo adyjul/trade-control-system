@@ -435,20 +435,148 @@ class MarketScanner:
         return ranked_symbols
 
     def get_best_asset_for_trading(self):
+        """Dapatkan aset terbaik dengan skor aktivitas TERTINGGI yang memiliki setup probabilitas tinggi"""
         trending_symbols = self.get_trending_symbols()
         ranked_assets = self.rank_symbols_by_activity(trending_symbols)
+        
         if not ranked_assets:
             print("❌ Tidak ada aset yang bisa dianalisis!")
             return None
-        qualified_assets = [asset for asset in ranked_assets if asset['activity_score'] >= 40.0]
-        if qualified_assets:
-            best_asset = qualified_assets[0]
-            print(f"🎯 ASET TERBAIK: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
-            return best_asset['symbol']
-        else:
+        
+        # Filter aset dengan skor minimum (40.0) dan ambil maksimal 5 aset teratas
+        qualified_assets = [asset for asset in ranked_assets if asset['activity_score'] >= 40.0][:5]
+        
+        if not qualified_assets:
+            # Fallback: gunakan aset teratas meskipun skornya rendah
             best_asset = ranked_assets[0]
             print(f"⚠️ Tidak ada aset qualified, menggunakan: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
             return best_asset['symbol']
+        
+        print(f"🔍 Menganalisis {len(qualified_assets)} aset qualified untuk high probability setup...")
+        
+        high_potential_assets = []
+        for asset in qualified_assets:
+            symbol = asset['symbol']
+            print(f"   📊 Menganalisis setup {symbol}...")
+            
+            # Ambil data singkat (50 candle) untuk analisis setup
+            df = self.fetch_ohlcv_data(symbol)
+            if df is None or len(df) < 30:
+                continue
+            
+            # Hitung directional bias dan setup probability
+            directional_bias = self.calculate_directional_bias(df)
+            has_setup = self.has_high_probability_setup(df, directional_bias)
+            
+            if has_setup:
+                # Hitung confidence score berdasarkan multiple faktor
+                confidence_score = self.calculate_setup_confidence(df, directional_bias)
+                high_potential_assets.append({
+                    'symbol': symbol,
+                    'activity_score': asset['activity_score'],
+                    'directional_bias': directional_bias,
+                    'confidence_score': confidence_score,
+                    'setup_type': 'BULLISH' if directional_bias > 0.3 else 'BEARISH'
+                })
+                print(f"   ✅ {symbol} - SETUP DITEMUKAN! Confidence: {confidence_score:.2f} | Bias: {directional_bias:+.2f}")
+            else:
+                print(f"   ⚪ {symbol} - Tidak ada setup probabilitas tinggi")
+        
+        # Pilih aset terbaik berdasarkan confidence score
+        if high_potential_assets:
+            # Urutkan berdasarkan confidence_score (tertinggi ke terendah)
+            high_potential_assets.sort(key=lambda x: x['confidence_score'], reverse=True)
+            best_asset = high_potential_assets[0]
+            print(f"\n🎯 ASET TERBAIK DENGAN HIGH PROBABILITY SETUP: {best_asset['symbol']}")
+            print(f"   💯 Confidence Score: {best_asset['confidence_score']:.2f}")
+            print(f"   📈 Directional Bias: {best_asset['directional_bias']:+.2f} ({best_asset['setup_type']})")
+            print(f"   ⚡ Activity Score: {best_asset['activity_score']:.1f}")
+            return best_asset['symbol']
+        
+        # Fallback: jika tidak ada setup probabilitas tinggi, gunakan aset dengan activity score tertinggi
+        best_asset = qualified_assets[0]
+        print(f"\n🎯 TIDAK ADA HIGH PROBABILITY SETUP - Menggunakan aset dengan activity score tertinggi: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
+        return best_asset['symbol']
+        
+
+    def has_high_probability_setup(self, df, directional_bias):
+        """Cek apakah pola candle mendukung entry"""
+        if len(df) < 20:
+            return False
+        
+        # 1. Cari breakout level
+        recent_high = df['high'].iloc[-5:].max()
+        recent_low = df['low'].iloc[-5:].min()
+        
+        # 2. Konfirmasi dengan volume & momentum
+        current_vol = df['volume'].iloc[-1]
+        avg_vol = df['volume_ma20'].iloc[-1]
+        adx = df['adx'].iloc[-1]
+        
+        # Bullish Setup
+        if directional_bias > 0.3:
+            broke_resistance = df['close'].iloc[-1] > recent_high * 1.002
+            volume_confirmation = current_vol > avg_vol * 1.3
+            momentum_ok = adx > 18 and df['plus_di'].iloc[-1] > df['minus_di'].iloc[-1]
+            return broke_resistance and (volume_confirmation or momentum_ok)
+        
+        # Bearish Setup
+        elif directional_bias < -0.3:
+            broke_support = df['close'].iloc[-1] < recent_low * 0.998
+            volume_confirmation = current_vol > avg_vol * 1.3
+            momentum_ok = adx > 18 and df['minus_di'].iloc[-1] > df['plus_di'].iloc[-1]
+            return broke_support and (volume_confirmation or momentum_ok)
+        
+        return False
+    
+    def calculate_setup_confidence(self, df, directional_bias):
+        """Hitung confidence score untuk setup (0.0 - 1.0)"""
+        score = 0.0
+        max_score = 0.0
+        
+        # 1. Volatilitas (ATR%)
+        atr = df['atr'].iloc[-1]
+        current_price = df['close'].iloc[-1]
+        atr_pct = (atr / current_price) * 100
+        max_score += 0.3
+        if 0.15 <= atr_pct <= 0.8:  # Volatilitas ideal
+            score += 0.3
+        elif atr_pct > 0.8:  # Terlalu volatile
+            score += 0.1
+        
+        # 2. Volume confirmation
+        current_vol = df['volume'].iloc[-1]
+        avg_vol = df['volume_ma20'].iloc[-1]
+        vol_ratio = current_vol / avg_vol if avg_vol > 0 else 1.0
+        max_score += 0.3
+        if vol_ratio > 1.8:
+            score += 0.3
+        elif vol_ratio > 1.4:
+            score += 0.2
+        
+        # 3. Momentum strength (ADX + DI)
+        adx = df['adx'].iloc[-1]
+        plus_di = df['plus_di'].iloc[-1]
+        minus_di = df['minus_di'].iloc[-1]
+        di_diff = abs(plus_di - minus_di)
+        max_score += 0.4
+        if adx > 25 and di_diff > 10:
+            score += 0.4
+        elif adx > 20 and di_diff > 8:
+            score += 0.3
+        
+        # Normalisasi ke 0.0-1.0
+        confidence = score / max_score if max_score > 0 else 0.0
+        
+        # Adjusment berdasarkan directional bias strength
+        bias_strength = abs(directional_bias)
+        if bias_strength > 0.5:
+            confidence *= 1.2  # Booster untuk bias kuat
+        elif bias_strength < 0.2:
+            confidence *= 0.7  # Penalty untuk bias lemah
+        
+        return min(1.0, confidence)
+
 
     def calculate_market_score(self, df, btc_df=None):
         if len(df) < 50:
@@ -853,6 +981,7 @@ def run_forward_test():
     print(f"🚀 MULAI FORWARD TEST - MODE: {MODE.upper()} | INTERVAL SCAN: {RESCAN_INTERVAL_MINUTES} MENIT")
     print("=" * 70)
 
+    LOG_FILENAME = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     scanner = MarketScanner()
     balance = INITIAL_BALANCE
     active_position = None
@@ -1147,7 +1276,7 @@ def run_forward_test():
                         **trade_result
                     })
 
-                    log_exit_to_excel(trade_log[-1])
+                    log_exit_to_excel(trade_log[-1],LOG_FILENAME)
 
                     send_telegram_message(f"❌ <b>EXIT</b>\n"
                                           f"Coin: {active_position['symbol']}\n"
@@ -1328,7 +1457,7 @@ def run_forward_test():
                         active_position['regime'] = regime
                         active_position['market_regime'] = market_regime
                         
-                        log_entry_to_excel(active_position)
+                        log_entry_to_excel(active_position,LOG_FILENAME)
 
                         send_telegram_message(f"📊 <b>ENTRY</b>\n"
                           f"Coin: {active_position['symbol']}\n"
@@ -1484,7 +1613,7 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
     exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
     try:
         # Tambahkan sleep kecil untuk membantu menghindari rate limit
-        # time.sleep(0.1) 
+        time.sleep(0.1) 
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         if len(ohlcv) < limit * 0.7:
             print(f"⚠️ Data tidak lengkap: {len(ohlcv)}/{limit} candle untuk {symbol}")
@@ -1514,9 +1643,10 @@ def send_telegram_message(message):
         print(f"⚠️ Error kirim Telegram: {e}")
 
 
-def log_entry_to_excel(entry_data):
+def log_entry_to_excel(entry_data,filelog):
     """Simpan data entry ke file Excel"""
-    filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
+    # filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
+    filename = filelog
     df_entry = pd.DataFrame([{
         'entry_time': entry_data['entry_time'].strftime('%Y-%m-%d %H:%M:%S'), # Konversi ke string
         'exit_time': '', # Kosongkan untuk entry
@@ -1550,9 +1680,10 @@ def log_entry_to_excel(entry_data):
     updated_df.to_excel(filename, index=False, engine='openpyxl')
     print(f"✅ Entry log disimpan ke: {filename}")
 
-def log_exit_to_excel(exit_data):
+def log_exit_to_excel(exit_data,filelog):
     """Simpan data exit ke file Excel yang sama dengan entry"""
-    filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
+    # filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
+    filename = filelog
     df_exit = pd.DataFrame([{
         'entry_time': exit_data['entry_time'].strftime('%Y-%m-%d %H:%M:%S'), # Konversi ke string
         'exit_time': exit_data['exit_time'], # Sudah string
