@@ -398,12 +398,20 @@ class MarketScanner:
                 else:
                     adx_score = 50
 
+                directional_bias = self.calculate_directional_bias(symbol, df)
                 activity_score = (
-                    ob_sentiment * 0.35 +
-                    price_score * 0.25 +
-                    volume_score * 0.20 +
-                    adx_score * 0.20
+                    ob_sentiment * 0.30 +
+                    price_score * 0.20 +
+                    volume_score * 0.15 +
+                    adx_score * 0.15 +
+                    ((directional_bias + 1) / 2) * 0.20
                 )
+                # activity_score = (
+                #     ob_sentiment * 0.35 +
+                #     price_score * 0.25 +
+                #     volume_score * 0.20 +
+                #     adx_score * 0.20
+                # )
                 spike_count = int(df['volume_spike'].sum()) if 'volume_spike' in df else 0
                 ranked_symbols.append({
                     'symbol': symbol,
@@ -491,6 +499,45 @@ class MarketScanner:
         except Exception as e:
             print(f"🔥 Error calculating market score: {e}")
             return 0.4
+
+    def calculate_directional_bias(self, symbol, df):
+        """Hitung probabilitas bullish/bearish untuk aset"""
+        if len(df) < 50:
+            return 0.0  # Netral
+        
+        # 1. Momentum dari RSI + MACD
+        rsi = df['rsi'].iloc[-1]
+        rsi_bias = (70 - rsi) / 40 if rsi < 50 else (70 - rsi) / 20  # -1 (bear) hingga +1 (bull)
+        
+        # 2. Trend dari ADX + DI
+        adx = df['adx'].iloc[-1]
+        plus_di = df['plus_di'].iloc[-1]
+        minus_di = df['minus_di'].iloc[-1]
+        trend_strength = adx / 25  # Normalisasi 0-1
+        di_diff = (plus_di - minus_di) / max(plus_di, minus_di, 1)
+        trend_bias = trend_strength * di_diff
+        
+        # 3. Order Book Sentiment (existing)
+        ob_sentiment = self.get_orderbook_sentiment(symbol)
+        ob_bias = (ob_sentiment - 50) / 50  # Normalisasi -1 hingga +1
+        
+        # 4. Volume Profile
+        vol_ratio = df['volume'].iloc[-1] / df['volume_ma20'].iloc[-1]
+        if vol_ratio > 1.5 and df['close'].iloc[-1] > df['open'].iloc[-1]:
+            vol_bias = 0.3  # Volume beli kuat
+        elif vol_ratio > 1.5 and df['close'].iloc[-1] < df['open'].iloc[-1]:
+            vol_bias = -0.3  # Volume jual kuat
+        else:
+            vol_bias = 0
+        
+        # Kombinasikan semua faktor
+        directional_score = (
+            rsi_bias * 0.25 +
+            trend_bias * 0.35 +
+            ob_bias * 0.25 +
+            vol_bias * 0.15
+        )
+        return max(-1.0, min(1.0, directional_score))
 
     def is_market_hot(self, score):
         return score >= MIN_SCAN_SCORE
@@ -1223,21 +1270,33 @@ def run_forward_test():
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
                 allow_long = False
 
-            high_quality_long = (broke_long_prev and price_in_long_zone and
-                                vol_confirmed and atr_confirmed and 
-                                oi_confirmed_long and
-                                ema_fast > ema_slow and adx > adx_threshold and 
-                                strong_momentum and allow_long and
-                                mtf_score >= MTF_MIN_SCORE and mtf_direction >= MTF_DIRECTION_THRESHOLD
-                                and rsi_long_ok)
+            high_quality_long = (broke_long_prev and 
+                                price_in_long_zone and
+                                vol_confirmed and 
+                                atr_confirmed and 
+                                # oi_confirmed_long and
+                                ema_fast > ema_slow and 
+                                adx > adx_threshold and 
+                                strong_momentum and 
+                                allow_long and
+                                mtf_score >= MTF_MIN_SCORE and 
+                                mtf_direction >= MTF_DIRECTION_THRESHOLD
+                                and rsi_long_ok
+                                )
 
-            high_quality_short = (broke_short_prev and price_in_short_zone and 
+            high_quality_short = (
+                                broke_short_prev and 
+                                price_in_short_zone and 
                                 vol_confirmed and atr_confirmed and 
-                                oi_confirmed_short and
-                                ema_fast < ema_slow and adx > adx_threshold and 
-                                strong_momentum and allow_short and 
-                                mtf_score >= MTF_MIN_SCORE and mtf_direction <= -MTF_DIRECTION_THRESHOLD
-                                and rsi_short_ok)
+                                # oi_confirmed_short and
+                                ema_fast < ema_slow and 
+                                adx > adx_threshold and 
+                                strong_momentum and 
+                                allow_short and 
+                                mtf_score >= MTF_MIN_SCORE and 
+                                mtf_direction <= -MTF_DIRECTION_THRESHOLD
+                                and rsi_short_ok
+                                )
             
             # if price_in_long_zone or price_in_short_zone:
             #     print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
