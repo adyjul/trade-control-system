@@ -460,12 +460,25 @@ class MarketScanner:
             print(f"   📊 Menganalisis setup {symbol}...")
             
             # Ambil data singkat (50 candle) untuk analisis setup
-            df = self.fetch_ohlcv_data(symbol)
+            df = fetch_ohlcv_data(symbol, TIMEFRAME, 50)
             if df is None or len(df) < 30:
+                continue
+
+            try:
+                df['ema20'] = talib.EMA(df['close'], 20)
+                df['ema50'] = talib.EMA(df['close'], 50)
+                df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+                df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
+                df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
+                df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
+                df['rsi'] = talib.RSI(df['close'], 14)
+                df['volume_ma20'] = df['volume'].rolling(20).mean()
+            except Exception as e:
+                print(f"   ⚠️ Error menghitung indikator untuk {symbol}: {e}")
                 continue
             
             # Hitung directional bias dan setup probability
-            directional_bias = self.calculate_directional_bias(df)
+            directional_bias =self.calculate_directional_bias(symbol, df)
             has_setup = self.has_high_probability_setup(df, directional_bias)
             
             if has_setup:
