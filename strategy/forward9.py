@@ -686,13 +686,29 @@ class MarketScanner:
         ob_bias = (ob_sentiment - 50) / 50  # Normalisasi -1 hingga +1
         
         # 4. Volume Profile
-        vol_ratio = df['volume'].iloc[-1] / df['volume_ma20'].iloc[-1]
-        if vol_ratio > 1.5 and df['close'].iloc[-1] > df['open'].iloc[-1]:
-            vol_bias = 0.3  # Volume beli kuat
-        elif vol_ratio > 1.5 and df['close'].iloc[-1] < df['open'].iloc[-1]:
-            vol_bias = -0.3  # Volume jual kuat
-        else:
+        # vol_ratio = df['volume'].iloc[-1] / df['volume_ma20'].iloc[-1]
+        # if vol_ratio > 1.5 and df['close'].iloc[-1] > df['open'].iloc[-1]:
+        #     vol_bias = 0.3  # Volume beli kuat
+        # elif vol_ratio > 1.5 and df['close'].iloc[-1] < df['open'].iloc[-1]:
+        #     vol_bias = -0.3  # Volume jual kuat
+        # else:
+        #     vol_bias = 0
+
+        last_vol = df['volume'].iloc[-1]
+        last_ma20 = df['volume_ma20'].iloc[-1]
+        last_close = df['close'].iloc[-1]
+        last_open = df['open'].iloc[-1]
+
+        if pd.isna(last_vol) or pd.isna(last_ma20) or last_ma20 == 0:
             vol_bias = 0
+        else:
+            vol_ratio = last_vol / last_ma20
+            if vol_ratio > 1.5:
+                vol_bias = 0.3 if last_close > last_open else -0.3
+            else:
+                vol_bias = 0
+        
+        print(f"📈 RSI Bias: {rsi_bias:.2f}, Trend Bias: {trend_bias:.2f}, OB Bias: {ob_bias:.2f}, Vol Bias: {vol_bias:.2f}")
         
         # Kombinasikan semua faktor
         directional_score = (
