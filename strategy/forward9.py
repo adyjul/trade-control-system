@@ -385,8 +385,16 @@ class MarketScanner:
                 price_score = min(100, max(0, price_change_score))
 
                 if len(df) >= 5:
-                    volume_score = (df['volume'].iloc[-1] / df['volume'].mean()) * 12
-                    volume_score = min(100, max(0, volume_score))
+                    vol = df['volume']
+                    if vol.isna().all() or vol.mean() == 0:
+                        volume_score = 50
+                    else:
+                        latest = vol.iloc[-1]
+                        mean_val = vol.mean()
+                        if np.isnan(latest) or np.isnan(mean_val) or mean_val == 0:
+                            volume_score = 50
+                        else:
+                            volume_score = min(100, max(0, (latest / mean_val) * 12))
                 else:
                     volume_score = 50
 
