@@ -325,8 +325,11 @@ class MarketScanner:
                 relaxed_vol = self.min_volume_usd * 0.5
                 relaxed_chg = self.min_24h_change * 0.5
                 for symbol, data in tickers.items():
+
                     if not symbol.endswith('/USDT'):
+                        print(f"🔎 Cek {symbol} (tidak USDT)")
                         continue
+
                     quote_vol = data.get('quoteVolume')
                     pct_change = data.get('percentage')
                     last_price = data.get('last')
