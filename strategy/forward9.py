@@ -321,6 +321,24 @@ class MarketScanner:
                 }
 
             if not valid_pairs:
+                print("⚠️ Tidak ada aset lolos kriteria ketat — mencoba kriteria lebih longgar...")
+                relaxed_vol = self.min_volume_usd * 0.5
+                relaxed_chg = self.min_24h_change * 0.5
+                for symbol, data in tickers.items():
+                    if not symbol.endswith('/USDT'):
+                        continue
+                    quote_vol = data.get('quoteVolume')
+                    pct_change = data.get('percentage')
+                    last_price = data.get('last')
+                    if quote_vol is None or pct_change is None or last_price is None:
+                        continue
+                    if last_price <= 0.001 or abs(pct_change) >= 50.0:
+                        continue
+                    if (quote_vol > relaxed_vol and
+                        abs(pct_change) > relaxed_chg):
+                        valid_pairs[symbol] = data
+
+            if not valid_pairs:
                 print("⚠️ Tidak ada pasangan USDT yang valid dari Binance")
                 return self.get_default_symbols()
 
@@ -349,6 +367,7 @@ class MarketScanner:
             top_symbols = df.nlargest(self.max_symbols, 'activity_score')
 
             if len(top_symbols) == 0:
+                print('⚠️ Tidak ada aset TOP yang lolos kriteria — fallback ke default')
                 return self.get_default_symbols()
 
             print(f"✅ BERHASIL MENDAPATKAN {len(top_symbols)} ASET TRENDING (berdasarkan activity score):")
