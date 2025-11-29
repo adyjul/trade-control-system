@@ -330,6 +330,7 @@ class MarketScanner:
                     quote_vol = data.get('quoteVolume')
                     pct_change = data.get('percentage')
                     last_price = data.get('last')
+                    print(f"🔎 Cek {symbol} (quoteVolume: {quote_vol:.2f}, percentage: {pct_change:.2f}, last: {last_price:.4f})")
                     if quote_vol is None or pct_change is None or last_price is None:
                         continue
                     if last_price <= 0.001 or abs(pct_change) >= 50.0:
