@@ -1418,8 +1418,8 @@ def run_forward_test():
             rsi = current_row['rsi']
             volume_ratio = volume / current_row['volume_ma20']
 
-            rsi_long_ok = (rsi < 70) and (rsi > 30) and (volume_ratio > 1.5)  # RSI < 70 untuk long
-            rsi_short_ok = (rsi > 30) and (rsi < 70) and (volume_ratio > 1.5) # RSI > 30 untuk short
+            # rsi_long_ok = (rsi < 70) and (rsi > 30) and (volume_ratio > 1.5)  # RSI < 70 untuk long
+            # rsi_short_ok = (rsi > 30) and (rsi < 70) and (volume_ratio > 1.5) # RSI > 30 untuk short
 
             if market_regime in ['STRONG_BULL', 'BULL']:
                 allow_short = False
@@ -1437,7 +1437,7 @@ def run_forward_test():
                                 allow_long and
                                 mtf_score >= MTF_MIN_SCORE and 
                                 mtf_direction >= MTF_DIRECTION_THRESHOLD
-                                and rsi_long_ok
+                                # and rsi_long_ok
                                 )
 
             high_quality_short = (
@@ -1451,7 +1451,7 @@ def run_forward_test():
                                 allow_short and 
                                 mtf_score >= MTF_MIN_SCORE and 
                                 mtf_direction <= -MTF_DIRECTION_THRESHOLD
-                                and rsi_short_ok
+                                # and rsi_short_ok
                                 )
             
             # if price_in_long_zone or price_in_short_zone:
