@@ -299,87 +299,35 @@ class MarketScanner:
         self._rate_limit()
         try:
             tickers = self.exchange.fetch_tickers()
-
-            # Kumpulkan semua USDT pairs yang valid
-            valid_pairs = {}
+            usdt_pairs = {}
             for symbol, data in tickers.items():
-                if not symbol.endswith('/USDT'):
+                base_pair = symbol.split(':')[0]
+                if not base_pair.endswith('/USDT'):
                     continue
-                quote_vol = data.get('quoteVolume')
-                pct_change = data.get('percentage')
-                last_price = data.get('last')
-                if (quote_vol is None or pct_change is None or last_price is None or
-                    last_price <= 0.001):
+                if ('quoteVolume' not in data or 'percentage' not in data or
+                    data['quoteVolume'] is None or data['percentage'] is None):
                     continue
-                # Hindari pump/dump ekstrem langsung di sini
-                if abs(pct_change) >= 50.0:
-                    continue
-                valid_pairs[symbol] = {
-                    'quoteVolume': quote_vol,
-                    'percentage': pct_change,
-                    'last': last_price
-                }
+                if (data['quoteVolume'] > self.min_volume_usd and
+                    abs(data['percentage']) > self.min_24h_change and
+                    data['last'] > 0.001):
+                    usdt_pairs[symbol] = data
 
-            if not valid_pairs:
-                print("⚠️ Tidak ada aset lolos kriteria ketat — mencoba kriteria lebih longgar...")
-                relaxed_vol = self.min_volume_usd * 0.5
-                relaxed_chg = self.min_24h_change * 0.5
-                for symbol, data in tickers.items():
-
-                    if not symbol.endswith('/USDT'):
-                        print(f"🔎 Cek {symbol} (tidak USDT)")
-                        continue
-
-                    quote_vol = data.get('quoteVolume')
-                    pct_change = data.get('percentage')
-                    last_price = data.get('last')
-                    print(f"🔎 Cek {symbol} (quoteVolume: {quote_vol:.2f}, percentage: {pct_change:.2f}, last: {last_price:.4f})")
-                    if quote_vol is None or pct_change is None or last_price is None:
-                        continue
-                    if last_price <= 0.001 or abs(pct_change) >= 50.0:
-                        continue
-                    if (quote_vol > relaxed_vol and
-                        abs(pct_change) > relaxed_chg):
-                        valid_pairs[symbol] = data
-
-            if not valid_pairs:
-                print("⚠️ Tidak ada pasangan USDT yang valid dari Binance")
+            if not usdt_pairs:
+                print("⚠️ Tidak ada aset yang memenuhi kriteria volume dan pergerakan")
                 return self.get_default_symbols()
 
-            # Buat DataFrame
-            df = pd.DataFrame.from_dict(valid_pairs, orient='index')
+            df = pd.DataFrame.from_dict(usdt_pairs, orient='index')
             df['symbol'] = df.index
             df['volume_usd'] = df['quoteVolume']
             df['change_24h'] = df['percentage']
             df['price'] = df['last']
-            df['abs_change'] = df['change_24h'].abs()
-
-            # Filter volume minimal (opsional sebagai lantai keamanan)
-            df = df[df['volume_usd'] >= min(self.min_volume_usd, df['volume_usd'].quantile(0.2))]
-
-            if len(df) < 3:
-                print("⚠️ Terlalu sedikit aset setelah filter volume — fallback ke default")
-                return self.get_default_symbols()
-
-            # Hitung activity score: kombinasi volume & perubahan relatif
-            # Gunakan ranking persentil untuk normalisasi
-            df['vol_rank'] = df['volume_usd'].rank(pct=True)
-            df['chg_rank'] = df['abs_change'].rank(pct=True)
-            df['activity_score'] = (df['vol_rank'] * 0.6 + df['chg_rank'] * 0.4)  # bobot: volume lebih penting
-
-            # Ambil top berdasarkan activity_score, bukan hanya volume
-            top_symbols = df.nlargest(self.max_symbols, 'activity_score')
-
-            if len(top_symbols) == 0:
-                print('⚠️ Tidak ada aset TOP yang lolos kriteria — fallback ke default')
-                return self.get_default_symbols()
-
-            print(f"✅ BERHASIL MENDAPATKAN {len(top_symbols)} ASET TRENDING (berdasarkan activity score):")
+            df = df[abs(df['change_24h']) < 50.0]
+            df = df[df['volume_usd'] > self.min_volume_usd]
+            top_symbols = df.sort_values('volume_usd', ascending=False).head(self.max_symbols)
+            print(f"✅ BERHASIL MENDAPATKAN {len(top_symbols)} ASET TRENDING:")
             for i, (_, row) in enumerate(top_symbols.iterrows()):
-                print(f"   #{i+1} {row['symbol']} | Vol: ${row['volume_usd']:,.0f} | Chg: {row['change_24h']:+.2f}% | Score: {row['activity_score']:.3f}")
-
+                print(f"   #{i+1} {row['symbol']} | Vol: ${row['volume_usd']:,.0f} | Chg: {row['change_24h']:+.2f}% | P: ${row['price']:.4f}")
             return top_symbols['symbol'].tolist()
-
         except Exception as e:
             print(f"❌ Error mengambil data dari Binance: {e}")
             print("🔄 Menggunakan daftar aset default...")
