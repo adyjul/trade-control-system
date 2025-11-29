@@ -700,9 +700,11 @@ class MarketScanner:
         last_open = df['open'].iloc[-1]
 
         if pd.isna(last_vol) or pd.isna(last_ma20) or last_ma20 == 0:
+            print('ini nol kawan')
             vol_bias = 0
         else:
             vol_ratio = last_vol / last_ma20
+            print(f'vol ratio: {vol_ratio}')
             if vol_ratio > 1.5:
                 vol_bias = 0.3 if last_close > last_open else -0.3
             else:
