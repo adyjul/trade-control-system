@@ -311,7 +311,10 @@ class MarketScanner:
                 base_pair = symbol.split(':')[0]
                 if not base_pair.endswith('/USDT'):
                     continue
-                
+
+                if not base_pair.isascii():
+                    print("❗ SIMBOL ANEH DITEMUKAN:", repr(symbol))
+
                 if not self.is_symbol_trading(symbol):
                     print(f"⚠️ {symbol} tidak aktif")
                     continue
