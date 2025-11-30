@@ -48,7 +48,7 @@ if TIMEFRAME == '15m':
     
     # Interval Timing
     DATA_UPDATE_INTERVAL = 900 
-    RESCAN_INTERVAL_MINUTES = 60
+    RESCAN_INTERVAL_MINUTES = 240
     MIN_TIME_BETWEEN_SCANS = 30
     
     # Volume & Momentum
@@ -297,6 +297,7 @@ class MarketScanner:
     def get_trending_symbols(self):
         print("🔍 MENGAMBIL DAFTAR ASET TRENDING DARI BINANCE...")
         self._rate_limit()
+
         try:
             tickers = self.exchange.fetch_tickers()
             usdt_pairs = {}
@@ -327,7 +328,9 @@ class MarketScanner:
             print(f"✅ BERHASIL MENDAPATKAN {len(top_symbols)} ASET TRENDING:")
             for i, (_, row) in enumerate(top_symbols.iterrows()):
                 print(f"   #{i+1} {row['symbol']} | Vol: ${row['volume_usd']:,.0f} | Chg: {row['change_24h']:+.2f}% | P: ${row['price']:.4f}")
+
             return top_symbols['symbol'].tolist()
+        
         except Exception as e:
             print(f"❌ Error mengambil data dari Binance: {e}")
             print("🔄 Menggunakan daftar aset default...")
@@ -1047,8 +1050,9 @@ def run_forward_test():
     last_oi = None
     last_oi_update = datetime.now()
     OI_MIN_CHANGE_THRESHOLD = 2.0
-    # oi_confirmed_long = False
-    # oi_confirmed_short = False
+    oi_confirmed_long = False
+    oi_confirmed_short = False
+
     oi_state = {
                     'last_oi': None,
                     'long': False,
@@ -1244,7 +1248,7 @@ def run_forward_test():
 
                         if current_oi is not None:
                             oi_state['last_oi'] = current_oi
-                            print(f"OI terbaru untuk {current_symbol}: {current_oi}")
+                            print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
                         else:
                             print('data OI belum lengkap')
                         
@@ -1457,7 +1461,7 @@ def run_forward_test():
                                 price_in_long_zone and
                                 vol_confirmed and 
                                 atr_confirmed and 
-                                # oi_confirmed_long and
+                                oi_confirmed_long and
                                 ema_fast > ema_slow and 
                                 adx > adx_threshold and 
                                 strong_momentum and 
@@ -1471,7 +1475,7 @@ def run_forward_test():
                                 broke_short_prev and 
                                 price_in_short_zone and 
                                 vol_confirmed and atr_confirmed and 
-                                # oi_confirmed_short and
+                                oi_confirmed_short and
                                 ema_fast < ema_slow and 
                                 adx > adx_threshold and 
                                 strong_momentum and 
@@ -1803,29 +1807,36 @@ def get_oi_confirmation(df, current_oi, last_oi, atr):
 
     oi_change_pct = ((current_oi - last_oi) / last_oi) * 100
     candle_body = abs(df['close'].iloc[-1] - df['open'].iloc[-1])
-    big_candle = candle_body > (0.20 * atr)
-
     price_up = df['close'].iloc[-1] > df['open'].iloc[-1]
     price_down = df['close'].iloc[-1] < df['open'].iloc[-1]
 
-    # Default -> no OI signal
+    # ATR lebih kecil biar sering valid
+    big_candle = candle_body > (0.08 * atr)
+
+    OI_MIN = 0.35
+    # # dynamic OI threshold
+    # if timeframe == '5m':
+    #     OI_MIN = 0.20
+    # elif timeframe == '15m':
+    # else:
+    #     OI_MIN = 1.0
+
     long_confirm = False
     short_confirm = False
 
-    # RULE 1: OI naik + big candle = valid breakout
-    if oi_change_pct > 0.3 and big_candle:
+    # Valid breakout
+    if oi_change_pct > OI_MIN and big_candle:
         if price_up:
             long_confirm = True
-            print(f"🟢 OI naik {oi_change_pct:.2f}% dan big candle, konfirmasi long")
         if price_down:
             short_confirm = True
-            print(f"🟢 OI naik {oi_change_pct:.2f}% dan big candle, konfirmasi short")
+        print(f"🟢 OI naik {oi_change_pct:.2f}%, valid breakout → {('LONG' if price_up else 'SHORT')}")
 
-    # RULE 2: OI turun = jangan entry apapun (liquidation close)
-    if oi_change_pct < -0.5:
+    # If OI turun, jangan entry
+    if oi_change_pct < -0.3:
         long_confirm = False
         short_confirm = False
-        print(f"🔴 OI turun {oi_change_pct:.2f}%, jangan entry apapun (liquidation close)")
+        print(f"🔴 OI turun {oi_change_pct:.2f}% → Hindari entry")
 
     return long_confirm, short_confirm
 
