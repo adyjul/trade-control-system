@@ -133,16 +133,19 @@ class MarketScanner:
             'ICP': 'MID_CAP', 'INJ': 'MID_CAP', 'TON': 'MID_CAP', 'ARB': 'MID_CAP',
             'NEAR': 'MID_CAP', 'OP': 'MID_CAP', 'APT': 'MID_CAP', 'SUI': 'MID_CAP',
             'ATOM': 'MID_CAP', 'ETC': 'MID_CAP', 'FIL': 'MID_CAP', 'RNDR': 'MID_CAP',
+            'ENA': 'MID_CAP','TIA': 'MID_CAP','ORCA': 'MID_CAP','ARC': 'MID_CAP', 
+            'TRX': 'MID_CAP','AAVE': 'MID_CAP',
             
             # SMALL_CAP (Market cap $10M-$100M, likuiditas sedang)
             'SEI': 'SMALL_CAP', 'IRYS': 'SMALL_CAP', 'BONK': 'SMALL_CAP', 
             'WIF': 'SMALL_CAP', 'PYTH': 'SMALL_CAP', 'JTO': 'SMALL_CAP',
-            'TAO': 'SMALL_CAP', 'STRK': 'SMALL_CAP', 'ONDO': 'SMALL_CAP',
+            'TAO': 'SMALL_CAP', 'STRK': 'SMALL_CAP', 'ONDO': 'SMALL_CAP','ASTER': 'SMALL_CAP',
+            'TRS': 'SMALL_CAP', 'ARCON': 'SMALL_CAP',
             
             # MEME (Volatilitas sangat tinggi, driven by hype)
             'SHIB': 'MEME', 'PEPE': 'MEME', 'FLOKI': 'MEME', 
-            '1000PEPE': 'MEME', '1000FLOKI': 'MEME', 'BONK': 'MEME', 'WIF': 'MEME',
-            'MOG': 'MEME', 'TURBO': 'MEME', 'BOME': 'MEME'
+            '1000PEPE': 'MEME', '1000FLOKI': 'MEME', 'BONK': 'MEME', 'WIF': 'MEME','GIG': 'MEME',
+            'MOG': 'MEME', 'TURBO': 'MEME', 'BOME': 'MEME','HYPE': 'MEME', 'GIGGLE': 'MEME', 
         }
 
     def _rate_limit(self):
@@ -176,11 +179,11 @@ class MarketScanner:
         try:
             if 'atr' not in df.columns or df['atr'].isna().all():
                 df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+
             df['atr_pct'] = (df['atr'] / df['close']) * 100
             avg_atr_pct = df['atr_pct'].rolling(VOLATILITY_WINDOW).mean().iloc[-1]
 
-            print(symbol, avg_atr_pct)
-            if pd.isna(avg_atr_pct) or avg_atr_pct == 0:
+            if pd.isna(avg_atr_pct) or avg_atr_pct < 0.01 or avg_atr_pct > 10.0:
                 return self.get_default_asset_profile(symbol)
 
             df['vol_ma20'] = df['volume'].rolling(20).mean()
@@ -223,7 +226,6 @@ class MarketScanner:
             'asset_class': asset_class,
             'source': 'DEFAULT_FALLBACK'
         })
-        print(f"🔄 Menggunakan DEFAULT ASSET PROFILE untuk {symbol}:")
         print(f"🔄 Default Profile untuk {symbol}: {asset_class}")
         return profile
 
@@ -1126,8 +1128,6 @@ def run_forward_test():
 
     # Ambil profil aset dan regime pasar
     asset_profile = scanner.get_asset_profile(current_symbol, df)
-    print(f"📊 Symbol Aset: {current_symbol}")
-    print(f"📊 Profil Aset: {asset_profile}")
     market_regime = scanner.detect_market_regime(df)
     dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
 
