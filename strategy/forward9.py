@@ -293,6 +293,12 @@ class MarketScanner:
         
         return thresholds
     
+    def is_symbol_trading(self, symbol):
+        try:
+            market = self.exchange.market(symbol)
+            return market.get('active', False) and market['info'].get('status') == 'TRADING'
+        except:
+            return False
 
     def get_trending_symbols(self):
         print("🔍 MENGAMBIL DAFTAR ASET TRENDING DARI BINANCE...")
@@ -305,9 +311,15 @@ class MarketScanner:
                 base_pair = symbol.split(':')[0]
                 if not base_pair.endswith('/USDT'):
                     continue
+                
+                if not self.is_symbol_trading(symbol):
+                    print(f"⚠️ {symbol} tidak aktif")
+                    continue
+                
                 if ('quoteVolume' not in data or 'percentage' not in data or
                     data['quoteVolume'] is None or data['percentage'] is None):
                     continue
+                
                 if (data['quoteVolume'] > self.min_volume_usd and
                     abs(data['percentage']) > self.min_24h_change and
                     data['last'] > 0.001):
@@ -1241,14 +1253,15 @@ def run_forward_test():
                         current_close = df['close'].iloc[-1]
                         current_oi = get_open_interest(scanner.exchange, current_symbol)
                         atr_value = df['atr'].iloc[-1]  
-                        long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value)
 
+                        print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
+
+                        long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value)
                         oi_state['long'] = long_confirm
                         oi_state['short'] = short_confirm
 
                         if current_oi is not None:
                             oi_state['last_oi'] = current_oi
-                            print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
                         else:
                             print('data OI belum lengkap')
                         
