@@ -308,12 +308,15 @@ class MarketScanner:
             tickers = self.exchange.fetch_tickers()
             usdt_pairs = {}
             for symbol, data in tickers.items():
+                
+                if not symbol.isascii():
+                    continue
+                if symbol not in self.exchange.markets:
+                    continue
+
                 base_pair = symbol.split(':')[0]
                 if not base_pair.endswith('/USDT'):
                     continue
-                
-                if not base_pair.isascii():
-                    print("❗ SIMBOL ANEH DITEMUKAN:", repr(symbol))
 
                 if not self.is_symbol_trading(symbol):
                     print(f"⚠️ {symbol} tidak aktif")
