@@ -178,6 +178,8 @@ class MarketScanner:
                 df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
             df['atr_pct'] = (df['atr'] / df['close']) * 100
             avg_atr_pct = df['atr_pct'].rolling(VOLATILITY_WINDOW).mean().iloc[-1]
+
+            print(symbol, avg_atr_pct)
             if pd.isna(avg_atr_pct) or avg_atr_pct == 0:
                 return self.get_default_asset_profile(symbol)
 
