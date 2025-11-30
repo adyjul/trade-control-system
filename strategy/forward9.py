@@ -312,9 +312,9 @@ class MarketScanner:
                 if not base_pair.endswith('/USDT'):
                     continue
                 
-                # if not self.is_symbol_trading(symbol):
-                #     print(f"⚠️ {symbol} tidak aktif")
-                #     continue
+                if not self.is_symbol_trading(symbol):
+                    print(f"⚠️ {symbol} tidak aktif")
+                    continue
                 
                 if ('quoteVolume' not in data or 'percentage' not in data or
                     data['quoteVolume'] is None or data['percentage'] is None):
