@@ -123,11 +123,26 @@ class MarketScanner:
             'DEFAULT': {'atr_threshold': 0.25, 'volume_multiplier': 1.6, 'level_multiplier': 0.7, 'risk_pct': 0.010}
         }
         self.asset_classification = {
+            # MAJOR (Market cap > $1B, likuiditas sangat tinggi)
             'BTC': 'MAJOR', 'ETH': 'MAJOR', 'BNB': 'MAJOR',
+            'XRP': 'MAJOR', 'ADA': 'MAJOR', 'DOGE': 'MAJOR', 
+            'LTC': 'MAJOR', 'BCH': 'MAJOR', 'DOT': 'MAJOR',
+            
+            # MID_CAP (Market cap $100M-$1B, likuiditas baik)
             'SOL': 'MID_CAP', 'AVAX': 'MID_CAP', 'MATIC': 'MID_CAP', 'LINK': 'MID_CAP',
             'ICP': 'MID_CAP', 'INJ': 'MID_CAP', 'TON': 'MID_CAP', 'ARB': 'MID_CAP',
-            'DOGE': 'MEME', 'SHIB': 'MEME', 'PEPE': 'MEME', 'FLOKI': 'MEME',
-            'SEI': 'SMALL_CAP', 'SUI': 'SMALL_CAP', 'APT': 'SMALL_CAP'
+            'NEAR': 'MID_CAP', 'OP': 'MID_CAP', 'APT': 'MID_CAP', 'SUI': 'MID_CAP',
+            'ATOM': 'MID_CAP', 'ETC': 'MID_CAP', 'FIL': 'MID_CAP', 'RNDR': 'MID_CAP',
+            
+            # SMALL_CAP (Market cap $10M-$100M, likuiditas sedang)
+            'SEI': 'SMALL_CAP', 'IRYS': 'SMALL_CAP', 'BONK': 'SMALL_CAP', 
+            'WIF': 'SMALL_CAP', 'PYTH': 'SMALL_CAP', 'JTO': 'SMALL_CAP',
+            'TAO': 'SMALL_CAP', 'STRK': 'SMALL_CAP', 'ONDO': 'SMALL_CAP',
+            
+            # MEME (Volatilitas sangat tinggi, driven by hype)
+            'SHIB': 'MEME', 'PEPE': 'MEME', 'FLOKI': 'MEME', 
+            '1000PEPE': 'MEME', '1000FLOKI': 'MEME', 'BONK': 'MEME', 'WIF': 'MEME',
+            'MOG': 'MEME', 'TURBO': 'MEME', 'BOME': 'MEME'
         }
 
     def _rate_limit(self):
@@ -1262,7 +1277,7 @@ def run_forward_test():
 
                         print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
 
-                        long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value)
+                        long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value,oi_state['threshold'])
                         oi_state['long'] = long_confirm
                         oi_state['short'] = short_confirm
 
@@ -1820,7 +1835,7 @@ def calculate_oi_change(current_oi, previous_oi):
         return 0.0
     return ((current_oi - previous_oi) / previous_oi) * 100
 
-def get_oi_confirmation(df, current_oi, last_oi, atr):
+def get_oi_confirmation(df, current_oi, last_oi, atr, treshold = 0.35):
 
     if last_oi is None or current_oi is None:
         return False, False
@@ -1833,14 +1848,12 @@ def get_oi_confirmation(df, current_oi, last_oi, atr):
     # ATR lebih kecil biar sering valid
     big_candle = candle_body > (0.08 * atr)
 
-    OI_MIN = 0.35
-
     long_confirm = False
     short_confirm = False
 
-    print(f"📊 Perubahan OI sekarang {oi_change_pct:.2f}%")
+    print(f"📊 Perubahan OI sekarang {oi_change_pct:.2f}% dengan treshold {treshold}")
     # Valid breakout
-    if oi_change_pct > OI_MIN and big_candle:
+    if oi_change_pct > treshold and big_candle:
         if price_up:
             long_confirm = True
         if price_down:
