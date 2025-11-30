@@ -102,12 +102,12 @@ class MarketScanner:
                 'apiKey': API_KEY,
                 'secret': API_SECRET,
                 'enableRateLimit': True,
-                'options': {'defaultType': 'swap'}
+                'options': {'defaultType': 'future'}
             })
         else:
             self.exchange = ccxt.binance({
                 'enableRateLimit': True,
-                'options': {'defaultType': 'swap'}
+                'options': {'defaultType': 'future'}
             })
         
         self.min_volume_usd = 300000
@@ -311,7 +311,7 @@ class MarketScanner:
                 base_pair = symbol.split(':')[0]
                 if not base_pair.endswith('/USDT'):
                     continue
-
+                
                 if not base_pair.isascii():
                     print("❗ SIMBOL ANEH DITEMUKAN:", repr(symbol))
 
@@ -1684,7 +1684,7 @@ def run_forward_test():
 # --- FUNGSI FETCH DATA ---
 def fetch_ohlcv_data(symbol, timeframe, limit):
     """Ambil data OHLCV dari exchange"""
-    exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
+    exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'future'}})
     try:
         # Tambahkan sleep kecil untuk membantu menghindari rate limit
         time.sleep(0.1) 
