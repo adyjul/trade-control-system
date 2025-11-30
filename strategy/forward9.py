@@ -172,6 +172,7 @@ class MarketScanner:
 
     def get_asset_profile(self, symbol, df):
         if len(df) < 50:
+            print('masuk di sini')
             return self.get_default_asset_profile(symbol)
         try:
             if 'atr' not in df.columns or df['atr'].isna().all():
