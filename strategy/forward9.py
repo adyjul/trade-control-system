@@ -1821,6 +1821,7 @@ def calculate_oi_change(current_oi, previous_oi):
     return ((current_oi - previous_oi) / previous_oi) * 100
 
 def get_oi_confirmation(df, current_oi, last_oi, atr):
+
     if last_oi is None or current_oi is None:
         return False, False
 
@@ -1833,16 +1834,11 @@ def get_oi_confirmation(df, current_oi, last_oi, atr):
     big_candle = candle_body > (0.08 * atr)
 
     OI_MIN = 0.35
-    # # dynamic OI threshold
-    # if timeframe == '5m':
-    #     OI_MIN = 0.20
-    # elif timeframe == '15m':
-    # else:
-    #     OI_MIN = 1.0
 
     long_confirm = False
     short_confirm = False
 
+    print(f"📊 Perubahan OI sekarang {oi_change_pct:.2f}%")
     # Valid breakout
     if oi_change_pct > OI_MIN and big_candle:
         if price_up:
