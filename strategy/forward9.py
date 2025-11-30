@@ -1266,7 +1266,7 @@ def run_forward_test():
                         oi_state['long'] = long_confirm
                         oi_state['short'] = short_confirm
 
-                        if current_oi is not None and oi_state['last_oi'] is not None:
+                        if current_oi is not None:
                             oi_state['last_oi'] = current_oi
                         else:
                             print('data OI belum lengkap')
