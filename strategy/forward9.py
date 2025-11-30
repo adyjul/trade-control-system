@@ -1123,6 +1123,8 @@ def run_forward_test():
 
     # Ambil profil aset dan regime pasar
     asset_profile = scanner.get_asset_profile(current_symbol, df)
+    print(f"📊 Symbol Aset: {current_symbol}")
+    print(f"📊 Profil Aset: {asset_profile}")
     market_regime = scanner.detect_market_regime(df)
     dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
 
