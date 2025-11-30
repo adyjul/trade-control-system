@@ -312,14 +312,14 @@ class MarketScanner:
                 if not base_pair.endswith('/USDT'):
                     continue
                 
-                if not self.is_symbol_trading(symbol):
-                    print(f"⚠️ {symbol} tidak aktif")
-                    continue
+                # if not self.is_symbol_trading(symbol):
+                #     print(f"⚠️ {symbol} tidak aktif")
+                #     continue
                 
                 if ('quoteVolume' not in data or 'percentage' not in data or
                     data['quoteVolume'] is None or data['percentage'] is None):
                     continue
-                
+
                 if (data['quoteVolume'] > self.min_volume_usd and
                     abs(data['percentage']) > self.min_24h_change and
                     data['last'] > 0.001):
