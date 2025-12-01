@@ -1220,7 +1220,13 @@ def run_forward_test():
 
                                     symbol_base = current_symbol.split('/')[0]
                                     asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-                                    threshold_map = {'MAJOR': 0.8, 'MID_CAP': 1.0, 'SMALL_CAP': 1.5, 'MEME': 2.0, 'DEFAULT': 1.8}
+                                    threshold_map = {
+                                        'MAJOR': 1.2,        # perubahan OI signifikan
+                                        'MID_CAP': 0.8,      # volatilitas sedang
+                                        'SMALL_CAP': 0.6,    # perubahan OI lebih halus
+                                        'MEME': 0.4,         # OI sangat stabil
+                                        'DEFAULT': 0.7       # Fallback aman untuk semua aset
+                                    }
                                     oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
                                     # end reset OI 
 
@@ -1272,7 +1278,13 @@ def run_forward_test():
                         
                         symbol_base = current_symbol.split('/')[0]
                         asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-                        threshold_map = {'MAJOR': 0.8, 'MID_CAP': 1.0, 'SMALL_CAP': 1.5, 'MEME': 2.0, 'DEFAULT': 1.8}
+                        threshold_map = {
+                            'MAJOR': 1.2,        # perubahan OI signifikan
+                            'MID_CAP': 0.8,      #  volatilitas sedang
+                            'SMALL_CAP': 0.6,    # Altcoin kecil - perubahan OI lebih halus
+                            'MEME': 0.4,         # OI sangat stabil
+                            'DEFAULT': 0.7       # Fallback aman untuk semua aset
+                        }
                         oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
 
                         prev_close = df['close'].iloc[-2]
