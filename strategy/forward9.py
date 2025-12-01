@@ -1222,10 +1222,10 @@ def run_forward_test():
                                     asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
                                     threshold_map = {
                                         'MAJOR': 1.2,        # perubahan OI signifikan
-                                        'MID_CAP': 0.8,      # volatilitas sedang
-                                        'SMALL_CAP': 0.6,    # perubahan OI lebih halus
-                                        'MEME': 0.4,         # OI sangat stabil
-                                        'DEFAULT': 0.7       # Fallback aman untuk semua aset
+                                        'MID_CAP': 0.5,      # volatilitas sedang
+                                        'SMALL_CAP': 0.15,    # perubahan OI lebih halus
+                                        'MEME': 0.3,         # OI sangat stabil
+                                        'DEFAULT': 0.15       # Fallback aman untuk semua aset
                                     }
                                     oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
                                     # end reset OI 
