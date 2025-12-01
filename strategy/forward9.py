@@ -1291,20 +1291,24 @@ def run_forward_test():
                         current_close = df['close'].iloc[-1]
                         current_oi = get_open_interest(scanner.exchange, current_symbol)
                         atr_value = df['atr'].iloc[-1]  
+                        if asset_class == 'MAJOR' or asset_class == 'DEFAULT':
+                            print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
 
-                        print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
+                            long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value,oi_state['threshold'])
+                            oi_state['long'] = long_confirm
+                            oi_state['short'] = short_confirm
 
-                        long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value,oi_state['threshold'])
-                        oi_state['long'] = long_confirm
-                        oi_state['short'] = short_confirm
-
-                        if current_oi is not None:
-                            oi_state['last_oi'] = current_oi
+                            if current_oi is not None:
+                                oi_state['last_oi'] = current_oi
+                            else:
+                                print('data OI belum lengkap')
+                            
+                            oi_confirmed_long = long_confirm
+                            oi_confirmed_short = short_confirm
                         else:
-                            print('data OI belum lengkap')
-                        
-                        oi_confirmed_long = long_confirm
-                        oi_confirmed_short = short_confirm
+                            print('OI di SKIP karena asset bukan MAJOR atau DEFAULT')
+                            i_confirmed_long = True
+                            oi_confirmed_short = True
 
                         # hasil perhitungan OI 
 
