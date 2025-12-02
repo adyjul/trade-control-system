@@ -1291,7 +1291,7 @@ def run_forward_test():
                         current_close = df['close'].iloc[-1]
                         current_oi = get_open_interest(scanner.exchange, current_symbol)
                         atr_value = df['atr'].iloc[-1]  
-                        if asset_class == 'MAJOR' or asset_class == 'DEFAULT':
+                        if asset_class == 'MAJOR':
                             print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
 
                             long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value,oi_state['threshold'])
@@ -1306,7 +1306,7 @@ def run_forward_test():
                             oi_confirmed_long = long_confirm
                             oi_confirmed_short = short_confirm
                         else:
-                            print('OI di SKIP karena asset bukan MAJOR atau DEFAULT')
+                            print('OI di SKIP karena asset bukan MAJOR')
                             i_confirmed_long = True
                             oi_confirmed_short = True
 
