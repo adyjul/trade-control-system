@@ -535,21 +535,23 @@ class MarketScanner:
             
             # Hitung directional bias dan setup probability
             directional_bias =self.calculate_directional_bias(symbol, df)
-            has_setup = self.has_high_probability_setup(df, directional_bias)
-            
-            if has_setup:
-                # Hitung confidence score berdasarkan multiple faktor
-                confidence_score = self.calculate_setup_confidence(df, directional_bias)
-                high_potential_assets.append({
-                    'symbol': symbol,
-                    'activity_score': asset['activity_score'],
-                    'directional_bias': directional_bias,
-                    'confidence_score': confidence_score,
-                    'setup_type': 'BULLISH' if directional_bias > 0.3 else 'BEARISH'
-                })
-                print(f"   ✅ {symbol} - SETUP DITEMUKAN! Confidence: {confidence_score:.2f} | Bias: {directional_bias:+.2f}")
-            else:
-                print(f"   ⚪ {symbol} - Tidak ada setup probabilitas tinggi")
+            confidence_score = self.calculate_setup_confidence(df, directional_bias)
+            high_potential_assets.append({
+                'symbol': symbol,
+                'activity_score': asset['activity_score'],
+                'directional_bias': directional_bias,
+                'confidence_score': confidence_score,
+                'setup_type': 'BULLISH' if directional_bias > 0.3 else 'BEARISH'
+            })
+
+
+            # if has_setup:
+            #     # Hitung confidence score berdasarkan multiple faktor
+            #     confidence_score = self.calculate_setup_confidence(df, directional_bias)
+
+            #     print(f"   ✅ {symbol} - SETUP DITEMUKAN! Confidence: {confidence_score:.2f} | Bias: {directional_bias:+.2f}")
+            # else:
+            #     print(f"   ⚪ {symbol} - Tidak ada setup probabilitas tinggi")
         
         # Pilih aset terbaik berdasarkan confidence score
         if high_potential_assets:
@@ -1516,7 +1518,7 @@ def run_forward_test():
                                 price_in_long_zone and
                                 vol_confirmed and 
                                 atr_confirmed and 
-                                oi_confirmed_long and
+                                # oi_confirmed_long and
                                 ema_fast > ema_slow and 
                                 adx > adx_threshold and 
                                 strong_momentum and 
@@ -1530,7 +1532,7 @@ def run_forward_test():
                                 broke_short_prev and 
                                 price_in_short_zone and 
                                 vol_confirmed and atr_confirmed and 
-                                oi_confirmed_short and
+                                # oi_confirmed_short and
                                 ema_fast < ema_slow and 
                                 adx > adx_threshold and 
                                 strong_momentum and 
