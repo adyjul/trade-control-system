@@ -1465,10 +1465,14 @@ def run_forward_test():
                 
             if TIMEFRAME == '15m':
                 # Zona entry lebih longgar
-                long_zone_start = long_level - (atr * ZONE_START_FACTOR * level_multiplier)
-                long_zone_end = long_level + (atr * ZONE_END_FACTOR * level_multiplier)
-                short_zone_start = short_level - (atr * ZONE_END_FACTOR * level_multiplier)
-                short_zone_end = short_level + (atr * ZONE_START_FACTOR * level_multiplier)
+                # long_zone_start = long_level - (atr * ZONE_START_FACTOR * level_multiplier)
+                # long_zone_end = long_level + (atr * ZONE_END_FACTOR * level_multiplier)
+                # short_zone_start = short_level - (atr * ZONE_END_FACTOR * level_multiplier)
+                # short_zone_end = short_level + (atr * ZONE_START_FACTOR * level_multiplier)
+                long_zone_start = long_level - (atr * 0.8 * level_multiplier)
+                long_zone_end = long_level + (atr * 1.2 * level_multiplier)
+                short_zone_start = short_level - (atr * 1.2 * level_multiplier)
+                short_zone_end = short_level + (atr * 0.8 * level_multiplier)
             else:
                 # Konfigurasi default untuk 5m
                 long_zone_start = long_level - (atr * 0.8 * level_multiplier)
