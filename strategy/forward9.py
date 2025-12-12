@@ -1547,11 +1547,11 @@ def run_forward_test():
                                 # and rsi_short_ok
                                 )
             
-            # if price_in_long_zone or price_in_short_zone:
-            #     print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
-            #     print(f"   🔵 LONG Zone: {long_zone_start:.6f} - {long_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_long_zone}")
-            #     print(f"   🔴 SHORT Zone: {short_zone_start:.6f} - {short_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_short_zone}")
-            #     print(f"   💪 Momentum Strength: {momentum_strength:.3f} | Strong: {strong_momentum} | DI+: {plus_di:.1f} | DI-: {minus_di:.1f}")
+            if price_in_long_zone or price_in_short_zone:
+                print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
+                print(f"   🔵 LONG Zone: {long_zone_start:.6f} - {long_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_long_zone}")
+                print(f"   🔴 SHORT Zone: {short_zone_start:.6f} - {short_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_short_zone}")
+                print(f"   💪 Momentum Strength: {momentum_strength:.3f} | Strong: {strong_momentum} | DI+: {plus_di:.1f} | DI-: {minus_di:.1f}")
 
 
             # if (retest_long and vol_confirmed and atr_confirmed and
