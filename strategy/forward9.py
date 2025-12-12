@@ -1548,10 +1548,19 @@ def run_forward_test():
                                 )
             
             if price_in_long_zone or price_in_short_zone:
-                print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
-                print(f"   🔵 LONG Zone: {long_zone_start:.6f} - {long_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_long_zone}")
-                print(f"   🔴 SHORT Zone: {short_zone_start:.6f} - {short_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_short_zone}")
-                print(f"   💪 Momentum Strength: {momentum_strength:.3f} | Strong: {strong_momentum} | DI+: {plus_di:.1f} | DI-: {minus_di:.1f}")
+                print(f"broke short: {broke_short_prev} | broke long: {broke_long_prev}")
+                print(f"price in long zone: {price_in_long_zone} | price in short zone: {price_in_short_zone}")
+                print(f"vol confirmed: {vol_confirmed} | atr confirmed: {atr_confirmed}")
+                print(f"ema fast: {ema_fast} | ema slow: {ema_slow}")
+                print(f"adx: {adx} | adx threshold: {adx_threshold}")
+                print(f"strong momentum: {strong_momentum}")
+                print(f"allow long: {allow_long} | allow short: {allow_short}")
+                print(f"mtf score: {mtf_score} | mtf direction: {mtf_direction}")
+                print(f"high quality long: {high_quality_long} | high quality short: {high_quality_short}")
+                # print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
+                # print(f"   🔵 LONG Zone: {long_zone_start:.6f} - {long_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_long_zone}")
+                # print(f"   🔴 SHORT Zone: {short_zone_start:.6f} - {short_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_short_zone}")
+                # print(f"   💪 Momentum Strength: {momentum_strength:.3f} | Strong: {strong_momentum} | DI+: {plus_di:.1f} | DI-: {minus_di:.1f}")
 
 
             # if (retest_long and vol_confirmed and atr_confirmed and
