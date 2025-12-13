@@ -1437,7 +1437,10 @@ def run_forward_test():
 
             ema_slow = current_row['ema_slow']
             ema_fast = current_row['ema_fast']
-            atr_threshold = dynamic_thresholds['atr_threshold']
+            recent_atr_pct = df['atr_pct'].iloc[-100:].quantile(0.3)
+            dynamic_atr_threshold = max(0.15, recent_atr_pct * 0.8)
+            # atr_threshold = dynamic_thresholds['atr_threshold']
+            atr_threshold = dynamic_atr_threshold
             volume_multiplier = dynamic_thresholds['volume_multiplier']
             adx_threshold = dynamic_thresholds['adx_threshold']
             level_multiplier = dynamic_thresholds['level_multiplier']
@@ -1470,10 +1473,11 @@ def run_forward_test():
                 # long_zone_end = long_level + (atr * ZONE_END_FACTOR * level_multiplier)
                 # short_zone_start = short_level - (atr * ZONE_END_FACTOR * level_multiplier)
                 # short_zone_end = short_level + (atr * ZONE_START_FACTOR * level_multiplier)
-                long_zone_start = long_level - (atr * 0.8 * level_multiplier)
-                long_zone_end = long_level + (atr * 1.2 * level_multiplier)
-                short_zone_start = short_level - (atr * 1.2 * level_multiplier)
-                short_zone_end = short_level + (atr * 0.8 * level_multiplier)
+                long_zone_start = long_level - (atr * 1.5 * level_multiplier)
+                long_zone_end = long_level + (atr * 2.0 * level_multiplier)
+
+                short_zone_start = short_level - (atr * 1.5 * level_multiplier)
+                short_zone_end = short_level + (atr * 2.0 * level_multiplier)
             else:
                 # Konfigurasi default untuk 5m
                 long_zone_start = long_level - (atr * 0.8 * level_multiplier)
