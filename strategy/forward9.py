@@ -1448,15 +1448,37 @@ def run_forward_test():
 
             # print(f"[DEBUG] Volume Multiplier Dinamis: {volume_multiplier:.2f}x | Vol Ratio Saat Ini: {vol_ratio:.2f}x | Vol Confirmed: {vol_ratio >= volume_multiplier}")
 
-            vol_confirmed = vol_ratio >= volume_multiplier
+            vol_confirmed = vol_ratio >= (volume_multiplier * 0.9)
             atr_confirmed = atr_pct >= atr_threshold
 
             prev_close = df['close'].iloc[i-1]
-            long_level = prev_close + atr * level_multiplier
-            short_level = prev_close - atr * level_multiplier
 
-            broke_long_prev = df['high'].iloc[i-1] >= long_level
-            broke_short_prev = df['low'].iloc[i-1] <= short_level
+            lookback_start_swing = max(0, i - 15)
+            lookback_end_swing = i - 2  # exclude last 2 candles to avoid fresh spikes
+
+            if lookback_end_swing > lookback_start_swing:
+                swing_high = df['high'].iloc[lookback_start_swing:lookback_end_swing].max()
+                swing_low = df['low'].iloc[lookback_start_swing:lookback_end_swing].min()
+            else:
+                swing_high = df['high'].iloc[:i-2].max()
+                swing_low = df['low'].iloc[:i-2].min()
+
+            long_level = swing_high
+            short_level = swing_low
+
+            # long_level = prev_close + atr * level_multiplier
+            # short_level = prev_close - atr * level_multiplier
+
+
+
+            lookback_start = max(0, i - 5)
+            lookback_end = i 
+
+            recent_high = df['high'].iloc[lookback_start:lookback_end].max()
+            recent_low  = df['low'].iloc[lookback_start:lookback_end].min()
+
+            broke_long_prev  = recent_high >= long_level
+            broke_short_prev = recent_low  <= short_level
 
             # retest_long = (broke_long_prev and
             #               df['low'].iloc[i] <= long_level * 1.003 and
@@ -1473,10 +1495,10 @@ def run_forward_test():
                 # long_zone_end = long_level + (atr * ZONE_END_FACTOR * level_multiplier)
                 # short_zone_start = short_level - (atr * ZONE_END_FACTOR * level_multiplier)
                 # short_zone_end = short_level + (atr * ZONE_START_FACTOR * level_multiplier)
-                long_zone_start = long_level - (atr * 1.5 * level_multiplier)
-                long_zone_end = long_level + (atr * 2.0 * level_multiplier)
+                long_zone_start = long_level - (atr * 2.0 * level_multiplier)
+                long_zone_end = long_level + (atr * 0.5 * level_multiplier)
 
-                short_zone_start = short_level - (atr * 1.5 * level_multiplier)
+                short_zone_start = short_level - (atr * 0.5 * level_multiplier)
                 short_zone_end = short_level + (atr * 2.0 * level_multiplier)
             else:
                 # Konfigurasi default untuk 5m
@@ -1518,54 +1540,61 @@ def run_forward_test():
             # rsi_long_ok = (rsi < 70) and (rsi > 30) and (volume_ratio > 1.5)  # RSI < 70 untuk long
             # rsi_short_ok = (rsi > 30) and (rsi < 70) and (volume_ratio > 1.5) # RSI > 30 untuk short
 
+            mtf_score_ok = mtf_score >= (MTF_MIN_SCORE * 0.8)
+            regime_ok = regime in ["MODERATE_TREND", "STRONG_TREND", "VERY_STRONG_TREND"]
+
             if market_regime in ['STRONG_BULL', 'BULL']:
                 allow_short = False
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
                 allow_long = False
 
-            high_quality_long = (broke_long_prev and 
-                                price_in_long_zone and
-                                vol_confirmed and 
-                                atr_confirmed and 
-                                # oi_confirmed_long and
-                                ema_fast > ema_slow and 
-                                adx > adx_threshold and 
-                                strong_momentum and 
-                                allow_long and
-                                mtf_score >= MTF_MIN_SCORE and 
-                                mtf_direction >= MTF_DIRECTION_THRESHOLD
-                                # and rsi_long_ok
-                                )
+            high_quality_long = (
+                broke_long_prev and price_in_long_zone and
+                vol_confirmed and atr_confirmed and
+                ema_fast > ema_slow and adx > (adx_threshold * 0.9) and
+                strong_momentum and allow_long and
+                mtf_score_ok and (mtf_direction >= -0.05) and  # izinkan netral
+                regime_ok
+            )
 
             high_quality_short = (
-                                broke_short_prev and 
-                                price_in_short_zone and 
-                                vol_confirmed and atr_confirmed and 
-                                # oi_confirmed_short and
-                                ema_fast < ema_slow and 
-                                adx > adx_threshold and 
-                                strong_momentum and 
-                                allow_short and 
-                                mtf_score >= MTF_MIN_SCORE and 
-                                mtf_direction <= -MTF_DIRECTION_THRESHOLD
-                                # and rsi_short_ok
-                                )
-            
-            if price_in_long_zone or price_in_short_zone:
-                print(f"broke short: {broke_short_prev} | broke long: {broke_long_prev}")
-                print(f"price in long zone: {price_in_long_zone} | price in short zone: {price_in_short_zone}")
-                print(f"vol confirmed: {vol_confirmed} | atr confirmed: {atr_confirmed}")
-                print(f"ema fast: {ema_fast} | ema slow: {ema_slow}")
-                print(f"adx: {adx} | adx threshold: {adx_threshold}")
-                print(f"strong momentum: {strong_momentum}")
-                print(f"allow long: {allow_long} | allow short: {allow_short}")
-                print(f"mtf score: {mtf_score} | mtf direction: {mtf_direction}")
-                print(f"high quality long: {high_quality_long} | high quality short: {high_quality_short}")
-                # print(f"[{current_time.strftime('%H:%M:%S')}] [ZONE ENTRY] {current_symbol}")
-                # print(f"   🔵 LONG Zone: {long_zone_start:.6f} - {long_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_long_zone}")
-                # print(f"   🔴 SHORT Zone: {short_zone_start:.6f} - {short_zone_end:.6f} | Current: {close:.6f} | In Zone: {price_in_short_zone}")
-                # print(f"   💪 Momentum Strength: {momentum_strength:.3f} | Strong: {strong_momentum} | DI+: {plus_di:.1f} | DI-: {minus_di:.1f}")
+                broke_short_prev and price_in_short_zone and
+                vol_confirmed and atr_confirmed and
+                ema_fast < ema_slow and adx > (adx_threshold * 0.9) and
+                strong_momentum and allow_short and
+                mtf_score_ok and (mtf_direction <= 0.05) and
+                regime_ok
+            )
 
+            # high_quality_long = (broke_long_prev and 
+            #                     price_in_long_zone and
+            #                     vol_confirmed and 
+            #                     atr_confirmed and 
+            #                     # oi_confirmed_long and
+            #                     ema_fast > ema_slow and 
+            #                     adx > adx_threshold and 
+            #                     strong_momentum and 
+            #                     allow_long and
+            #                     mtf_score >= MTF_MIN_SCORE and 
+            #                     mtf_direction >= MTF_DIRECTION_THRESHOLD
+            #                     # and rsi_long_ok
+            #                     )
+
+            # high_quality_short = (
+            #                     broke_short_prev and 
+            #                     price_in_short_zone and 
+            #                     vol_confirmed and atr_confirmed and 
+            #                     # oi_confirmed_short and
+            #                     ema_fast < ema_slow and 
+            #                     adx > adx_threshold and 
+            #                     strong_momentum and 
+            #                     allow_short and 
+            #                     mtf_score >= MTF_MIN_SCORE and 
+            #                     mtf_direction <= -MTF_DIRECTION_THRESHOLD
+            #                     # and rsi_short_ok
+            #                     )
+            
+           
 
             # if (retest_long and vol_confirmed and atr_confirmed and
             #     ema_fast > ema_slow and adx > adx_threshold and allow_long):
