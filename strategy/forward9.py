@@ -1557,6 +1557,8 @@ def run_forward_test():
                 regime_ok
             )
 
+            high_quality_long = True
+
             high_quality_short = (
                 broke_short_prev and price_in_short_zone and
                 vol_confirmed and atr_confirmed and
@@ -1600,6 +1602,7 @@ def run_forward_test():
             #     ema_fast > ema_slow and adx > adx_threshold and allow_long):
             #     sl = long_level - atr * SL_ATR_MULT
             #     tp = long_level + atr * TP_ATR_MULT
+            
             if high_quality_long:
                 sl = long_level - atr * SL_ATR_MULT
                 tp = long_level + atr * TP_ATR_MULT
