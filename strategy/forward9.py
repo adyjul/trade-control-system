@@ -1602,36 +1602,63 @@ def run_forward_test():
             #     ema_fast > ema_slow and adx > adx_threshold and allow_long):
             #     sl = long_level - atr * SL_ATR_MULT
             #     tp = long_level + atr * TP_ATR_MULT
+
+            current_price = get_current_price(scanner.exchange, current_symbol)
+            if current_price is None:
+                current_price = close  # fallback ke harga close terakhir
+            
+            symbol_base = current_symbol.split('/')[0]
+            asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
+
+            TP_MULT_MAP = {
+                'MAJOR': 1.8,      # Aset besar, lebih stabil
+                'MID_CAP': 2.2,    # Aset menengah
+                'SMALL_CAP': 3.0,  # Aset kecil, lebih volatil
+                'MEME': 4.0,       # Aset meme, sangat volatil
+                'DEFAULT': 2.5
+            }
+
+            SL_MULT_MAP = {
+                'MAJOR': 1.2,
+                'MID_CAP': 1.5,
+                'SMALL_CAP': 2.0,
+                'MEME': 2.5,
+                'DEFAULT': 1.8
+            }
+
+            tp_mult = TP_MULT_MAP.get(asset_class, 2.5)
+            sl_mult = SL_MULT_MAP.get(asset_class, 1.8)
             
             if high_quality_long:
-                sl = long_level - atr * SL_ATR_MULT
-                tp = long_level + atr * TP_ATR_MULT
-                if sl <= 0 or tp <= long_level or sl >= long_level:
+                entry_price = current_price
+                sl = entry_price - atr * sl_mult
+                tp = entry_price + atr * tp_mult
+
+                if sl <= 0 or tp <= entry_price or sl >= entry_price:
+                    print(f"⚠️ SL/TP tidak valid untuk LONG: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
                     continue
                 
-                qty = calculate_professional_position_size(balance, long_level, sl, risk_pct, LEVERAGE)
+                qty = calculate_professional_position_size(balance, entry_price, sl, risk_pct, LEVERAGE)
                 if qty > 0:
-                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal LONG DETECTED untuk {current_symbol} @ {long_level:.4f}")
-                    print(f"   📊 ATR%: {atr_pct:.3f}% (Threshold: {atr_threshold:.3f}%) | Volume Ratio: {vol_ratio:.2f}x (Threshold: {volume_multiplier:.2f}x)")
-                    print(f"   📈 Market Regime: {market_regime} | Trend Regime: {regime}")
+                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal LONG DETECTED untuk {current_symbol} @ {entry_price:.4f}")
+                    print(f"   📊 ATR: {atr:.4f} | SL: {sl:.4f} ({sl_mult}x) | TP: {tp:.4f} ({tp_mult}x)")
+                    print(f"   📈 Kelas Aset: {asset_class} | Market Regime: {market_regime}")
                     
                     if MODE == 'simulated':
-                        active_position = execute_order_simulated(current_symbol, 'LONG', qty, long_level, sl, tp, balance, LEVERAGE, scanner.exchange)
+                        active_position = execute_order_simulated(current_symbol, 'LONG', qty, entry_price, sl, tp, balance, LEVERAGE, scanner.exchange)
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
                         active_position['market_regime'] = market_regime
-                        
-                        log_entry_to_excel(active_position,LOG_FILENAME)
-
+                        log_entry_to_excel(active_position, LOG_FILENAME)
                         send_telegram_message(f"📊 <b>ENTRY</b>\n"
-                          f"Coin: {active_position['symbol']}\n"
-                          f"Arah: {active_position['side']}\n"
-                          f"Harga: {active_position['entry_price']:.4f}\n"
-                          f"Qty: {active_position['qty']:.4f}\n"
-                          f"SL: {active_position['sl_price']:.4f}\n"
-                          f"TP: {active_position['tp_price']:.4f}\n"
-                          f"Time: {active_position['entry_time'].strftime('%H:%M:%S')}")
+                                            f"Coin: {active_position['symbol']}\n"
+                                            f"Arah: {active_position['side']}\n"
+                                            f"Harga: {active_position['entry_price']:.4f}\n"
+                                            f"Qty: {active_position['qty']:.4f}\n"
+                                            f"SL: {active_position['sl_price']:.4f}\n"
+                                            f"TP: {active_position['tp_price']:.4f}\n"
+                                            f"Time: {active_position['entry_time'].strftime('%H:%M:%S')}")
 
                     elif MODE == 'live':
                         active_position = execute_order_live(scanner.exchange, current_symbol, 'LONG', qty, long_level, sl, tp)
