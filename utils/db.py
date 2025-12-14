@@ -5,6 +5,7 @@ from config import DB_PATH
 
 @contextmanager
 def get_conn():
+    print(DB_PATH)
     conn = sqlite3.connect(DB_PATH)
     print('hai')
     conn.row_factory = sqlite3.Row
