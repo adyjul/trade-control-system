@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import joblib
 
-MODEL_PATH = '/root/trade-control-system/strategy/ml/models'
+MODEL_PATH = '/home/trade-control-system/strategy/ml/models'
 
 def get_model_path(pair: str, timeframe: str):
     return os.path.join(MODEL_PATH, f'model_{pair}_{timeframe}.pkl')

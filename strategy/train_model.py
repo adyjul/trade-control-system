@@ -8,7 +8,7 @@ from sklearn.metrics import classification_report
 import numpy as np
 
 # === STEP 1: Baca file Excel hasil backtest ===
-df = pd.read_excel('/root/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx')
+df = pd.read_excel('/home/trade-control-system/backtest_result/hasil_backtest_avaxusdt_1h.xlsx')
 
 # === STEP 2: Buat kolom label (0/1) jika belum ada ===
 if 'label' not in df.columns:
@@ -76,6 +76,6 @@ print("All scores:", cv_scores)
 
 # === STEP 9: Simpan model (opsional, kalau mau dipakai buat prediksi nanti) ===
 import joblib
-joblib.dump(model, '/root/trade-control-system/models/breakout_rf_model.pkl')
-print("Model disimpan sebagai '/root/trade-control-system/models/breakout_rf_model.pkl'")
+joblib.dump(model, '/home/trade-control-system/models/breakout_rf_model.pkl')
+print("Model disimpan sebagai '/home/trade-control-system/models/breakout_rf_model.pkl'")
 

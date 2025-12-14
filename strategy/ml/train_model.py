@@ -9,8 +9,8 @@ from sklearn.metrics import classification_report, confusion_matrix, ConfusionMa
 import re  # Untuk validasi pola nama file
 
 def train_all_models():
-    folder_path = '/root/trade-control-system/backtest_result'
-    model_output_dir = '/root/trade-control-system/strategy/ml/models'
+    folder_path = '/home/trade-control-system/backtest_result'
+    model_output_dir = '/home/trade-control-system/strategy/ml/models'
     os.makedirs(model_output_dir, exist_ok=True)
 
     pattern = r'^hasil_backtest_[a-z0-9]+_[0-9a-z]+\.xlsx$'

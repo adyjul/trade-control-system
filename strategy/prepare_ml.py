@@ -1,6 +1,6 @@
 import pandas as pd
 
-def prepare_ml_dataset(input_file='/root/trade-control-system/backtest_result/summary_backtes.xlsx', output_file='/root/trade-control-system/backtest_result/ml_dataset.csv'):
+def prepare_ml_dataset(input_file='/home/trade-control-system/backtest_result/summary_backtes.xlsx', output_file='/home/trade-control-system/backtest_result/ml_dataset.csv'):
     # Baca data hasil backtest
     df = pd.read_excel(input_file)
 
