@@ -544,6 +544,18 @@ class MarketScanner:
                 'setup_type': 'BULLISH' if directional_bias > 0.3 else 'BEARISH'
             })
 
+            if high_potential_assets:
+                high_potential_assets.sort(key=lambda x: x['confidence_score'], reverse=True)
+                best_asset = high_potential_assets[0]
+                return best_asset['symbol'], best_asset['activity_score']  # RETURN TUPLE
+            
+            if qualified_assets:
+                best_asset = qualified_assets[0]
+                return best_asset['symbol'], best_asset['activity_score']  # RETURN TUPLE
+            
+            best_asset = ranked_assets[0]
+            return best_asset['symbol'], best_asset['activity_score']  # RETURN TUPLE
+
 
             # if has_setup:
             #     # Hitung confidence score berdasarkan multiple faktor
@@ -1101,7 +1113,7 @@ def run_forward_test():
                 }
 
     print("🔄 MENCARI ASET TERBAIK UNTUK TRADING AWAL...")
-    current_symbol = scanner.get_best_asset_for_trading()
+    current_symbol, current_score = scanner.get_best_asset_for_trading()
     if not current_symbol:
         print("❌ Gagal mendapatkan aset awal, keluar.")
         return
@@ -1179,8 +1191,8 @@ def run_forward_test():
                 print("\n" + "="*50)
                 print(f"🔍 MEMULAI PROSES SCANNING ULANG...")
                 print("="*50)
-                
-                new_symbol = scanner.get_best_asset_for_trading()
+                new_score = None
+                new_symbol, new_score = scanner.get_best_asset_for_trading()
                 if new_symbol:
                     if new_symbol != current_symbol:
                         # Cek apakah minimal waktu antar switch terpenuhi
@@ -1192,63 +1204,159 @@ def run_forward_test():
                             
                             # Simpan data jika ada posisi aktif
                             if active_position:
-                                print(f"⚠️ [{current_time.strftime('%H:%M:%S')}] MASIH ADA POSISI AKTIF DI {current_symbol}, TIDAK BISA GANTI ASET")
-                                print(f"   Tunggu posisi selesai atau tutup manual terlebih dahulu")
-                            else:
-                                # Ganti ke aset baru
-                                print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {new_symbol}...")
-                                new_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, BARS_TO_FETCH)
-                                if new_df is not None and len(new_df) >= BARS_TO_FETCH * 0.7:
-                                    # Data baru berhasil diambil, ganti aset
-                                    current_symbol = new_symbol
-                                    last_switch_time = current_time
-                                    df = new_df # Ganti df dengan data baru
-                                    # Hitung ulang indikator
-                                    df['ema_fast'] = talib.EMA(df['close'], 20)
-                                    df['ema_slow'] = talib.EMA(df['close'], 50)
-                                    df['ema_200'] = talib.EMA(df['close'], 200)
-                                    df['rsi'] = talib.RSI(df['close'], 14)
-                                    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-                                    df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-                                    df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-                                    df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-                                    df['vol_ma'] = df['volume'].rolling(10).mean()
-                                    df['volume_ma20'] = df['volume'].rolling(20).mean()
+                                old_score = active_position.get('activity_score_at_entry', 0)
+                                hold_duration = (current_time - active_position['entry_time']).total_seconds() / 60
+                                current_price = get_current_price(scanner.exchange, current_symbol)
+                                if current_price is None:
+                                    print(f"⚠️ Gagal ambil harga untuk {current_symbol}, batalkan force close")
+                                    continue
 
-                                    # reset OI
-                                    oi_state['last_oi'] = None
-                                    oi_state['long'] = False
-                                    oi_state['short'] = False
-
-                                    symbol_base = current_symbol.split('/')[0]
-                                    asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-                                    threshold_map = {
-                                        'MAJOR': 1.2,        # perubahan OI signifikan
-                                        'MID_CAP': 0.5,      # volatilitas sedang
-                                        'SMALL_CAP': 0.15,    # perubahan OI lebih halus
-                                        'MEME': 0.3,         # OI sangat stabil
-                                        'DEFAULT': 0.15       # Fallback aman untuk semua aset
-                                    }
-                                    oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
-                                    # end reset OI 
-
-                                    # Update profil aset dan regime
-                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
-                                    market_regime = scanner.detect_market_regime(df)
-                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                    last_data_time = df['timestamp'].iloc[-1]
-                                    print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
+                                if active_position['side'] == 'LONG':
+                                    current_pnl_pct = ((current_price - active_position['entry_price']) / active_position['entry_price']) * 100
                                 else:
-                                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {new_symbol}, TETAP DI {current_symbol}")
-                                    # Jika gagal mengambil data untuk aset baru, kita tetap di aset lama
-                                    # Tidak perlu mengganti current_symbol atau df
-                                    # Perbarui profil dan regime untuk aset lama (current_symbol) jika perlu
-                                    print(f"🔄 [{current_time.strftime('%H:%M:%S')}] Memperbarui profil dan regime untuk aset lama: {current_symbol}")
-                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
-                                    market_regime = scanner.detect_market_regime(df)
-                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                    # last_data_time dan df tetap sama
-                                    # last_switch_time TIDAK diupdate karena kita tidak benar-benar pindah
+                                    current_pnl_pct = ((active_position['entry_price'] - current_price) / active_position['entry_price']) * 100
+                                
+                                # new_score = ranked_assets[0]['activity_score'] if ranked_assets else 0
+
+                                criteria_met = 0
+                                force_reasons = []
+
+                                if new_score >= 30.0 and old_score <= 22.0 and (new_score - old_score) >= 8.0:
+                                    criteria_met += 1
+                                    force_reasons.append(f"Skor lebih tinggi ({new_score:.1f} vs {old_score:.1f})")
+                                
+                                timeframe_minutes = 15 if TIMEFRAME == '15m' else 5
+                                max_hold = max(25, 1.5 * (60 / timeframe_minutes))
+                                if hold_duration > max_hold:
+                                    criteria_met += 1
+                                    force_reasons.append(f"Hold terlalu lama ({hold_duration:.0f}/{max_hold:.0f} menit)")
+
+                                # current_regime = scanner.detect_market_regime(df)
+                                temp_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, 50)
+                                if temp_df is not None and len(temp_df) >= 30:
+                                    current_regime = scanner.detect_market_regime(temp_df)
+                                else:
+                                    current_regime = "NEUTRAL"
+                                
+                                old_regime = active_position.get('market_regime', 'NEUTRAL')
+                                regime_map = {'STRONG_BULL': 1.0, 'BULL': 0.5, 'NEUTRAL': 0.0, 'BEAR': -0.5, 'STRONG_BEAR': -1.0}
+                                if abs(regime_map[current_regime] - regime_map[old_regime]) >= 0.4:
+                                    criteria_met += 1
+                                    force_reasons.append(f"Regime berubah ({old_regime} → {current_regime})")
+
+                                # expected_rr = TP_ATR_MULT / SL_ATR_MULT  # Contoh: 3.0 / 1.5 = 2.0
+                                # expected_pnl_pct = 1.0 * expected_rr if active_position['side'] == 'LONG' else 1.0
+
+                                risk_per_unit = abs(active_position['entry_price'] - active_position['sl_price']) * LEVERAGE
+                                reward_per_unit = abs(active_position['tp_price'] - active_position['entry_price']) * LEVERAGE
+                                expected_rr = reward_per_unit / risk_per_unit if risk_per_unit > 0 else 1.0
+                                expected_pnl_pct = expected_rr * abs(active_position['entry_price'] - active_position['sl_price']) / active_position['entry_price'] * 100
+                                
+                                if abs(current_pnl_pct) >= 0.5 and abs(current_pnl_pct) >= 0.5 * expected_pnl_pct:
+                                    criteria_met += 1
+                                    force_reasons.append(f"PnL optimal ({current_pnl_pct:+.2f}%)")
+
+                                should_force_close = (criteria_met >= 2)
+
+                                if should_force_close:
+                                    print(f"🔄 [{current_time.strftime('%H:%M:%S')}] POSISI LAMA DITUTUP OTOMATIS: {current_symbol} → BERPINDAH KE {new_symbol}")
+                                    # Tutup posisi lama
+                                    current_price = get_current_price(scanner.exchange, current_symbol)
+                                    if current_price is not None:
+                                        # Hitung PnL & tutup
+                                        if active_position['side'] == 'LONG':
+                                            pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
+                                        else:
+                                            pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
+
+                                        position_value = active_position['entry_price'] * active_position['qty']
+                                        fee_cost = position_value * 0.001 * 2
+                                        slippage_cost = position_value * SLIPPAGE_RATE * LEVERAGE
+                                        market_impact = calculate_market_impact(scanner.exchange, current_symbol, active_position['qty'], position_value)
+                                        impact_cost = position_value * market_impact
+                                        net_pnl = pnl - fee_cost - slippage_cost - impact_cost
+                                        balance = balance + net_pnl
+
+                                        # Log exit
+                                        trade_result = {
+                                            'exit_time': datetime.now(),
+                                            'exit_reason': 'FORCED_SWITCH',
+                                            'exit_price': current_price,
+                                            'gross_pnl': pnl,
+                                            'fee_cost': fee_cost,
+                                            'slippage_cost': slippage_cost,
+                                            'impact_cost': impact_cost,
+                                            'net_pnl': net_pnl,
+                                            'balance_after_exit': balance,
+                                            'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60
+                                        }
+                                        trade_log.append({**active_position, **trade_result})
+                                        log_exit_to_excel(trade_log[-1], LOG_FILENAME)
+                                        send_telegram_message(f"🔄 <b>FORCED EXIT</b>\nCoin: {active_position['symbol']}\nReason: Switch to hotter asset\nPnL Net: {net_pnl:+.4f}")
+
+                                        print(f"💰 Forced Close PnL: {net_pnl:+.4f} | Balance: {balance:.4f}")
+                                        active_position = None
+                                        last_exit_time = datetime.now()
+
+                                        # Ganti ke aset baru
+                                        print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {new_symbol}...")
+                                        new_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, BARS_TO_FETCH)
+                                        if new_df is not None and len(new_df) >= BARS_TO_FETCH * 0.7:
+                                            # Data baru berhasil diambil, ganti aset
+                                            current_symbol = new_symbol
+                                            last_switch_time = current_time
+                                            df = new_df # Ganti df dengan data baru
+                                            # Hitung ulang indikator
+                                            df['ema_fast'] = talib.EMA(df['close'], 20)
+                                            df['ema_slow'] = talib.EMA(df['close'], 50)
+                                            df['ema_200'] = talib.EMA(df['close'], 200)
+                                            df['rsi'] = talib.RSI(df['close'], 14)
+                                            df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+                                            df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
+                                            df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
+                                            df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
+                                            df['vol_ma'] = df['volume'].rolling(10).mean()
+                                            df['volume_ma20'] = df['volume'].rolling(20).mean()
+
+                                            # reset OI
+                                            oi_state['last_oi'] = None
+                                            oi_state['long'] = False
+                                            oi_state['short'] = False
+
+                                            symbol_base = current_symbol.split('/')[0]
+                                            asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
+                                            threshold_map = {
+                                                'MAJOR': 1.2,        # perubahan OI signifikan
+                                                'MID_CAP': 0.5,      # volatilitas sedang
+                                                'SMALL_CAP': 0.15,    # perubahan OI lebih halus
+                                                'MEME': 0.3,         # OI sangat stabil
+                                                'DEFAULT': 0.15       # Fallback aman untuk semua aset
+                                            }
+                                            oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
+                                            # end reset OI 
+
+                                            # Update profil aset dan regime
+                                            asset_profile = scanner.get_asset_profile(current_symbol, df)
+                                            market_regime = scanner.detect_market_regime(df)
+                                            dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
+                                            last_data_time = df['timestamp'].iloc[-1]
+                                            print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
+                                        else:
+                                            print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {new_symbol}, TETAP DI {current_symbol}")
+                                            # Jika gagal mengambil data untuk aset baru, kita tetap di aset lama
+                                            # Tidak perlu mengganti current_symbol atau df
+                                            # Perbarui profil dan regime untuk aset lama (current_symbol) jika perlu
+                                            print(f"🔄 [{current_time.strftime('%H:%M:%S')}] Memperbarui profil dan regime untuk aset lama: {current_symbol}")
+                                            asset_profile = scanner.get_asset_profile(current_symbol, df)
+                                            market_regime = scanner.detect_market_regime(df)
+                                            dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
+                                            # last_data_time dan df tetap sama
+                                            # last_switch_time TIDAK diupdate karena kita tidak benar-benar pindah
+                            else:
+                                print(f"⏳ [{current_time.strftime('%H:%M:%S')}] POSISI AKTIF MASIH DIPERTAHANKAN. Tidak force-switch ke {new_symbol} (Skor baru: {new_score:.1f})")
+                                # Tetap di aset lama, jangan ganti
+                                last_scan_time = current_time
+                                continue
                     else:
                         print(f"🔄 [{current_time.strftime('%H:%M:%S')}] ASET TERBAIK MASIH SAMA: {current_symbol}")
                 else:
@@ -1650,6 +1758,10 @@ def run_forward_test():
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
                         active_position['market_regime'] = market_regime
+                        active_position['activity_score_at_entry'] = current_score
+                        active_position['market_regime_at_entry'] = market_regime
+                        active_position['expected_rr'] = TP_ATR_MULT / SL_ATR_MULT
+
                         log_entry_to_excel(active_position, LOG_FILENAME)
                         send_telegram_message(f"📊 <b>ENTRY</b>\n"
                                             f"Coin: {active_position['symbol']}\n"
@@ -1671,25 +1783,30 @@ def run_forward_test():
             #     sl = short_level + atr * SL_ATR_MULT
             #     tp = short_level - atr * TP_ATR_MULT
             elif high_quality_short:
-                sl = short_level + atr * SL_ATR_MULT
-                tp = short_level - atr * TP_ATR_MULT
-                if sl <= short_level or tp >= short_level or sl <= 0 or tp <= 0:
-                    continue
-                # if sl <= short_level or tp >= short_level or sl <= 0:
-                #     continue
+                entry_price = current_price
+                sl = entry_price + atr * sl_mult
+                tp = entry_price - atr * tp_mult
 
-                qty = calculate_professional_position_size(balance, short_level, sl, risk_pct, LEVERAGE)
+                if sl <= 0 or tp <= entry_price or sl >= entry_price:
+                    print(f"⚠️ SL/TP tidak valid untuk SHORT: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
+                    continue
+                
+                qty = calculate_professional_position_size(balance, entry_price, sl, risk_pct, LEVERAGE)
                 if qty > 0:
-                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal SHORT DETECTED untuk {current_symbol} @ {short_level:.4f}")
-                    print(f"   📊 ATR%: {atr_pct:.3f}% (Threshold: {atr_threshold:.3f}%) | Volume Ratio: {vol_ratio:.2f}x (Threshold: {volume_multiplier:.2f}x)")
-                    print(f"   📉 Market Regime: {market_regime} | Trend Regime: {regime}")
+                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal SHORT DETECTED untuk {current_symbol} @ {entry_price:.4f}")
+                    print(f"   📊 ATR: {atr:.4f} | SL: {sl:.4f} ({sl_mult}x) | TP: {tp:.4f} ({tp_mult}x)")
+                    print(f"   📈 Kelas Aset: {asset_class} | Market Regime: {market_regime}")
                     
                     if MODE == 'simulated':
-                        active_position = execute_order_simulated(current_symbol, 'SHORT', qty, short_level, sl, tp, balance, LEVERAGE,scanner.exchange)
+                        active_position = execute_order_simulated(current_symbol, 'SHORT', qty, entry_price, sl, tp, balance, LEVERAGE,scanner.exchange)
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
                         active_position['market_regime'] = market_regime
+                        active_position['activity_score_at_entry'] = current_score
+                        active_position['market_regime_at_entry'] = market_regime
+                        active_position['expected_rr'] = TP_ATR_MULT / SL_ATR_MULT
+
                     elif MODE == 'live':
                         active_position = execute_order_live(scanner.exchange, current_symbol, 'SHORT', qty, short_level, sl, tp)
                         active_position['entry_time'] = datetime.now()
