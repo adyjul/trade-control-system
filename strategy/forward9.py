@@ -1229,16 +1229,23 @@ def run_forward_test():
 
                                 criteria_met = 0
                                 force_reasons = []
+                                force_val = False
 
+                                
                                 if new_score >= 30.0 and old_score <= 22.0 and (new_score - old_score) >= 8.0:
                                     criteria_met += 1
                                     force_reasons.append(f"Skor lebih tinggi ({new_score:.1f} vs {old_score:.1f})")
+                                else :
+                                    print('skor rendah')
                                 
                                 timeframe_minutes = 15 if TIMEFRAME == '15m' else 5
                                 max_hold = max(25, 1.5 * (60 / timeframe_minutes))
                                 if hold_duration > max_hold:
-                                    criteria_met += 1
+                                    # criteria_met += 1
+                                    force_val = True
                                     force_reasons.append(f"Hold terlalu lama ({hold_duration:.0f}/{max_hold:.0f} menit)")
+                                else:
+                                    print('masih belum')
 
                                 # current_regime = scanner.detect_market_regime(df)
                                 temp_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, 50)
@@ -1252,6 +1259,8 @@ def run_forward_test():
                                 if abs(regime_map[current_regime] - regime_map[old_regime]) >= 0.4:
                                     criteria_met += 1
                                     force_reasons.append(f"Regime berubah ({old_regime} → {current_regime})")
+                                else:
+                                    print('regime tidak berubah')
 
                                 # expected_rr = TP_ATR_MULT / SL_ATR_MULT  # Contoh: 3.0 / 1.5 = 2.0
                                 # expected_pnl_pct = 1.0 * expected_rr if active_position['side'] == 'LONG' else 1.0
@@ -1265,7 +1274,11 @@ def run_forward_test():
                                     criteria_met += 1
                                     force_reasons.append(f"PnL optimal ({current_pnl_pct:+.2f}%)")
 
-                                should_force_close = (criteria_met >= 2)
+                                if force_val :
+                                    should_force_close = True
+                                else:
+                                    should_force_close = (criteria_met >= 2)
+
                                 print('force close : ',should_force_close)
 
                                 if should_force_close:
@@ -1302,7 +1315,7 @@ def run_forward_test():
                                         }
                                         trade_log.append({**active_position, **trade_result})
                                         log_exit_to_excel(trade_log[-1], LOG_FILENAME)
-                                        send_telegram_message(f"🔄 <b>FORCED EXIT</b>\nCoin: {active_position['symbol']}\nReason: Switch to hotter asset\nPnL Net: {net_pnl:+.4f}")
+                                        send_telegram_message(f"🔄 <b>FORCED EXIT</b>\nCoin: {active_position['symbol']}\nReason: {force_reasons[0]} \nPnL Net: {net_pnl:+.4f}")
 
                                         print(f"💰 Forced Close PnL: {net_pnl:+.4f} | Balance: {balance:.4f}")
                                         active_position = None
