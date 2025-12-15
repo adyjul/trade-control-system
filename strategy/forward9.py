@@ -50,9 +50,9 @@ if TIMEFRAME == '15m':
     DATA_UPDATE_INTERVAL = 900 
     # RESCAN_INTERVAL_MINUTES = 180
     # MIN_TIME_BETWEEN_SCANS = 45
-    
-    RESCAN_INTERVAL_MINUTES = 2
-    MIN_TIME_BETWEEN_SCANS = 1
+
+    RESCAN_INTERVAL_MINUTES = 30
+    MIN_TIME_BETWEEN_SCANS = 15
     
     # Volume & Momentum
     VOLUME_WINDOW = 10  # Lebih panjang untuk smoothing
