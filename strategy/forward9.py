@@ -513,7 +513,7 @@ class MarketScanner:
             # Fallback: gunakan aset teratas meskipun skornya rendah
             best_asset = ranked_assets[0]
             print(f"⚠️ Tidak ada aset qualified, menggunakan: {best_asset['symbol']} (Skor: {best_asset['activity_score']:.1f})")
-            return best_asset['symbol']
+            return best_asset['symbol'],best_asset['activity_score']
         
         print(f"🔍 Menganalisis {len(qualified_assets)} aset qualified untuk high probability setup...")
         
