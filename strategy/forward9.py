@@ -47,12 +47,13 @@ if TIMEFRAME == '15m':
     MTF_DIRECTION_THRESHOLD = 0.1
     
     # Interval Timing
-    DATA_UPDATE_INTERVAL = 900 
+    # DATA_UPDATE_INTERVAL = 900 
     # RESCAN_INTERVAL_MINUTES = 180
     # MIN_TIME_BETWEEN_SCANS = 45
 
     RESCAN_INTERVAL_MINUTES = 2
     MIN_TIME_BETWEEN_SCANS = 1
+    DATA_UPDATE_INTERVAL = 1 
     
     # Volume & Momentum
     VOLUME_WINDOW = 10  # Lebih panjang untuk smoothing
