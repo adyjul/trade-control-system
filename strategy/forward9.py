@@ -48,8 +48,11 @@ if TIMEFRAME == '15m':
     
     # Interval Timing
     DATA_UPDATE_INTERVAL = 900 
-    RESCAN_INTERVAL_MINUTES = 180
-    MIN_TIME_BETWEEN_SCANS = 45
+    # RESCAN_INTERVAL_MINUTES = 180
+    # MIN_TIME_BETWEEN_SCANS = 45
+    
+    RESCAN_INTERVAL_MINUTES = 2
+    MIN_TIME_BETWEEN_SCANS = 1
     
     # Volume & Momentum
     VOLUME_WINDOW = 10  # Lebih panjang untuk smoothing
@@ -1194,6 +1197,7 @@ def run_forward_test():
                 new_score = None
                 new_symbol, new_score = scanner.get_best_asset_for_trading()
                 if new_symbol:
+
                     if new_symbol != current_symbol:
                         # Cek apakah minimal waktu antar switch terpenuhi
                         if (current_time - last_switch_time).total_seconds() < MIN_TIME_BETWEEN_SCANS * 60:
@@ -1204,6 +1208,7 @@ def run_forward_test():
                             
                             # Simpan data jika ada posisi aktif
                             if active_position:
+                                print(f"⚠️ Simpan data posisi aktif sebelum switch aset...")
                                 old_score = active_position.get('activity_score_at_entry', 0)
                                 hold_duration = (current_time - active_position['entry_time']).total_seconds() / 60
                                 current_price = get_current_price(scanner.exchange, current_symbol)
@@ -1257,6 +1262,7 @@ def run_forward_test():
                                     force_reasons.append(f"PnL optimal ({current_pnl_pct:+.2f}%)")
 
                                 should_force_close = (criteria_met >= 2)
+                                print('force close : ',should_force_close)
 
                                 if should_force_close:
                                     print(f"🔄 [{current_time.strftime('%H:%M:%S')}] POSISI LAMA DITUTUP OTOMATIS: {current_symbol} → BERPINDAH KE {new_symbol}")
