@@ -18,7 +18,7 @@ load_dotenv()
 INITIAL_BALANCE = 20.0
 LEVERAGE = 10
 # TP_ATR_MULT = 3.0
-TIMEFRAME = '15m'
+TIMEFRAME = '1m'
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '') 
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')  
@@ -51,8 +51,8 @@ if TIMEFRAME == '15m':
     # RESCAN_INTERVAL_MINUTES = 180
     # MIN_TIME_BETWEEN_SCANS = 45
 
-    RESCAN_INTERVAL_MINUTES = 30
-    MIN_TIME_BETWEEN_SCANS = 15
+    RESCAN_INTERVAL_MINUTES = 2
+    MIN_TIME_BETWEEN_SCANS = 1
     
     # Volume & Momentum
     VOLUME_WINDOW = 10  # Lebih panjang untuk smoothing
