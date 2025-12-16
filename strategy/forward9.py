@@ -1733,7 +1733,7 @@ def run_forward_test():
                 vol_confirmed and atr_confirmed and
                 ema_fast > ema_slow and adx > (adx_threshold * 0.9) and
                 strong_momentum and allow_long and
-                mtf_score_ok and (mtf_direction >= -0.05) and  # izinkan netral
+                mtf_score_ok and (mtf_direction >= 0.05) and  # izinkan netral
                 regime_ok
             )
 
@@ -1745,7 +1745,7 @@ def run_forward_test():
                 vol_confirmed and atr_confirmed and
                 ema_fast < ema_slow and adx > (adx_threshold * 0.9) and
                 strong_momentum and allow_short and
-                mtf_score_ok and (mtf_direction <= 0.05) and
+                mtf_score_ok and (mtf_direction <= -0.05) and
                 regime_ok
             )
 
