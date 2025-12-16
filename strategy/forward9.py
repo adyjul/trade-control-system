@@ -1728,8 +1728,8 @@ def run_forward_test():
                 allow_long = False
 
             high_quality_long = (
-                broke_long_prev 
-                and price_in_long_zone and
+                # broke_long_prev 
+                # and price_in_long_zone and
                 vol_confirmed and atr_confirmed and
                 ema_fast > ema_slow and adx > (adx_threshold * 0.9) and
                 strong_momentum and allow_long and
@@ -1740,8 +1740,8 @@ def run_forward_test():
             # high_quality_long = True
 
             high_quality_short = (
-                broke_short_prev
-                and price_in_short_zone and
+                # broke_short_prev
+                # and price_in_short_zone and
                 vol_confirmed and atr_confirmed and
                 ema_fast < ema_slow and adx > (adx_threshold * 0.9) and
                 strong_momentum and allow_short and
