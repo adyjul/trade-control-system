@@ -1372,10 +1372,62 @@ def run_forward_test():
                                             # last_data_time dan df tetap sama
                                             # last_switch_time TIDAK diupdate karena kita tidak benar-benar pindah
                             else:
-                                print(f"⏳ [{current_time.strftime('%H:%M:%S')}] POSISI AKTIF MASIH DIPERTAHANKAN. Tidak force-switch ke {new_symbol} (Skor baru: {new_score:.1f})")
-                                # Tetap di aset lama, jangan ganti
-                                last_scan_time = current_time
-                                continue
+                                print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {new_symbol}...")
+                                new_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, BARS_TO_FETCH)
+                                if new_df is not None and len(new_df) >= BARS_TO_FETCH * 0.7:
+                                    # Data baru berhasil diambil, ganti aset
+                                    current_symbol = new_symbol
+                                    last_switch_time = current_time
+                                    df = new_df # Ganti df dengan data baru
+                                    # Hitung ulang indikator
+                                    df['ema_fast'] = talib.EMA(df['close'], 20)
+                                    df['ema_slow'] = talib.EMA(df['close'], 50)
+                                    df['ema_200'] = talib.EMA(df['close'], 200)
+                                    df['rsi'] = talib.RSI(df['close'], 14)
+                                    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+                                    df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
+                                    df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
+                                    df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
+                                    df['vol_ma'] = df['volume'].rolling(10).mean()
+                                    df['volume_ma20'] = df['volume'].rolling(20).mean()
+
+                                    # reset OI
+                                    oi_state['last_oi'] = None
+                                    oi_state['long'] = False
+                                    oi_state['short'] = False
+
+                                    symbol_base = current_symbol.split('/')[0]
+                                    asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
+                                    threshold_map = {
+                                        'MAJOR': 1.2,        # perubahan OI signifikan
+                                        'MID_CAP': 0.5,      # volatilitas sedang
+                                        'SMALL_CAP': 0.15,    # perubahan OI lebih halus
+                                        'MEME': 0.3,         # OI sangat stabil
+                                        'DEFAULT': 0.15       # Fallback aman untuk semua aset
+                                    }
+                                    oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
+                                    # end reset OI 
+
+                                    # Update profil aset dan regime
+                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
+                                    market_regime = scanner.detect_market_regime(df)
+                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
+                                    last_data_time = df['timestamp'].iloc[-1]
+                                    print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
+                                else:
+                                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {new_symbol}, TETAP DI {current_symbol}")
+                                    # Jika gagal mengambil data untuk aset baru, kita tetap di aset lama
+                                    # Tidak perlu mengganti current_symbol atau df
+                                    # Perbarui profil dan regime untuk aset lama (current_symbol) jika perlu
+                                    print(f"🔄 [{current_time.strftime('%H:%M:%S')}] Memperbarui profil dan regime untuk aset lama: {current_symbol}")
+                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
+                                    market_regime = scanner.detect_market_regime(df)
+                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
+                                    
+                                # print(f"⏳ [{current_time.strftime('%H:%M:%S')}] POSISI AKTIF MASIH DIPERTAHANKAN. Tidak force-switch ke {new_symbol} (Skor baru: {new_score:.1f})")
+                                # # Tetap di aset lama, jangan ganti
+                                # last_scan_time = current_time
+                                # continue
                     else:
                         print(f"🔄 [{current_time.strftime('%H:%M:%S')}] ASET TERBAIK MASIH SAMA: {current_symbol}")
                 else:
