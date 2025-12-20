@@ -1629,160 +1629,117 @@ def run_forward_test():
 
             vol_confirmed = vol_ratio >= (volume_multiplier * 0.9)
             atr_confirmed = atr_pct >= atr_threshold
+            atr_50 = df['atr'].rolling(50).mean().iloc[i] if i >= 50 else atr  # Fallback jika data kurang
+            is_sideways = (
+                current_row['adx'] < 22 and  # ADX rendah = sideways
+                current_row['atr'] < (atr_50 * 0.8)  # Volatilitas menyempit
+            )
+            is_strong_trend = current_row['adx'] > 25
+            is_uptrend = (ema_fast > ema_slow * 1.003) and (close > ema_slow)
+            is_downtrend = (ema_fast < ema_slow * 0.997) and (close < ema_slow)
 
-            prev_close = df['close'].iloc[i-1]
+            high_quality_long = False
+            high_quality_short = False
+            mtf_score, mtf_direction = get_multi_timeframe_confirmation(scanner.exchange, current_symbol)
 
-            lookback_start_swing = max(0, i - 15)
-            lookback_end_swing = i - 2  # exclude last 2 candles to avoid fresh spikes
-
-            if lookback_end_swing > lookback_start_swing:
-                swing_high = df['high'].iloc[lookback_start_swing:lookback_end_swing].max()
-                swing_low = df['low'].iloc[lookback_start_swing:lookback_end_swing].min()
-            else:
-                swing_high = df['high'].iloc[:i-2].max()
-                swing_low = df['low'].iloc[:i-2].min()
-
-            long_level = swing_high
-            short_level = swing_low
-
-            # long_level = prev_close + atr * level_multiplier
-            # short_level = prev_close - atr * level_multiplier
-
-
-
-            lookback_start = max(0, i - 5)
-            lookback_end = i 
-
-            recent_high = df['high'].iloc[lookback_start:lookback_end].max()
-            recent_low  = df['low'].iloc[lookback_start:lookback_end].min()
-
-            broke_long_prev  = recent_high >= long_level
-            broke_short_prev = recent_low  <= short_level
-
-            # retest_long = (broke_long_prev and
-            #               df['low'].iloc[i] <= long_level * 1.003 and
-            #               close > long_level * 0.997)
-            # retest_short = (broke_short_prev and
-            #                df['high'].iloc[i] >= short_level * 0.997 and
-            #                close < short_level * 1.003)
-
-            ENTRY_ZONE_BUFFER = 0.015 
-                
-            if TIMEFRAME == '15m':
-                # Zona entry lebih longgar
-                # long_zone_start = long_level - (atr * ZONE_START_FACTOR * level_multiplier)
-                # long_zone_end = long_level + (atr * ZONE_END_FACTOR * level_multiplier)
-                # short_zone_start = short_level - (atr * ZONE_END_FACTOR * level_multiplier)
-                # short_zone_end = short_level + (atr * ZONE_START_FACTOR * level_multiplier)
-                long_zone_start = long_level - (atr * 2.0 * level_multiplier)
-                long_zone_end = long_level + (atr * 0.5 * level_multiplier)
-
-                short_zone_start = short_level - (atr * 0.5 * level_multiplier)
-                short_zone_end = short_level + (atr * 2.0 * level_multiplier)
-            else:
-                # Konfigurasi default untuk 5m
-                long_zone_start = long_level - (atr * 0.8 * level_multiplier)
-                long_zone_end = long_level + (atr * 1.2 * level_multiplier)
-                short_zone_start = short_level - (atr * 1.2 * level_multiplier)
-                short_zone_end = short_level + (atr * 0.8 * level_multiplier)
-        
-
-            price_in_long_zone = (df['low'].iloc[i] <= long_zone_end) and (close >= long_zone_start)
-            price_in_short_zone = (df['high'].iloc[i] >= short_zone_start) and (close <= short_zone_end)
-
-            plus_di = current_row['plus_di']
-            minus_di = current_row['minus_di']
-            momentum_strength = abs(plus_di - minus_di) / max(plus_di, minus_di, 1)
-            strong_momentum = momentum_strength > (0.20 if TIMEFRAME == '15m' else 0.25)
-
+            market_regime = "NEUTRAL"
             allow_long = True
             allow_short = True
 
-            # print(f"\n🔍 [{current_time.strftime('%H:%M:%S')}] Multi-Timeframe Analysis untuk {current_symbol}...")
-            mtf_score, mtf_direction = get_multi_timeframe_confirmation(scanner.exchange, current_symbol)
-
-            if TIMEFRAME == '15m':
-                MTF_MIN_SCORE = 0.3    # Lebih longgar (30%)
-                MTF_DIRECTION_THRESHOLD = 0.1  # Minimal consensus
-                MTF_WEIGHT = 0.8       # Bobot lebih tinggi karena lebih reliable
-            else:  # 5m
-                MTF_MIN_SCORE = 0.4
-                MTF_DIRECTION_THRESHOLD = 0.2
-                MTF_WEIGHT = 0.6
-
-            # print(f"🎯 MTF Result: Score={mtf_score:.2f} | Direction={mtf_direction:.2f}")
-            # print(f"   {'✅ BULLISH' if mtf_direction > 0.3 else '✅ BEARISH' if mtf_direction < -0.3 else '🟡 NEUTRAL'} di timeframe lebih tinggi")
-
-            rsi = current_row['rsi']
-            volume_ratio = volume / current_row['volume_ma20']
-
-            # rsi_long_ok = (rsi < 70) and (rsi > 30) and (volume_ratio > 1.5)  # RSI < 70 untuk long
-            # rsi_short_ok = (rsi > 30) and (rsi < 70) and (volume_ratio > 1.5) # RSI > 30 untuk short
-
-            mtf_score_ok = mtf_score >= (MTF_MIN_SCORE * 0.8)
-            regime_ok = regime in ["MODERATE_TREND", "STRONG_TREND", "VERY_STRONG_TREND"]
+            if current_row['adx'] > 30:
+                if ema_fast > ema_slow * 1.01:  # Uptrend kuat
+                    market_regime = "STRONG_BULL"
+                elif ema_fast < ema_slow * 0.99:  # Downtrend kuat
+                    market_regime = "STRONG_BEAR"
+            elif current_row['adx'] > 20:
+                if ema_fast > ema_slow:
+                    market_regime = "BULL"
+                elif ema_fast < ema_slow:
+                    market_regime = "BEAR"
 
             if market_regime in ['STRONG_BULL', 'BULL']:
-                allow_short = False
+                allow_short = False  # Jangan short di bull market
+                print(f"🚫 SHORT DISABLED - Market Regime: {market_regime}")
             elif market_regime in ['STRONG_BEAR', 'BEAR']:
-                allow_long = False
+                allow_long = False  # Jangan long di bear market
+                print(f"🚫 LONG DISABLED - Market Regime: {market_regime}")
 
-            high_quality_long = (
-                # broke_long_prev 
-                # and price_in_long_zone and
-                vol_confirmed and atr_confirmed and
-                ema_fast > ema_slow and adx > (adx_threshold * 0.9) and
-                strong_momentum and allow_long and
-                mtf_score_ok and (mtf_direction >= 0.05) and  # izinkan netral
-                regime_ok
-            )
-
-            # high_quality_long = True
-
-            high_quality_short = (
-                # broke_short_prev
-                # and price_in_short_zone and
-                vol_confirmed and atr_confirmed and
-                ema_fast < ema_slow and adx > (adx_threshold * 0.9) and
-                strong_momentum and allow_short and
-                mtf_score_ok and (mtf_direction <= -0.05) and
-                regime_ok
-            )
-
-            # high_quality_long = (broke_long_prev and 
-            #                     price_in_long_zone and
-            #                     vol_confirmed and 
-            #                     atr_confirmed and 
-            #                     # oi_confirmed_long and
-            #                     ema_fast > ema_slow and 
-            #                     adx > adx_threshold and 
-            #                     strong_momentum and 
-            #                     allow_long and
-            #                     mtf_score >= MTF_MIN_SCORE and 
-            #                     mtf_direction >= MTF_DIRECTION_THRESHOLD
-            #                     # and rsi_long_ok
-            #                     )
-
-            # high_quality_short = (
-            #                     broke_short_prev and 
-            #                     price_in_short_zone and 
-            #                     vol_confirmed and atr_confirmed and 
-            #                     # oi_confirmed_short and
-            #                     ema_fast < ema_slow and 
-            #                     adx > adx_threshold and 
-            #                     strong_momentum and 
-            #                     allow_short and 
-            #                     mtf_score >= MTF_MIN_SCORE and 
-            #                     mtf_direction <= -MTF_DIRECTION_THRESHOLD
-            #                     # and rsi_short_ok
-            #                     )
+            if is_sideways:
+                # Hitung level breakout (gunakan Bollinger Band jika tersedia, else swing high/low)
+                if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
+                    long_level = df['bb_upper'].iloc[i-1]
+                    short_level = df['bb_lower'].iloc[i-1]
+                else:
+                    # Fallback ke swing levels seperti kode lama
+                    lookback_start_swing = max(0, i - 15)
+                    lookback_end_swing = i - 2
+                    
+                    if lookback_end_swing > lookback_start_swing:
+                        swing_high = df['high'].iloc[lookback_start_swing:lookback_end_swing].max()
+                        swing_low = df['low'].iloc[lookback_start_swing:lookback_end_swing].min()
+                    else:
+                        swing_high = df['high'].iloc[:i-2].max()
+                        swing_low = df['low'].iloc[:i-2].min()
+                    
+                    long_level = swing_high
+                    short_level = swing_low
+                
+                # Breakout confirmation
+                broke_resistance = close > long_level * 1.002  # Break minimal 0.2%
+                broke_support = close < short_level * 0.998    # Break minimal 0.2%
+                volume_confirmed = volume > (current_row['volume_ma20'] * 1.5)
+                
+                # RSI filter untuk breakout
+                rsi_long_ok = current_row['rsi'] < 75  # Hindari overbought ekstrem
+                rsi_short_ok = current_row['rsi'] > 25  # Hindari oversold ekstrem
+                
+                # MTF confirmation (lebih longgar untuk breakout)
+                mtf_ok_long = mtf_direction > -0.1  # Izinkan netral untuk long
+                mtf_ok_short = mtf_direction < 0.1  # Izinkan netral untuk short
+                
+                # Entry condition untuk breakout mode
+                if broke_resistance and volume_confirmed and rsi_long_ok and mtf_ok_long and allow_long:
+                    high_quality_long = True
+                    print(f"🔥 BREAKOUT MODE - LONG SIGNAL: {current_symbol} @ {close:.6f}")
+                    
+                if broke_support and volume_confirmed and rsi_short_ok and mtf_ok_short and allow_short:
+                    high_quality_short = True
+                    print(f"🔥 BREAKOUT MODE - SHORT SIGNAL: {current_symbol} @ {close:.6f}")
             
-           
-
-            # if (retest_long and vol_confirmed and atr_confirmed and
-            #     ema_fast > ema_slow and adx > adx_threshold and allow_long):
-            #     sl = long_level - atr * SL_ATR_MULT
-            #     tp = long_level + atr * TP_ATR_MULT
+            elif is_strong_trend:
+                # LONG di Uptrend
+                if is_uptrend and allow_long:
+                    # Pullback ke EMA cepat (EMA8/EMA20)
+                    pullback_to_ema = (
+                        (df['low'].iloc[i] <= ema_fast * (1 + 0.004)) and
+                        (close >= ema_fast * (1 - 0.004/2))
+                    )
+                    volume_pullback = volume < (current_row['volume_ma20'] * 0.85)  # Volume turun di pullback
+                    rsi_ok = current_row['rsi'] < 68  # Tidak terlalu overbought
+                    di_ok = current_row['plus_di'] > (current_row['minus_di'] + 3)  # Momentum positif
+                    
+                    # MTF confirmation (lebih ketat untuk trend continuation)
+                    mtf_ok = mtf_direction > 0.05  # Minimal bullish bias
+                    
+                    if pullback_to_ema and volume_pullback and rsi_ok and di_ok and mtf_ok:
+                        high_quality_long = True
+                        print(f"📈 TREND MODE - LONG SIGNAL: {current_symbol} @ {close:.6f}")
+                
+                # SHORT di Downtrend
+                elif is_downtrend and allow_short:
+                    pullback_to_ema = (
+                        (df['high'].iloc[i] >= ema_fast * (1 - 0.004)) and
+                        (close <= ema_fast * (1 + 0.004/2))
+                    )
+                    volume_pullback = volume < (current_row['volume_ma20'] * 0.85)
+                    rsi_ok = current_row['rsi'] > 32  # Tidak terlalu oversold
+                    di_ok = current_row['minus_di'] > (current_row['plus_di'] + 3)  # Momentum negatif
+                    
+                    mtf_ok = mtf_direction < -0.05  # Minimal bearish bias
+                    
+                    if pullback_to_ema and volume_pullback and rsi_ok and di_ok and mtf_ok:
+                        high_quality_short = True
+                        print(f"📉 TREND MODE - SHORT SIGNAL: {current_symbol} @ {close:.6f}")
 
             current_price = get_current_price(scanner.exchange, current_symbol)
             if current_price is None:
