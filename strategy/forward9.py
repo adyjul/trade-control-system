@@ -1772,9 +1772,9 @@ def run_forward_test():
                 sl = entry_price - atr * sl_mult
                 tp = entry_price + atr * tp_mult
 
-                if sl <= 0 or tp <= entry_price or sl >= entry_price:
-                    print(f"⚠️ SL/TP tidak valid untuk LONG: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
-                    continue
+                # if sl <= 0 or tp <= entry_price or sl >= entry_price:
+                #     print(f"⚠️ SL/TP tidak valid untuk LONG: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
+                #     continue
                 
                 qty = calculate_professional_position_size(balance, entry_price, sl, risk_pct, LEVERAGE)
                 if qty > 0:
