@@ -1769,8 +1769,17 @@ def run_forward_test():
             
             if high_quality_long:
                 entry_price = current_price
+
                 sl = entry_price - atr * sl_mult
                 tp = entry_price + atr * tp_mult
+
+                entry_price = float(scanner.exchange.price_to_precision(current_symbol, entry_price))
+                sl = float(scanner.exchange.price_to_precision(current_symbol, sl))
+                tp = float(scanner.exchange.price_to_precision(current_symbol, tp))
+
+                if sl <= entry_price or tp >= entry_price:
+                    print(f"⚠️ Invalid SL/TP after precision: SL={sl}, TP={tp}, Entry={entry_price}")
+                    continue
 
                 # if sl <= 0 or tp <= entry_price or sl >= entry_price:
                 #     print(f"⚠️ SL/TP tidak valid untuk LONG: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
@@ -1817,9 +1826,17 @@ def run_forward_test():
                 sl = entry_price + atr * sl_mult
                 tp = entry_price - atr * tp_mult
 
-                if sl <= 0 or tp <= entry_price or sl >= entry_price:
-                    print(f"⚠️ SL/TP tidak valid untuk SHORT: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
+                entry_price = float(scanner.exchange.price_to_precision(current_symbol, entry_price))
+                sl = float(scanner.exchange.price_to_precision(current_symbol, sl))
+                tp = float(scanner.exchange.price_to_precision(current_symbol, tp))
+
+                if sl <= entry_price or tp >= entry_price:
+                    print(f"⚠️ Invalid SL/TP after precision: SL={sl}, TP={tp}, Entry={entry_price}")
                     continue
+
+                # if sl <= 0 or tp <= entry_price or sl >= entry_price:
+                #     print(f"⚠️ SL/TP tidak valid untuk SHORT: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
+                #     continue
                 
                 qty = calculate_professional_position_size(balance, entry_price, sl, risk_pct, LEVERAGE)
                 if qty > 0:
