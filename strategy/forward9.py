@@ -1777,7 +1777,7 @@ def run_forward_test():
                 sl = float(scanner.exchange.price_to_precision(current_symbol, sl))
                 tp = float(scanner.exchange.price_to_precision(current_symbol, tp))
 
-                if sl <= entry_price or tp >= entry_price:
+                if sl >= entry_price or tp <= entry_price:
                     print(f"⚠️ Invalid SL/TP after precision: SL={sl}, TP={tp}, Entry={entry_price}")
                     continue
 
