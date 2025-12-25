@@ -1664,6 +1664,19 @@ def run_forward_test():
                 allow_long = False  # Jangan long di bear market
                 print(f"🚫 LONG DISABLED - Market Regime: {market_regime}")
 
+            
+            if is_sideways :
+                print('trade terindikasi sideways')
+            
+            if is_strong_trend:
+                print('trade terindikasi strong trend')
+                if is_uptrend:
+                    print('trade terindikasi uptrend')
+                elif is_downtrend:
+                    print('trade terindikasi downtrend')
+            
+            
+
             if is_sideways:
                 # Hitung level breakout (gunakan Bollinger Band jika tersedia, else swing high/low)
                 if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
