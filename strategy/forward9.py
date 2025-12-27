@@ -1822,6 +1822,7 @@ def run_forward_test():
                         active_position['market_regime_at_entry'] = market_regime
                         active_position['expected_rr'] = TP_ATR_MULT / SL_ATR_MULT
 
+
                         log_entry_to_excel(active_position, LOG_FILENAME)
                         send_telegram_message(f"📊 <b>ENTRY</b>\n"
                                             f"Coin: {active_position['symbol']}\n"
@@ -1830,7 +1831,11 @@ def run_forward_test():
                                             f"Qty: {active_position['qty']:.4f}\n"
                                             f"SL: {active_position['sl_price']:.4f}\n"
                                             f"TP: {active_position['tp_price']:.4f}\n"
-                                            f"Time: {active_position['entry_time'].strftime('%H:%M:%S')}")
+                                            f"Time: {active_position['entry_time'].strftime('%H:%M:%S')}\n"
+                                            f"Regime: {active_position['regime']}\n"
+                                            f"RSI Current: {current_row['rsi']}\n"
+                                            f"Expected RR: {active_position['expected_rr']:.2f}")
+                                
 
                     elif MODE == 'live':
                         active_position = execute_order_live(scanner.exchange, current_symbol, 'LONG', qty, long_level, sl, tp)
