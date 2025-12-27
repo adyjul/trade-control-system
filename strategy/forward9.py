@@ -1732,9 +1732,9 @@ def run_forward_test():
                     )
                     volume_pullback = volume < (current_row['volume_ma20'] * 0.85)  # Volume turun di pullback
                     
-                    rsi = current_row['rsi']
-                    rsi_ok = 45 <= rsi <= 75
-                    # rsi_ok = current_row['rsi'] < 68  # Tidak terlalu overbought
+                    # rsi = current_row['rsi']
+                    # rsi_ok = 45 <= rsi <= 75
+                    rsi_ok = current_row['rsi'] < 68  # Tidak terlalu overbought
                     di_ok = current_row['plus_di'] > (current_row['minus_di'] + 3)  # Momentum positif
                     
                     # MTF confirmation (lebih ketat untuk trend continuation)
@@ -1751,9 +1751,9 @@ def run_forward_test():
                         (close <= ema_fast * (1 + 0.004/2))
                     )
                     volume_pullback = volume < (current_row['volume_ma20'] * 0.85)
-                    rsi = current_row['rsi']
-                    rsi_ok = 25 <= rsi <= 55
-                    # rsi_ok = current_row['rsi'] > 32  # Tidak terlalu oversold
+                    # rsi = current_row['rsi']
+                    # rsi_ok = 25 <= rsi <= 55
+                    rsi_ok = current_row['rsi'] > 32  # Tidak terlalu oversold
                     di_ok = current_row['minus_di'] > (current_row['plus_di'] + 3)  # Momentum negatif
                     
                     mtf_ok = mtf_direction < -0.05  # Minimal bearish bias
