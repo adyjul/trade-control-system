@@ -1,5 +1,6 @@
 import ccxt
 import pandas as pd
+import talib
 
 # 🔧 SETTINGS — EDIT THESE DIRECTLY
 SYMBOLS = [
@@ -28,6 +29,7 @@ with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
                 continue
 
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['rsi'] = talib.RSI(df['close'], timeperiod=14)
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
 
