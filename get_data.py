@@ -1,51 +1,41 @@
 import ccxt
 import pandas as pd
-import argparse
-from datetime import datetime
 
-def fetch_data(symbol, timeframe, limit):
-    print(f"📥 Fetching {limit} {timeframe} candles for {symbol} from Binance...")
-    exchange = ccxt.binance()
-    try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return None
+# 🔧 SETTINGS — EDIT THESE DIRECTLY
+SYMBOLS = [
+    'ZKP/USDT',
+]
+TIMEFRAME = '15m'      # e.g., '15m', '1h', '4h', '1d'
+ROWS = 1000
+OUTPUT_FILE = 'futures_data.xlsx'
 
-    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df.set_index('timestamp', inplace=True)
-    return df
+# ----------------------------
+# Use Binance USDⓈ-M Futures (perpetual contracts)
+exchange = ccxt.binanceusdm({
+    'options': {'defaultType': 'future'}
+})
 
-def main():
-    parser = argparse.ArgumentParser(description="Fetch crypto price data and save to Excel (.xlsx)")
-    parser.add_argument("--symbol", type=str, default="BTC/USDT", help="Trading pair (e.g., PEPE/USDT, HYPE/USDT)")
-    parser.add_argument("--timeframe", type=str, default="4h", help="Timeframe (e.g., 15m, 1h, 4h, 1d)")
-    parser.add_argument("--rows", type=int, default=100, help="Number of candles to fetch")
-    parser.add_argument("--output", type=str, default="", help="Output Excel filename (e.g., data.xlsx)")
+print(f"🚀 Fetching {ROWS} {TIMEFRAME} futures candles for {len(SYMBOLS)} symbols...")
 
-    args = parser.parse_args()
+with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
+    for symbol in SYMBOLS:
+        try:
+            print(f"  → {symbol}")
+            ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=ROWS)
+            
+            if not ohlcv:
+                print(f"    ⚠️ No data for {symbol}")
+                continue
 
-    df = fetch_data(args.symbol, args.timeframe, args.rows)
-    if df is None:
-        return
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
 
-    # Auto-generate filename if not provided
-    if not args.output:
-        safe_symbol = args.symbol.replace("/", "_")
-        args.output = f"{safe_symbol}_{args.timeframe}_{args.rows}rows.xlsx"
+            # Excel sheet names can't have / and must be <=31 chars
+            sheet_name = symbol.replace("/", "")[:31]
+            df.to_excel(writer, sheet_name=sheet_name)
 
-    # Save to Excel
-    with pd.ExcelWriter(args.output, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='OHLCV')
+        except Exception as e:
+            print(f"    ❌ Failed {symbol}: {str(e)}")
 
-    print(f"✅ Data saved to Excel: {args.output}")
-    print(f"📅 Range: {df.index[0]} → {df.index[-1]}")
-    print(f"📊 Rows: {len(df)} | Columns: {list(df.columns)}")
-
-    # Show last 3 close prices
-    print("\nLast 3 close prices:")
-    print(df['close'].tail(3))
-
-if __name__ == "__main__":
-    main()
+print(f"\n✅ All done! Futures data saved to → {OUTPUT_FILE}")
