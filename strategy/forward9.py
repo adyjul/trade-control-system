@@ -16,15 +16,15 @@ load_dotenv()
 
 # --- CONFIG UTAMA (Gunakan konfig dari backtest sebagai base) ---
 INITIAL_BALANCE = 20.0
-LEVERAGE = 10
+LEVERAGE = 20
 # TP_ATR_MULT = 3.0
-TIMEFRAME = '15m'
+TIMEFRAME = '1h'
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '') 
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')  
 ENABLE_TELEGRAM = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 
-if TIMEFRAME == '15m':
+if TIMEFRAME == '1h':
     ATR_WINDOW = 14
     VOLATILITY_ADJUSTMENT = 1.8  # Faktor peningkatan volatilitas
     
@@ -62,6 +62,44 @@ if TIMEFRAME == '15m':
     MAX_SLIPPAGE_RATE = 0.0015 
     ORDER_BOOK_DEPTH = 25
     OI_UPDATE_INTERVAL = 900
+
+elif TIMEFRAME == '1h':
+    ATR_WINDOW = 14
+    VOLATILITY_ADJUSTMENT = 1.5  
+    
+    TP_ATR_MULT = 3.5  # Dari 5.5 di 15m
+    SL_ATR_MULT = 2.0  # Dari 3.0 di 15m
+    ZONE_START_FACTOR = 0.8
+    ZONE_END_FACTOR = 1.5
+    ENTRY_ZONE_BUFFER = 0.015 
+    ZONE_BUFFER_MULTIPLIER = 1.3
+    
+    # Risk Management (lebih konservatif)
+    BASE_RISK_PCT = 0.01  # 1% per trade
+    MAX_RISK_PER_TRADE = 0.02  # Max 2%
+    MAX_POSITION_VALUE = 0.40  # 40% dari balance
+    MIN_POSITION_VALUE = 2.0   # Minimal $2 per trade
+    
+    # MTF Confirmation
+    MTF_MIN_SCORE = 0.5
+    MTF_DIRECTION_THRESHOLD = 0.2  # Lebih ketat
+    
+    # Interval Timing (sesuai permintaan 6 jam)
+    DATA_UPDATE_INTERVAL = 1800  # 30 menit (update data lebih jarang)
+    RESCAN_INTERVAL_MINUTES = 360  # 6 jam
+    MIN_TIME_BETWEEN_SCANS = 120  # Minimal 2 jam antar switch
+    
+    # Volume & Momentum
+    VOLUME_WINDOW = 20  # Lebih panjang untuk smoothing
+    MIN_MOMENTUM_STRENGTH = 0.25  # Lebih ketat
+    
+    BARS_TO_FETCH = 200  # 200 candle 1h = ~8 hari
+    VOLATILITY_WINDOW = 50  # Lebih pendek karena data lebih sedikit
+    MIN_SCAN_SCORE = 0.55  # Lebih tinggi (kualitas sinyal lebih penting)
+    SLIPPAGE_RATE = 0.0005  # 0.05% (lebih rendah di timeframe tinggi)
+    MAX_SLIPPAGE_RATE = 0.001  # 0.1%
+    ORDER_BOOK_DEPTH = 30  # Lebih dalam
+    OI_UPDATE_INTERVAL = 3600  # 1 jam (update OI lebih jarang)
 
 else:  # 5m
     TP_ATR_MULT = 4.5
@@ -239,6 +277,13 @@ class MarketScanner:
             elif avg_atr_pct < 0.70: return 'MODERATE'
             elif avg_atr_pct < 1.10: return 'HIGH'
             elif avg_atr_pct < 1.50: return 'VERY_HIGH'
+            else: return 'EXTREME'
+        elif TIMEFRAME == '1h':
+            if avg_atr_pct < 0.5: return 'ULTRA_LOW'
+            elif avg_atr_pct < 1.0: return 'LOW'
+            elif avg_atr_pct < 2.0: return 'MODERATE'
+            elif avg_atr_pct < 3.5: return 'HIGH'
+            elif avg_atr_pct < 5.0: return 'VERY_HIGH'
             else: return 'EXTREME'
         else:  # 5m
             if avg_atr_pct < 0.15: return 'ULTRA_LOW'
@@ -804,17 +849,39 @@ def get_current_price(exchange, symbol):
 
 def get_multi_timeframe_confirmation(exchange, symbol):
     """Dapatkan konfirmasi tren dari multiple timeframe"""
-    higher_timeframes = {
-        '1h': '1h',
-        '4h' : '4h',
-    }
+    # higher_timeframes = {
+    #     '4h': '4h',
+    #     '1d' : '1d',
+    # }
+
+    if coin_age_days is None:
+        coin_age_days = get_coin_age_days(exchange, symbol)
+    
+    # ✅ LOGIKA DINAMIS BERDASARKAN UMUR KOIN
+    if coin_age_days < 30:  # Koin baru (<30 hari)
+        print(f"🟡 KOIN BARU ({coin_age_days} hari) - Gunakan MTF alternatif")
+        higher_timeframes = {
+            '15m': '15m',  # Lebih responsif
+            '1h': '1h',    # Timeframe utama
+        }
+        min_candles = 20  # Minimal candle yang diperlukan
+    else:  # Koin established
+        higher_timeframes = {
+            '4h': '4h',
+            '1d': '1d'
+        }
+        min_candles = 30
     
     trend_scores = []
     trend_directions = []
     
     for tf_name, tf_value in higher_timeframes.items():
         try:
-            ohlcv = exchange.fetch_ohlcv(symbol, tf_value, limit=50)
+            limit = 100 if tf_value == '1d' else 50
+            if coin_age_days < 30:  # Koin baru (<30 hari)
+                limit = min_candles
+            
+            ohlcv = exchange.fetch_ohlcv(symbol, tf_value, limit)
             if len(ohlcv) < 30:
                 continue
                 
@@ -832,36 +899,70 @@ def get_multi_timeframe_confirmation(exchange, symbol):
             adx = last_row['adx']
             plus_di = last_row['plus_di']
             minus_di = last_row['minus_di']
+
+            weight = 0.7 if tf_value == '1d' else 0.3
             
             # Hitung score tren untuk timeframe ini
             tf_score = 0
             tf_direction = 0  # 1 = bull, -1 = bear, 0 = neutral
             
             # 1. Kekuatan tren (ADX)
-            if adx > 25:
-                tf_score += 0.4
-            elif adx > 20:
-                tf_score += 0.3
-            elif adx > 15:
-                tf_score += 0.2
+            # if adx > 25:
+            #     tf_score += 0.4
+            # elif adx > 20:
+            #     tf_score += 0.3
+            # elif adx > 15:
+            #     tf_score += 0.2
+
+            adx_threshold = 20 if tf_value == '1d' else 15
+            if adx > adx_threshold + 10:
+                tf_score += 0.5 * weight
+            elif adx > adx_threshold + 5:
+                tf_score += 0.3 * weight
+            elif adx > adx_threshold:
+                tf_score += 0.2 * weight
                 
             # 2. Arah tren (DI+ vs DI-)
-            if plus_di > minus_di + 5 and plus_di > 20:
-                tf_score += 0.3
+            # if plus_di > minus_di + 5 and plus_di > 20:
+            #     tf_score += 0.3
+            #     tf_direction = 1
+            # elif minus_di > plus_di + 5 and minus_di > 20:
+            #     tf_score += 0.3
+            #     tf_direction = -1
+            di_threshold = 25 if tf_value == '1d' else 20
+            if plus_di > minus_di + 5 and plus_di > di_threshold:
+                tf_score += 0.4 * weight
                 tf_direction = 1
-            elif minus_di > plus_di + 5 and minus_di > 20:
-                tf_score += 0.3
+            elif minus_di > plus_di + 5 and minus_di > di_threshold:
+                tf_score += 0.4 * weight
                 tf_direction = -1
                 
             # 3. EMA alignment
-            if last_row['ema20'] > last_row['ema50']:
-                tf_score += 0.2
+            # if last_row['ema20'] > last_row['ema50']:
+            #     tf_score += 0.2
+            #     if tf_direction == 0:
+            #         tf_direction = 1
+            # elif last_row['ema20'] < last_row['ema50']:
+            #     tf_score += 0.2
+            #     if tf_direction == 0:
+            #         tf_direction = -1
+            if last_row['ema20'] > last_row['ema50'] * 1.01:  # Lebih ketat untuk daily
+                tf_score += 0.3 * weight
                 if tf_direction == 0:
                     tf_direction = 1
-            elif last_row['ema20'] < last_row['ema50']:
-                tf_score += 0.2
+            elif last_row['ema20'] < last_row['ema50'] * 0.99:
+                tf_score += 0.3 * weight
                 if tf_direction == 0:
                     tf_direction = -1
+            
+             # 4. ✅ Daily close position (HANYA UNTUK 1D)
+            if tf_value == '1d':
+                daily_close = last_row['close']
+                daily_open = tf_df['open'].iloc[-1]
+                if daily_close > daily_open * 1.02:  # Strong bullish candle
+                    tf_score += 0.2 * weight
+                elif daily_close < daily_open * 0.98:  # Strong bearish candle
+                    tf_score += 0.2 * weight
                     
             trend_scores.append(tf_score)
             trend_directions.append(tf_direction)
@@ -876,13 +977,40 @@ def get_multi_timeframe_confirmation(exchange, symbol):
         return 0.5, 0  # Default neutral
     
     # Hitung average score dan konsensus arah
-    avg_score = sum(trend_scores) / len(trend_scores)
-    direction_consensus = sum(trend_directions) / len(trend_directions) if trend_directions else 0
+    # avg_score = sum(trend_scores) / len(trend_scores)
+    # direction_consensus = sum(trend_directions) / len(trend_directions) if trend_directions else 0
+    total_weight = sum([0.7 if tf == '1d' else 0.3 for tf in higher_timeframes.keys()])
+    weighted_score = sum(score * (0.7 if i == 0 else 0.3) for i, score in enumerate(trend_scores)) / total_weight
     
     # Normalisasi direction consensus (-1 to 1)
-    direction_consensus = max(-1, min(1, direction_consensus))
+    # direction_consensus = max(-1, min(1, direction_consensus))
+    direction_consensus = trend_directions[0] if len(trend_directions) > 0 else 0
     
-    return avg_score, direction_consensus
+    return weighted_score, direction_consensus
+
+def get_coin_age_days(exchange, symbol):
+    """Hitung umur koin dalam hari sejak listing pertama"""
+    try:
+        # Ambil data trading terlama yang tersedia
+        earliest_ohlcv = exchange.fetch_ohlcv(symbol, '1d', limit=1, since=0)  # since=0 = dari awal
+        
+        if earliest_ohlcv and len(earliest_ohlcv) > 0:
+            first_candle_time = earliest_ohlcv[0][0]  # timestamp pertama
+            first_date = datetime.fromtimestamp(first_candle_time / 1000)
+            current_date = datetime.now()
+            age_days = (current_date - first_date).days
+            return max(1, age_days)  # minimal 1 hari
+        
+    except Exception as e:
+        print(f"Error cek umur {symbol}: {e}")
+        # Fallback: cek dari metadata exchange
+        market = exchange.market(symbol)
+        if 'info' in market and 'listingTime' in market['info']:
+            listing_time = int(market['info']['listingTime']) / 1000
+            listing_date = datetime.fromtimestamp(listing_time)
+            return max(1, (datetime.now() - listing_date).days)
+    
+    return 365  # Default: asumsi koin lama jika gagal deteksi
 
 def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balance, leverage,exchange):
     """Simulasikan eksekusi order market"""
@@ -1107,6 +1235,8 @@ def run_forward_test():
     OI_MIN_CHANGE_THRESHOLD = 2.0
     oi_confirmed_long = False
     oi_confirmed_short = False
+    last_entry_time = None      # waktu entry terakhir (untuk cooldown)
+    last_entry_symbol = None    # simbol yang terakhir di-entry
 
     oi_state = {
                     'last_oi': None,
@@ -1161,7 +1291,7 @@ def run_forward_test():
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
             # --- LOGIKA SCANNING ULANG OTOMATIS ---
 
-            if TIMEFRAME == '15m':
+            if TIMEFRAME == '1h':
                 minute = current_time.minute
                 second = current_time.second
                 # Cek apakah kita berada di menit 00, 15, 30, atau 45
@@ -1234,14 +1364,24 @@ def run_forward_test():
                                 else :
                                     print('skor rendah')
                                 
-                                timeframe_minutes = 15 if TIMEFRAME == '15m' else 5
-                                max_hold = max(25, 1.5 * (60 / timeframe_minutes))
+                                if TIMEFRAME == '1h':
+                                    timeframe_minutes = 60
+                                    base_hold = 240  # 4 jam (default untuk 1h)
+                                    max_hold = max(base_hold, 2.0 * (60 / timeframe_minutes))  # Min 4 jam
+                                elif TIMEFRAME == '15m':
+                                    timeframe_minutes = 15
+                                    base_hold = 25   # 25 menit (default untuk 15m)
+                                    max_hold = max(base_hold, 1.5 * (60 / timeframe_minutes))
+                                else:  # 5m
+                                    timeframe_minutes = 5
+                                    base_hold = 15   # 15 menit
+                                    max_hold = max(base_hold, 1.5 * (60 / timeframe_minutes))
+
                                 if hold_duration > max_hold:
-                                    # criteria_met += 1
                                     force_val = True
                                     force_reasons.append(f"Hold terlalu lama ({hold_duration:.0f}/{max_hold:.0f} menit)")
-                                else:
-                                    print('masih belum')
+                                else :
+                                    print('masih belum ges')
 
                                 # current_regime = scanner.detect_market_regime(df)
                                 temp_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, 50)
@@ -1252,11 +1392,19 @@ def run_forward_test():
                                 
                                 old_regime = active_position.get('market_regime', 'NEUTRAL')
                                 regime_map = {'STRONG_BULL': 1.0, 'BULL': 0.5, 'NEUTRAL': 0.0, 'BEAR': -0.5, 'STRONG_BEAR': -1.0}
-                                if abs(regime_map[current_regime] - regime_map[old_regime]) >= 0.4:
+                                regime_threshold = 0.6 if TIMEFRAME == '1h' else 0.4
+
+                                if abs(regime_map[current_regime] - regime_map[old_regime]) >= regime_threshold:
                                     criteria_met += 1
                                     force_reasons.append(f"Regime berubah ({old_regime} → {current_regime})")
                                 else:
                                     print('regime tidak berubah')
+
+                                # if abs(regime_map[current_regime] - regime_map[old_regime]) >= 0.4:
+                                #     criteria_met += 1
+                                #     force_reasons.append(f"Regime berubah ({old_regime} → {current_regime})")
+                                # else:
+                                #     print('regime tidak berubah')
 
                                 # expected_rr = TP_ATR_MULT / SL_ATR_MULT  # Contoh: 3.0 / 1.5 = 2.0
                                 # expected_pnl_pct = 1.0 * expected_rr if active_position['side'] == 'LONG' else 1.0
@@ -1684,7 +1832,9 @@ def run_forward_test():
                     short_level = df['bb_lower'].iloc[i-1]
                 else:
                     # Fallback ke swing levels seperti kode lama
-                    lookback_start_swing = max(0, i - 15)
+                    lookback_bars = 8 if TIMEFRAME == '1h' else 15  # Lebih pendek untuk 1h
+                    lookback_start_swing = max(0, i - lookback_bars)
+                    # lookback_start_swing = max(0, i - 15)
                     lookback_end_swing = i - 2
                     
                     if lookback_end_swing > lookback_start_swing:
@@ -1697,21 +1847,36 @@ def run_forward_test():
                     long_level = swing_high
                     short_level = swing_low
                 
-                # Breakout confirmation
-                broke_resistance = close > long_level * 1.002  # Break minimal 0.2%
-                broke_support = close < short_level * 0.998    # Break minimal 0.2%
-                volume_confirmed = volume > (current_row['volume_ma20'] * 1.5)
+                # # Breakout confirmation
+                # broke_resistance = close > long_level * 1.002  # Break minimal 0.2%
+                # broke_support = close < short_level * 0.998    # Break minimal 0.2%
+
+                buffer_pct = 0.005 if TIMEFRAME == '1h' else 0.002  # 0.5% untuk 1h
+                broke_resistance = close > long_level * (1 + buffer_pct)
+                broke_support = close < short_level * (1 - buffer_pct)
+
+                # volume_confirmed = volume > (current_row['volume_ma20'] * 1.5)
+
+                volume_multiplier = 1.8 if TIMEFRAME == '1h' else 1.5  # Lebih tinggi untuk 1h
+                volume_confirmed = volume > (current_row['volume_ma20'] * volume_multiplier)
                 
                 # RSI filter untuk breakout
                 # rsi_long_ok = current_row['rsi'] < 75  # Hindari overbought ekstrem
                 # rsi_short_ok = current_row['rsi'] > 25  # Hindari oversold ekstrem
                 rsi = current_row['rsi']
-                rsi_long_ok = 45 <= rsi <= 75
-                rsi_short_ok = 25 <= rsi <= 55
-                
+
+                # rsi_long_ok = 45 <= rsi <= 75
+                # rsi_short_ok = 25 <= rsi <= 55
+
+                rsi_long_ok = rsi <= 80 
+                rsi_short_ok = rsi >= 20
+
                 # MTF confirmation (lebih longgar untuk breakout)
-                mtf_ok_long = mtf_direction > -0.1  # Izinkan netral untuk long
-                mtf_ok_short = mtf_direction < 0.1  # Izinkan netral untuk short
+                # mtf_ok_long = mtf_direction > -0.1  # Izinkan netral untuk long
+                # mtf_ok_short = mtf_direction < 0.1  # Izinkan netral untuk short
+
+                mtf_ok_long = mtf_direction > -0.05  # Lebih ketat untuk 1h
+                mtf_ok_short = mtf_direction < 0.05
                 
                 # Entry condition untuk breakout mode
                 if broke_resistance and volume_confirmed and rsi_long_ok and mtf_ok_long and allow_long:
@@ -1724,41 +1889,41 @@ def run_forward_test():
             
             elif is_strong_trend:
                 # LONG di Uptrend
-                if is_uptrend and allow_long:
-                    # Pullback ke EMA cepat (EMA8/EMA20)
-                    pullback_to_ema = (
-                        (df['low'].iloc[i] <= ema_fast * (1 + 0.004)) and
-                        (close >= ema_fast * (1 - 0.004/2))
+                buffer_pullback = 0.008 if TIMEFRAME == '1h' else 0.004  # 0.8% untuk 1h
+                ema20 = df['ema20'].iloc[i]
+                if is_uptrend and allow_long:                    
+                    pullback_ok = (
+                        (df['low'].iloc[i] <= ema20 * (1 + buffer_pullback)) and
+                        (close >= ema20 * (1 - buffer_pullback/2))
                     )
-                    volume_pullback = volume < (current_row['volume_ma20'] * 0.85)  # Volume turun di pullback
-                    
-                    # rsi = current_row['rsi']
-                    # rsi_ok = 45 <= rsi <= 75
-                    rsi_ok = current_row['rsi'] < 68  # Tidak terlalu overbought
+
+                    volume_ok = volume < (current_row['volume_ma20'] * 0.9)
+
+                    rsi_ok = current_row['rsi'] < 70  # Tidak terlalu overbought
                     di_ok = current_row['plus_di'] > (current_row['minus_di'] + 3)  # Momentum positif
                     
                     # MTF confirmation (lebih ketat untuk trend continuation)
                     mtf_ok = mtf_direction > 0.05  # Minimal bullish bias
                     
-                    if pullback_to_ema and volume_pullback and rsi_ok and di_ok and mtf_ok:
+                    if pullback_ok and volume_ok and rsi_ok and di_ok and mtf_ok:
                         high_quality_long = True
                         print(f"📈 TREND MODE - LONG SIGNAL: {current_symbol} @ {close:.6f}")
                 
                 # SHORT di Downtrend
-                elif is_downtrend and allow_short:
-                    pullback_to_ema = (
-                        (df['high'].iloc[i] >= ema_fast * (1 - 0.004)) and
-                        (close <= ema_fast * (1 + 0.004/2))
+                elif is_downtrend and allow_short:   
+                    pullback_ok = (
+                        (df['high'].iloc[i] >= ema20 * (1 - buffer_pullback)) and
+                        (close <= ema20 * (1 + buffer_pullback/2))
                     )
-                    volume_pullback = volume < (current_row['volume_ma20'] * 0.85)
-                    # rsi = current_row['rsi']
-                    # rsi_ok = 25 <= rsi <= 55
-                    rsi_ok = current_row['rsi'] > 32  # Tidak terlalu oversold
+
+                    volume_ok = volume < (current_row['volume_ma20'] * 0.9)
+
+                    rsi_ok = current_row['rsi'] > 30  # Tidak terlalu oversold
                     di_ok = current_row['minus_di'] > (current_row['plus_di'] + 3)  # Momentum negatif
                     
                     mtf_ok = mtf_direction < -0.05  # Minimal bearish bias
                     
-                    if pullback_to_ema and volume_pullback and rsi_ok and di_ok and mtf_ok:
+                    if pullback_ok and volume_ok and rsi_ok and di_ok and mtf_ok:
                         high_quality_short = True
                         print(f"📉 TREND MODE - SHORT SIGNAL: {current_symbol} @ {close:.6f}")
 
@@ -1787,6 +1952,13 @@ def run_forward_test():
 
             tp_mult = TP_MULT_MAP.get(asset_class, 2.5)
             sl_mult = SL_MULT_MAP.get(asset_class, 1.8)
+
+            if active_position is None:
+                time_since_last_entry = (current_time - last_entry_time).total_seconds() / 60 if last_entry_time else float('inf')
+                if last_entry_symbol == current_symbol and time_since_last_entry < RESCAN_INTERVAL_MINUTES:
+                    send_telegram_message(f"entry ditunda karena suda ada sesi sebelumnya. {current_symbol} baru di-trade {time_since_last_entry:.0f} menit lalu. Tunggu hingga {RESCAN_INTERVAL_MINUTES} menit.")
+                    print(f"⏳ [{current_time.strftime('%H:%M:%S')}] COOLDOWN: {current_symbol} baru di-trade {time_since_last_entry:.0f} menit lalu. Tunggu hingga {RESCAN_INTERVAL_MINUTES} menit.")
+                    continue
             
             if high_quality_long:
                 entry_price = current_price
@@ -1814,6 +1986,8 @@ def run_forward_test():
                     
                     if MODE == 'simulated':
                         active_position = execute_order_simulated(current_symbol, 'LONG', qty, entry_price, sl, tp, balance, LEVERAGE, scanner.exchange)
+                        last_entry_time = datetime.now()
+                        last_entry_symbol = current_symbol
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
@@ -1823,7 +1997,6 @@ def run_forward_test():
                         active_position['expected_rr'] = TP_ATR_MULT / SL_ATR_MULT
 
 
-                        log_entry_to_excel(active_position, LOG_FILENAME)
                         send_telegram_message(f"📊 <b>ENTRY</b>\n"
                                             f"Coin: {active_position['symbol']}\n"
                                             f"Arah: {active_position['side']}\n"
@@ -1835,6 +2008,7 @@ def run_forward_test():
                                             f"Regime: {active_position['regime']}\n"
                                             f"RSI Current: {current_row['rsi']}\n"
                                             f"Expected RR: {active_position['expected_rr']:.2f}")
+                        log_entry_to_excel(active_position, LOG_FILENAME)
                                 
 
                     elif MODE == 'live':
@@ -1872,6 +2046,8 @@ def run_forward_test():
                     
                     if MODE == 'simulated':
                         active_position = execute_order_simulated(current_symbol, 'SHORT', qty, entry_price, sl, tp, balance, LEVERAGE,scanner.exchange)
+                        last_entry_time = datetime.now()
+                        last_entry_symbol = current_symbol
                         balance = active_position['balance'] 
                         active_position['entry_time'] = datetime.now()
                         active_position['regime'] = regime
@@ -2049,18 +2225,26 @@ def log_entry_to_excel(entry_data,filelog):
         'hold_time': '' # Kosongkan untuk entry
     }])
 
-    try:
-        # Coba baca file yang sudah ada
-        existing_df = pd.read_excel(filename, engine='openpyxl')
-        # Gabungkan data baru
-        updated_df = pd.concat([existing_df, df_entry], ignore_index=True)
-    except FileNotFoundError:
-        # Jika file belum ada, gunakan data baru sebagai awal
-        updated_df = df_entry
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            existing_df = pd.read_excel(filename, engine='openpyxl')
+            updated_df = pd.concat([existing_df, df_entry], ignore_index=True)
+        except FileNotFoundError:
+            updated_df = df_entry
 
-    # Simpan kembali ke file
-    updated_df.to_excel(filename, index=False, engine='openpyxl')
-    print(f"✅ Entry log disimpan ke: {filename}")
+        try:
+            updated_df.to_excel(filename, index=False, engine='openpyxl')
+            print(f"✅ Entry log disimpan ke: {filename}")
+            return  # Sukses, keluar
+        except Exception as e:
+            print(f"⚠️ Gagal menyimpan entry (percobaan {attempt+1}/{max_retries}): {e}")
+            time.sleep(1)
+    
+    # Jika semua percobaan gagal
+    print("❌ SEMUA PERCOBAAN GAGAL: Simpan cadangan ke file teks")
+    with open(f"entry_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w") as f:
+        f.write(str(entry_data))
 
 def log_exit_to_excel(exit_data,filelog):
     """Simpan data exit ke file Excel yang sama dengan entry"""
