@@ -1263,6 +1263,7 @@ def run_forward_test():
 
     # Hitung indikator awal
     df['ema_fast'] = talib.EMA(df['close'], 20)
+    df['ema20'] = talib.EMA(df['close'], 20)
     df['ema_slow'] = talib.EMA(df['close'], 50)
     df['ema_200'] = talib.EMA(df['close'], 200)
     df['rsi'] = talib.RSI(df['close'], 14)
