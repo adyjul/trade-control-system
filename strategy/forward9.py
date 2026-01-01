@@ -847,7 +847,7 @@ def get_current_price(exchange, symbol):
         except:
             return None
 
-def get_multi_timeframe_confirmation(exchange, symbol):
+def get_multi_timeframe_confirmation(exchange, symbol,coin_age_days=None):
     """Dapatkan konfirmasi tren dari multiple timeframe"""
     # higher_timeframes = {
     #     '4h': '4h',
