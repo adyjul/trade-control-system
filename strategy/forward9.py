@@ -24,7 +24,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')  
 ENABLE_TELEGRAM = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 
-if TIMEFRAME == '1h':
+if TIMEFRAME == '15m':
     ATR_WINDOW = 14
     VOLATILITY_ADJUSTMENT = 1.8  # Faktor peningkatan volatilitas
     
