@@ -1765,6 +1765,7 @@ def run_forward_test():
 
             ema_slow = current_row['ema_slow']
             ema_fast = current_row['ema_fast']
+            ema_20 = current_row['ema_20']
             recent_atr_pct = df['atr_pct'].iloc[-100:].quantile(0.3)
             dynamic_atr_threshold = max(0.15, recent_atr_pct * 0.8)
             # atr_threshold = dynamic_thresholds['atr_threshold']
@@ -1891,7 +1892,8 @@ def run_forward_test():
             elif is_strong_trend:
                 # LONG di Uptrend
                 buffer_pullback = 0.008 if TIMEFRAME == '1h' else 0.004  # 0.8% untuk 1h
-                ema20 = df['ema20'].iloc[i]
+                # ema20 = df['ema20'].iloc[i]
+                ema20 = ema_fast 
                 if is_uptrend and allow_long:                    
                     pullback_ok = (
                         (df['low'].iloc[i] <= ema20 * (1 + buffer_pullback)) and
