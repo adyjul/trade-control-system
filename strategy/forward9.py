@@ -1765,7 +1765,7 @@ def run_forward_test():
 
             ema_slow = current_row['ema_slow']
             ema_fast = current_row['ema_fast']
-            ema_20 = current_row['ema_20']
+            # ema_20 = current_row['ema_20']
             recent_atr_pct = df['atr_pct'].iloc[-100:].quantile(0.3)
             dynamic_atr_threshold = max(0.15, recent_atr_pct * 0.8)
             # atr_threshold = dynamic_thresholds['atr_threshold']
