@@ -1230,8 +1230,8 @@ def run_forward_test():
     # last_scan_time = datetime.now()
     # last_switch_time = datetime.now()
 
-    last_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES) - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
     next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
+    last_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES) - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
 
     print(f"📡 Bot dijalankan jam {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print(f"⏰ Scan pertama akan terjadi di: {next_scan_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
@@ -1302,10 +1302,10 @@ def run_forward_test():
             if TIMEFRAME == '1h':
                 minute = current_time.minute
                 second = current_time.second
-                # Cek apakah kita berada di menit 00, 15, 30, atau 45
-                if minute % 15 != 0:
-                    continue  # Skip kalau bukan menit kelipatan 15
-                if second < 2:  # Tunggu minimal 2 detik setelah tepat menit
+                # Hanya jalankan tepat setelah candle 1h SELESAI (xx:00:02 UTC)
+                if minute != 0:
+                    continue
+                if second < 2:
                     continue
             
 
