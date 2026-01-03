@@ -1227,8 +1227,15 @@ def run_forward_test():
     active_position = None
     trade_log = []
     current_symbol = None
-    last_scan_time = datetime.now()
-    last_switch_time = datetime.now()
+    # last_scan_time = datetime.now()
+    # last_switch_time = datetime.now()
+
+    last_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES) - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
+    next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
+
+    print(f"📡 Bot dijalankan jam {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    print(f"⏰ Scan pertama akan terjadi di: {next_scan_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
     last_exit_time = None
     last_oi = None
     last_oi_update = datetime.now()
@@ -1308,15 +1315,23 @@ def run_forward_test():
             should_rescan = False
             
             # Kondisi 1: Interval waktu tercapai
-            if (current_time - last_scan_time).total_seconds() >= RESCAN_INTERVAL_MINUTES * 60:
-                print(f"⏰ [{current_time.strftime('%H:%M:%S')}] WAKTU SCAN ULANG TERJANGKAU ({RESCAN_INTERVAL_MINUTES} MENIT)")
+            # if (current_time - last_scan_time).total_seconds() >= RESCAN_INTERVAL_MINUTES * 60:
+            #     print(f"⏰ [{current_time.strftime('%H:%M:%S')}] WAKTU SCAN ULANG TERJANGKAU ({RESCAN_INTERVAL_MINUTES} MENIT)")
+            #     should_rescan = True
+
+            if current_time >= next_scan_time:
+                print(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit)")
                 should_rescan = True
+
+                next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
+                last_scan_time = current_time
             
             # Kondisi 2: Setelah exit posisi (tunggu minimal MIN_TIME_BETWEEN_SCANS menit)
-            if last_exit_time and (current_time - last_exit_time).total_seconds() >= MIN_TIME_BETWEEN_SCANS * 60:
-                print(f"✅ [{current_time.strftime('%H:%M:%S')}] SCANNING ULANG SETELAH EXIT POSISI")
-                should_rescan = True
-                last_exit_time = None  # Reset agar tidak terus menerus scan
+            # untuk konsistensi trade : 1 kali trade setiap timeframe waktu dan coin
+            # if last_exit_time and (current_time - last_exit_time).total_seconds() >= MIN_TIME_BETWEEN_SCANS * 60:
+            #     print(f"✅ [{current_time.strftime('%H:%M:%S')}] SCANNING ULANG SETELAH EXIT POSISI")
+            #     should_rescan = True
+            #     last_exit_time = None  # Reset agar tidak terus menerus scan
             
             # Kondisi 3: Tidak ada sinyal entry dalam waktu lama (opsional, bisa ditambahkan)
             # ...
@@ -2202,6 +2217,17 @@ def send_telegram_message(message):
             print(f"❌ Gagal kirim Telegram: {response.text}")
     except Exception as e:
         print(f"⚠️ Error kirim Telegram: {e}")
+
+
+def get_next_aligned_time(interval_minutes):
+    """Hitung waktu UTC berikutnya yang merupakan kelipatan dari interval_minutes."""
+    now = datetime.utcnow()
+    # Jumlah menit sejak epoch
+    total_minutes = int(now.timestamp() // 60)
+    # Hitung kelipatan terdekat ke depan
+    aligned_minutes = ((total_minutes // interval_minutes) + 1) * interval_minutes
+    next_aligned = datetime.utcfromtimestamp(aligned_minutes * 60)
+    return next_aligned
 
 
 def log_entry_to_excel(entry_data,filelog):
