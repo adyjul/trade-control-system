@@ -1231,7 +1231,7 @@ def run_forward_test():
 
     last_switch_time = datetime.utcnow()
     next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
-    last_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES) - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
+    last_scan_time = next_scan_time - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
 
     print(f"📡 Bot dijalankan jam {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print(f"⏰ Scan pertama akan terjadi di: {next_scan_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
@@ -1304,9 +1304,7 @@ def run_forward_test():
                 minute = current_time.minute
                 second = current_time.second
                 # Hanya jalankan tepat setelah candle 1h SELESAI (xx:00:02 UTC)
-                if minute != 0:
-                    continue
-                if second < 2:
+                if minute != 0 or second < 2:
                     continue
             
 
@@ -1321,10 +1319,10 @@ def run_forward_test():
             #     should_rescan = True
 
             if current_time >= next_scan_time:
-                print(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit)")
-                should_rescan = True
-                send_telegram_message(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit) current {current_time.strftime('%H:%M:%S')} next {next_scan_time.strftime('%H:%M:%S')}")
                 next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
+                should_rescan = True
+                print(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit)")
+                send_telegram_message(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit) current {current_time.strftime('%H:%M:%S')} next {next_scan_time.strftime('%H:%M:%S')}")
                 last_scan_time = current_time
             
             # Kondisi 2: Setelah exit posisi (tunggu minimal MIN_TIME_BETWEEN_SCANS menit)
@@ -2221,13 +2219,23 @@ def send_telegram_message(message):
 
 
 def get_next_aligned_time(interval_minutes):
-    """Hitung waktu UTC berikutnya yang merupakan kelipatan dari interval_minutes."""
+    """Hitung waktu UTC berikutnya yang merupakan kelipatan dari interval_minutes (misal 6 jam)."""
     now = datetime.utcnow()
-    # Jumlah menit sejak epoch
-    total_minutes = int(now.timestamp() // 60)
-    # Hitung kelipatan terdekat ke depan
-    aligned_minutes = ((total_minutes // interval_minutes) + 1) * interval_minutes
-    next_aligned = datetime.utcfromtimestamp(aligned_minutes * 60)
+    
+    # Hitung menit sejak jam 00:00 hari ini
+    minutes_since_midnight = now.hour * 60 + now.minute
+    
+    # Hitung berapa menit lagi sampai kelipatan berikutnya
+    minutes_to_next = interval_minutes - (minutes_since_midnight % interval_minutes)
+    
+    # Tambahkan ke waktu sekarang, lalu reset detik/microsecond
+    next_aligned = now + timedelta(minutes=minutes_to_next)
+    next_aligned = next_aligned.replace(second=0, microsecond=0)
+    
+    # Jika hasilnya masih di masa lalu (misal karena perbedaan detik), tambah 1 interval
+    if next_aligned <= now:
+        next_aligned += timedelta(minutes=interval_minutes)
+    
     return next_aligned
 
 
