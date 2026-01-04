@@ -1322,7 +1322,7 @@ def run_forward_test():
             if current_time >= next_scan_time:
                 print(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit)")
                 should_rescan = True
-
+                send_telegram_message(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit) current {current_time.strftime('%H:%M:%S')} next {next_scan_time.strftime('%H:%M:%S')}")
                 next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
                 last_scan_time = current_time
             
