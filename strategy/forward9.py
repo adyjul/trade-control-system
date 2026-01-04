@@ -1295,6 +1295,7 @@ def run_forward_test():
     try:
         while True:
 
+            # current_time = datetime.utcnow()
             current_time = datetime.utcnow()
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
             # --- LOGIKA SCANNING ULANG OTOMATIS ---
