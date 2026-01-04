@@ -1228,8 +1228,8 @@ def run_forward_test():
     trade_log = []
     current_symbol = None
     # last_scan_time = datetime.now()
-    # last_switch_time = datetime.now()
 
+    last_switch_time = datetime.utcnow()
     next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
     last_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES) - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
 
@@ -1286,7 +1286,7 @@ def run_forward_test():
     market_regime = scanner.detect_market_regime(df)
     dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
 
-    last_update_time = datetime.now()
+    last_update_time = datetime.utcnow()
     last_data_time = df['timestamp'].iloc[-1]
 
     print(f"✅ Forward Test Siap - {current_symbol} | Regime: {market_regime} | Aset: {asset_profile.get('asset_class', 'N/A')}")
@@ -1295,7 +1295,7 @@ def run_forward_test():
     try:
         while True:
 
-            current_time = datetime.now()
+            current_time = datetime.utcnow()
             time.sleep(5) # Tunggu 5 detik sebelum cek lagi
             # --- LOGIKA SCANNING ULANG OTOMATIS ---
 
