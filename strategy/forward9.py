@@ -2202,6 +2202,7 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
 
 def send_telegram_message(message):
     """Kirim pesan ke chat Telegram"""
+    print(f"Mengirim pesan ke Telegram...{TELEGRAM_BOT_TOKEN}")
     if not ENABLE_TELEGRAM:
         return
     try:
