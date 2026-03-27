@@ -1220,7 +1220,7 @@ def run_forward_test():
     """Jalankan Forward Test Loop dengan scanning ulang otomatis"""
     print(f"🚀 MULAI FORWARD TEST - MODE: {MODE.upper()} | INTERVAL SCAN: {RESCAN_INTERVAL_MINUTES} MENIT")
     print("=" * 70)
-
+    send_telegram_message(f"🔄 [UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit) current next ")
     LOG_FILENAME = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     scanner = MarketScanner()
     balance = INITIAL_BALANCE
