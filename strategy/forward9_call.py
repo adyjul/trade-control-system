@@ -847,1340 +847,727 @@ def get_current_price(exchange, symbol):
         except:
             return None
 
-def get_multi_timeframe_confirmation(exchange, symbol,coin_age_days=None):
-    """Dapatkan konfirmasi tren dari multiple timeframe"""
-    # higher_timeframes = {
-    #     '4h': '4h',
-    #     '1d' : '1d',
-    # }
 
-    if coin_age_days is None:
-        coin_age_days = get_coin_age_days(exchange, symbol)
+# utamanya disini
+# --- FUNGSI UTAMA FORWARD TEST DENGAN SCANNING ULANG ---
+def run_signal_generator():
+    print("📡 MODE: SIGNAL GENERATOR | INTERVAL: 6 JAM | TF: 1h")
+    scanner = MarketScanner()
+    next_scan = get_next_aligned_time(360)
     
-    # ✅ LOGIKA DINAMIS BERDASARKAN UMUR KOIN
-    if coin_age_days < 30:  # Koin baru (<30 hari)
-        print(f"🟡 KOIN BARU ({coin_age_days} hari) - Gunakan MTF alternatif")
-        higher_timeframes = {
-            '15m': '15m',  # Lebih responsif
-            '1h': '1h',    # Timeframe utama
-        }
-        min_candles = 20  # Minimal candle yang diperlukan
-    else:  # Koin established
-        higher_timeframes = {
-            '4h': '4h',
-            '1d': '1d'
-        }
-        min_candles = 30
+    print(f"⏳ Scan pertama: {next_scan.strftime('%Y-%m-%d %H:%M UTC')}")
     
-    trend_scores = []
-    trend_directions = []
-    
-    for tf_name, tf_value in higher_timeframes.items():
-        try:
-            limit = 100 if tf_value == '1d' else 50
-            if coin_age_days < 30:  # Koin baru (<30 hari)
-                limit = min_candles
+    while True:
+        now = datetime.utcnow()
+        if now >= next_scan:
+            print(f"\n🔍 [{now.strftime('%H:%M')}] MEMULAI SCAN & GENERATE CALL...")
+            trending = scanner.get_trending_symbols()
+            ranked = scanner.rank_symbols_by_activity(trending)
+            top_3 = ranked[:3]
             
-            ohlcv = exchange.fetch_ohlcv(symbol, tf_value, limit)
-            if len(ohlcv) < 30:
+            if len(top_3) == 0:
+                print("⚠️ Tidak ada koin qualified. Tunggu scan berikutnya.")
+                next_scan = get_next_aligned_time(360)
+                time.sleep(60)
                 continue
                 
-            tf_df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            tf_df['timestamp'] = pd.to_datetime(tf_df['timestamp'], unit='ms')
+            signals = []
+            for asset in top_3:
+                sym = asset['symbol']
+                df = fetch_ohlcv_data(sym, TIMEFRAME, 120)
+                if df is None or len(df) < 60: continue
+                
+                # Hitung ATR
+                df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+                atr = df['atr'].iloc[-1]
+                close = df['close'].iloc[-1]
+                
+                # Tentukan arah sederhana (bisa disesuaikan dengan logika setup Anda)
+                # direction = 'LONG' if close > df['ema20'].iloc[-1] else 'SHORT'
+                
+                # Ambil data eksternal
+                ext_data = fetch_external_market_data(sym, TIMEFRAME,scanner)
+                
+                # Generate range TP/SL
+                # ranges = generate_tp_sl_ranges(close, atr, df, direction, TIMEFRAME)
+                signal, confidence, reasons, sl_tp = professional_entry_decision(
+                    sym, df, scanner, TIMEFRAME, ext_data
+                )
+
+                if signal in ['LONG', 'SHORT']:
+                    # Hitung win rate kontekstual
+                    symbol_base = sym.split('/')[0]
+                    asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
+                    # wr_data = calculate_contextual_win_rate(
+                    #     sym, signal, sl_tp.get('rr1', 2.0), asset_class, ext_data
+                    # )  
+                    rr_val = sl_tp.get('rr', 2.0)  # pakai 'rr'
+                    wr_data = calculate_contextual_win_rate(sym, signal, rr_val, asset_class, ext_data) 
+                
+                    signal_payload = {
+                        'symbol': sym,
+                        'timeframe': TIMEFRAME,
+                        'direction': signal,
+                        'entry_low': round(close * 0.999, 5),
+                        'entry_high': round(close * 1.001, 5),
+                        'sl': sl_tp['sl'],
+                        'tp1': sl_tp['tp1'],
+                        'tp2': sl_tp['tp2'],
+                        'rr1': sl_tp.get('rr1', sl_tp.get('rr', 2.0)),
+                        'rr2': sl_tp.get('rr2', sl_tp.get('rr', 2.0)),
+                        'win_rate': wr_data['win_rate'],
+                        'confidence': wr_data['confidence'],
+                        'reasons': wr_data['reasons'],
+                        'factors': wr_data['factors'],
+                        'next_scan': get_next_aligned_time(360).strftime('%H:%M UTC')
+                    }
+
+                    send_telegram_call(signal_payload)
+                
+                time.sleep(1.5)  # Hindari rate limit
+                
+            next_scan = get_next_aligned_time(360)
+            print(f"⏳ Scan berikutnya: {next_scan.strftime('%Y-%m-%d %H:%M UTC')}")
             
-            # Hitung indikator dasar
+        time.sleep(60)
+
+def fetch_external_market_data(symbol, timeframe,scanner):
+    """Ambil data makro & sentiment publik (semua gratis/public)"""
+    data = {}
+    try:
+        # 1. Fear & Greed Index (Global)
+        fg_res = requests.get('https://api.alternative.me/fng/?limit=1', timeout=5)
+        data['fear_greed'] = int(fg_res.json()['data'][0]['value'])
+        data['fear_greed_label'] = fg_res.json()['data'][0]['value_classification']
+    except:
+        data['fear_greed'] = 50
+        data['fear_greed_label'] = 'Neutral'
+
+    # 2. Funding Rate (Binance Futures)
+    try:
+        base = symbol.split('/')[0]
+        futures_sym = f"{base}USDT"
+        fr_data = scanner.exchange.fapiPublicGetFundingRate({'symbol': futures_sym, 'limit': 1})
+        data['funding_rate'] = float(fr_data[0]['fundingRate']) * 100
+    except:
+        data['funding_rate'] = 0.0
+
+    # 3. Open Interest Change (24h proxy)
+    try:
+        oi_data = scanner.exchange.fapiPublicGetOpenInterest({'symbol': futures_sym})
+        data['current_oi'] = float(oi_data['openInterest'])
+        data['oi_change_pct'] = 0.0  # Fallback jika history OI tidak tersedia
+    except:
+        data['current_oi'] = 0
+        data['oi_change_pct'] = 0.0
+
+    # 4. BTC Dominance Trend (CoinGecko Free)
+    try:
+        btc_dom_res = requests.get('https://api.coingecko.com/api/v3/global', timeout=5)
+        data['btc_dominance'] = float(btc_dom_res.json()['data']['market_cap_percentage']['btc'])
+    except:
+        data['btc_dominance'] = 52.0  # default historis
+
+    # 5. Social Sentiment Proxy (Volume/Price Momentum + OB Imbalance)
+    try:
+        ob = scanner.exchange.fetch_order_book(symbol, limit=20)
+        bid_vol = sum(b[1] for b in ob['bids'][:10])
+        ask_vol = sum(a[1] for a in ob['asks'][:10])
+        total = bid_vol + ask_vol
+        data['ob_imbalance'] = (bid_vol - ask_vol) / total if total > 0 else 0
+        data['social_sentiment_proxy'] = max(-1, min(1, data['ob_imbalance'] * 2))
+    except:
+        data['social_sentiment_proxy'] = 0.0
+
+    return data
+
+
+def calculate_contextual_win_rate(symbol, side, rr, asset_class, ext_data):
+    """Hitung win rate realistis berdasarkan kondisi makro & mikro"""
+    base_map = {'MAJOR': 0.54, 'MID_CAP': 0.51, 'SMALL_CAP': 0.48, 'MEME': 0.44, 'DEFAULT': 0.50}
+    base = base_map.get(asset_class, 0.50)
+    reasons = []
+
+    # 1. R:R Adjustment
+    rr_adj = max(-0.08, min(0.08, (rr - 2.0) * 0.015))
+    base += rr_adj
+    reasons.append(f"R:R {'+' if rr_adj>=0 else ''}{rr_adj*100:.1f}%")
+
+    # 2. Fear & Greed
+    fg = ext_data['fear_greed']
+    fg_adj = (fg - 50) / 100 * 0.10 if side == 'LONG' else (50 - fg) / 100 * 0.10
+    base += fg_adj
+    reasons.append(f"F&G ({ext_data['fear_greed_label']}) {'+' if fg_adj>=0 else ''}{fg_adj*100:.1f}%")
+
+    # 3. Funding Rate (Crowding Risk)
+    fr = ext_data['funding_rate']
+    fr_threshold = 0.10 if asset_class in ['MEME', 'SMALL_CAP'] else 0.05
+    fr_adj = 0
+    if side == 'LONG':
+        if fr > fr_threshold: fr_adj = -0.07
+        elif fr < -0.02: fr_adj = +0.05
+    else:
+        if fr > fr_threshold: fr_adj = +0.05
+        elif fr < -0.02: fr_adj = -0.07
+    base += fr_adj
+    reasons.append(f"Funding {'+' if fr_adj>=0 else ''}{fr_adj*100:.1f}%")
+
+    # 4. BTC Dominance
+    dom = ext_data['btc_dominance']
+    if asset_class != 'MAJOR':
+        dom_adj = 0.04 if dom < 50 else -0.05 if dom > 58 else 0
+        base += dom_adj
+        reasons.append(f"BTC Dom {dom:.1f}% {'+' if dom_adj>=0 else ''}{dom_adj*100:.1f}%")
+
+    # 5. Social/OB Sentiment Proxy
+    sent = ext_data['social_sentiment_proxy']
+    sent_adj = sent * 0.06 if side == 'LONG' else -sent * 0.06
+    base += sent_adj
+    reasons.append(f"OB/Sentiment {'+' if sent_adj>=0 else ''}{sent_adj*100:.1f}%")
+
+    # Clamp realistis
+    final_wr = round(max(0.32, min(0.78, base)) * 100, 1)
+    confidence = "HIGH" if final_wr >= 62 else "MEDIUM" if final_wr >= 52 else "LOW"
+    
+    return {'win_rate': final_wr, 'confidence': confidence, 'factors': reasons}
+
+
+def generate_tp_sl_ranges(entry_price, atr, df, direction, timeframe, scanner, symbol):
+    """Buat range SL & TP1/TP2 berbasis struktur pasar & volatilitas"""
+    lookback = 20 if timeframe == '1h' else 12
+    swing_high = df['high'].iloc[-lookback:].max()
+    swing_low = df['low'].iloc[-lookback:].min()
+    
+    if direction == 'LONG':
+        sl = max(swing_low * 0.998, entry_price - atr * 1.8)
+        tp1 = entry_price + atr * 1.5
+        tp2 = min(swing_high * 1.01, entry_price + atr * 3.5)
+    else:
+        sl = min(swing_high * 1.002, entry_price + atr * 1.8)
+        tp1 = entry_price - atr * 1.5
+        tp2 = max(swing_low * 0.99, entry_price - atr * 3.5)
+        
+    # Presisi harga sesuai exchange
+    sl = float(scanner.exchange.price_to_precision(symbol, sl))
+    tp1 = float(scanner.exchange.price_to_precision(symbol, tp1))
+    tp2 = float(scanner.exchange.price_to_precision(symbol, tp2))
+    
+    rr1 = abs(tp1 - entry_price) / abs(entry_price - sl) if sl != entry_price else 0
+    rr2 = abs(tp2 - entry_price) / abs(entry_price - sl) if sl != entry_price else 0
+    
+    return {'sl': sl, 'tp1': tp1, 'tp2': tp2, 'rr1': round(rr1, 2), 'rr2': round(rr2, 2)}
+
+def professional_entry_decision(symbol, df, scanner, timeframe='1h', ext_data=None):
+    """
+    Professional-grade entry decision engine
+    Returns: (signal: str, confidence: float, reasons: list, sl_tp: dict)
+    signal: 'LONG', 'SHORT', or 'WAIT'
+    """
+    if len(df) < 100:
+        return 'WAIT', 0.0, ['Data insufficient'], {}
+    
+    reasons = []
+    score = 0.0
+    max_score = 0.0
+    
+    # ========== 1. MARKET STRUCTURE ANALYSIS ==========
+    structure = analyze_market_structure(df)
+    max_score += 2.0
+    
+    if structure['trend'] == 'BULLISH' and structure['bos_confirmed']:
+        score += 1.5
+        reasons.append(f"Structure: Bullish BOS @{structure['bos_level']:.4f}")
+    elif structure['trend'] == 'BEARISH' and structure['bos_confirmed']:
+        score -= 1.5
+        reasons.append(f"Structure: Bearish BOS @{structure['bos_level']:.4f}")
+    
+    if structure['choch_detected']:
+        score += 0.5 if structure['choch_direction'] > 0 else -0.5
+        reasons.append(f"CHoCH: {'Bull' if structure['choch_direction']>0 else 'Bear'}")
+    
+    # ========== 2. SMART MONEY CONCEPTS ==========
+    smc = detect_smc_signals(df)
+    max_score += 2.0
+    
+    if smc['order_block_signal'] != 'NONE':
+        score += 1.0 if smc['order_block_signal'] == 'BULL' else -1.0
+        reasons.append(f"Order Block: {smc['order_block_signal']} @{smc['ob_price']:.4f}")
+    
+    if smc['fvg_signal'] != 'NONE' and smc['fvg_filled']:
+        score += 0.8 if smc['fvg_signal'] == 'BULL' else -0.8
+        reasons.append(f"FVG Fill: {smc['fvg_signal']}")
+    
+    if smc['liquidity_sweep']:
+        score += 0.7 if smc['sweep_direction'] > 0 else -0.7
+        reasons.append(f"Liquidity Sweep: {'Buy-side' if smc['sweep_direction']>0 else 'Sell-side'}")
+    
+    # ========== 3. VOLUME PROFILE & ORDER FLOW ==========
+    volume_analysis = analyze_volume_profile(df)
+    max_score += 1.5
+    
+    if volume_analysis['poc_reaction'] != 'NONE':
+        score += 0.6 if volume_analysis['poc_reaction'] == 'BOUNCE_BULL' else -0.6
+        reasons.append(f"POC Reaction: {volume_analysis['poc_reaction']}")
+    
+    if volume_analysis['absorption_detected']:
+        score += 0.5 if volume_analysis['absorption_side'] == 'BULL' else -0.5
+        reasons.append(f"Absorption: {volume_analysis['absorption_side']}")
+    
+    if volume_analysis['imbalance_ratio'] > 1.8:
+        score += 0.4 if volume_analysis['imbalance_side'] == 'BULL' else -0.4
+        reasons.append(f"Volume Imbalance: {volume_analysis['imbalance_side']}")
+    
+    # ========== 4. DIVERGENCE DETECTION ==========
+    divergence = detect_divergences(df)
+    max_score += 1.5
+    
+    if divergence['rsi_divergence'] != 'NONE':
+        score += 0.7 if divergence['rsi_divergence'] == 'BULL' else -0.7
+        reasons.append(f"RSI Divergence: {divergence['rsi_divergence']}")
+    
+    if divergence['macd_divergence'] != 'NONE' and divergence['macd_confirmed']:
+        score += 0.6 if divergence['macd_divergence'] == 'BULL' else -0.6
+        reasons.append(f"MACD Divergence: {divergence['macd_divergence']}")
+    
+    # ========== 5. MULTI-TIMEFRAME ALIGNMENT ==========
+    mtf_alignment = check_mtf_alignment(scanner.exchange, symbol, df, timeframe)
+    max_score += 2.0
+    
+    if mtf_alignment['all_bullish']:
+        score += 1.8
+        reasons.append("MTF: Full Bullish Alignment (15m/1h/4h)")
+    elif mtf_alignment['all_bearish']:
+        score -= 1.8
+        reasons.append("MTF: Full Bearish Alignment (15m/1h/4h)")
+    elif mtf_alignment['majority_bullish']:
+        score += 0.9
+        reasons.append("MTF: Majority Bullish (2/3 timeframes)")
+    elif mtf_alignment['majority_bearish']:
+        score -= 0.9
+        reasons.append("MTF: Majority Bearish (2/3 timeframes)")
+    else:
+        reasons.append("MTF: Mixed/Conflicting signals")
+    
+    # ========== 6. CORRELATION FILTER ==========
+    corr_filter = check_correlation_filter(scanner.exchange, symbol, ext_data)
+    max_score += 1.0
+    
+    if corr_filter['btc_correlation_ok']:
+        score += 0.5 if corr_filter['btc_trend'] == 'BULL' else -0.5
+        reasons.append(f"BTC Correlation: {corr_filter['btc_trend']} ✓")
+    else:
+        score -= 0.3
+        reasons.append("BTC Correlation: Conflicting ⚠️")
+    
+    # ========== 7. TIME/SESSION FILTER ==========
+    time_filter = check_time_filter(timeframe)
+    max_score += 0.5
+    
+    if time_filter['optimal_window']:
+        score += 0.4
+        reasons.append(f"Session: {time_filter['active_session']} (High Volatility)")
+    elif time_filter['avoid_window']:
+        score -= 0.5
+        reasons.append("Session: Low liquidity / News window ⚠️")
+    
+    # ========== 8. DYNAMIC RISK-REWARD VALIDATION ==========
+    rr_validation = validate_risk_reward(df, structure, smc)
+    max_score += 1.0
+    
+    if rr_validation['min_rr_met']:
+        score += 0.8
+        reasons.append(f"RR Ratio: {rr_validation['estimated_rr']:.2f} ✓")
+    else:
+        score -= 0.4
+        reasons.append(f"RR Ratio: {rr_validation['estimated_rr']:.2f} < 1.5 ⚠️")
+    
+    # ========== FINAL DECISION ==========
+    normalized_score = score / max_score if max_score > 0 else 0
+    confidence = round(abs(normalized_score) * 100, 1)
+    
+    # Thresholds profesional
+    LONG_THRESHOLD = 0.35   # Score > 35% of max → LONG
+    SHORT_THRESHOLD = -0.35 # Score < -35% of max → SHORT
+    
+    if normalized_score >= LONG_THRESHOLD and confidence >= 55:
+        signal = 'LONG'
+        sl_tp = calculate_structure_based_sl_tp(df, 'LONG', structure, smc)
+        reasons.append(f"✅ ENTRY LONG | Confidence: {confidence}%")
+    elif normalized_score <= SHORT_THRESHOLD and confidence >= 55:
+        signal = 'SHORT'
+        sl_tp = calculate_structure_based_sl_tp(df, 'SHORT', structure, smc)
+        reasons.append(f"✅ ENTRY SHORT | Confidence: {confidence}%")
+    else:
+        signal = 'WAIT'
+        sl_tp = {}
+        reasons.append(f"⏳ WAIT | Score: {normalized_score:.2f} | Need >±0.35")
+    
+    return signal, confidence, reasons, sl_tp
+
+def analyze_market_structure(df, lookback=50):
+    """Deteksi Higher Highs/Lows, BOS, CHoCH"""
+    highs = df['high'].values
+    lows = df['low'].values
+    closes = df['close'].values
+    
+    # Detect swing points
+    swing_highs = []
+    swing_lows = []
+    for i in range(5, len(df)-5):
+        if highs[i] > max(highs[i-5:i]) and highs[i] > max(highs[i+1:i+6]):
+            swing_highs.append((i, highs[i]))
+        if lows[i] < min(lows[i-5:i]) and lows[i] < min(lows[i+1:i+6]):
+            swing_lows.append((i, lows[i]))
+    
+    # Trend determination
+    if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+        last_hh = swing_highs[-1][1] > swing_highs[-2][1]
+        last_hl = swing_lows[-1][1] > swing_lows[-2][1]
+        last_ll = swing_lows[-1][1] < swing_lows[-2][1]
+        last_lh = swing_highs[-1][1] < swing_highs[-2][1]
+        
+        if last_hh and last_hl:
+            trend = 'BULLISH'
+        elif last_ll and last_lh:
+            trend = 'BEARISH'
+        else:
+            trend = 'RANGING'
+    else:
+        trend = 'UNKNOWN'
+    
+    # BOS detection
+    bos_confirmed = False
+    bos_level = None
+    if trend == 'BULLISH' and len(swing_highs) >= 2:
+        if closes[-1] > swing_highs[-1][1]:
+            bos_confirmed = True
+            bos_level = swing_highs[-1][1]
+    elif trend == 'BEARISH' and len(swing_lows) >= 2:
+        if closes[-1] < swing_lows[-1][1]:
+            bos_confirmed = True
+            bos_level = swing_lows[-1][1]
+    
+    # CHoCH detection
+    choch_detected = False
+    choch_direction = 0
+    if len(swing_highs) >= 3 and len(swing_lows) >= 3:
+        if trend == 'BULLISH' and closes[-1] < swing_lows[-2][1]:
+            choch_detected = True
+            choch_direction = -1
+        elif trend == 'BEARISH' and closes[-1] > swing_highs[-2][1]:
+            choch_detected = True
+            choch_direction = 1
+    
+    return {
+        'trend': trend,
+        'bos_confirmed': bos_confirmed,
+        'bos_level': bos_level,
+        'choch_detected': choch_detected,
+        'choch_direction': choch_direction,
+        'swing_highs': swing_highs[-3:],
+        'swing_lows': swing_lows[-3:]
+    }
+
+
+def detect_smc_signals(df, lookback=30):
+    """Deteksi Order Block, FVG, Liquidity Sweep"""
+    result = {
+        'order_block_signal': 'NONE',
+        'ob_price': None,
+        'fvg_signal': 'NONE',
+        'fvg_filled': False,
+        'liquidity_sweep': False,
+        'sweep_direction': 0
+    }
+    
+    # Order Block detection (simplified)
+    for i in range(len(df)-lookback, len(df)-5):
+        # Bullish OB: strong down candle followed by strong up move
+        if df['close'].iloc[i] < df['open'].iloc[i] * 0.98:  # Strong red
+            if i+3 < len(df) and df['close'].iloc[i+3] > df['open'].iloc[i]:
+                result['order_block_signal'] = 'BULL'
+                result['ob_price'] = df['close'].iloc[i]
+                break
+        # Bearish OB: strong up candle followed by strong down move
+        elif df['close'].iloc[i] > df['open'].iloc[i] * 1.02:  # Strong green
+            if i+3 < len(df) and df['close'].iloc[i+3] < df['open'].iloc[i]:
+                result['order_block_signal'] = 'BEAR'
+                result['ob_price'] = df['close'].iloc[i]
+                break
+    
+    # Fair Value Gap detection
+    for i in range(len(df)-2):
+        # Bullish FVG: gap between candle 1 high and candle 3 low
+        if df['low'].iloc[i+2] > df['high'].iloc[i]:
+            fvg_low = df['high'].iloc[i]
+            fvg_high = df['low'].iloc[i+2]
+            if df['low'].iloc[-1] <= fvg_high and df['high'].iloc[-1] >= fvg_low:
+                result['fvg_signal'] = 'BULL'
+                result['fvg_filled'] = True
+                break
+        # Bearish FVG
+        elif df['high'].iloc[i+2] < df['low'].iloc[i]:
+            fvg_low = df['high'].iloc[i+2]
+            fvg_high = df['low'].iloc[i]
+            if df['low'].iloc[-1] <= fvg_high and df['high'].iloc[-1] >= fvg_low:
+                result['fvg_signal'] = 'BEAR'
+                result['fvg_filled'] = True
+                break
+    
+    # Liquidity sweep detection
+    recent_high = df['high'].iloc[-10:].max()
+    recent_low = df['low'].iloc[-10:].min()
+    if df['high'].iloc[-1] > recent_high * 1.005 and df['close'].iloc[-1] < df['high'].iloc[-1] * 0.99:
+        result['liquidity_sweep'] = True
+        result['sweep_direction'] = -1  # Sell-side sweep, potential reversal up
+    elif df['low'].iloc[-1] < recent_low * 0.995 and df['close'].iloc[-1] > df['low'].iloc[-1] * 1.01:
+        result['liquidity_sweep'] = True
+        result['sweep_direction'] = 1  # Buy-side sweep, potential reversal down
+    
+    return result
+
+
+def analyze_volume_profile(df, lookback=50):
+    """Volume Profile: POC, Value Area, Absorption, Imbalance"""
+    result = {
+        'poc_reaction': 'NONE',
+        'absorption_detected': False,
+        'absorption_side': None,
+        'imbalance_ratio': 1.0,
+        'imbalance_side': None
+    }
+    
+    # Simple POC (Point of Control) - highest volume price zone
+    volume_by_price = df.groupby(pd.cut(df['close'], bins=20))['volume'].sum()
+    poc_bin = volume_by_price.idxmax()
+    poc_price = poc_bin.mid if hasattr(poc_bin, 'mid') else df['close'].iloc[-1]
+    
+    # Check reaction at POC
+    if abs(df['close'].iloc[-1] - poc_price) / poc_price < 0.005:  # Within 0.5%
+        if df['close'].iloc[-1] > df['open'].iloc[-1]:
+            result['poc_reaction'] = 'BOUNCE_BULL'
+        else:
+            result['poc_reaction'] = 'REJECT_BEAR'
+    
+    # Absorption detection (high volume, small range)
+    recent_candles = df.iloc[-10:]
+    avg_range = recent_candles['high'].sub(recent_candles['low']).mean()
+    current_range = df['high'].iloc[-1] - df['low'].iloc[-1]
+    if df['volume'].iloc[-1] > recent_candles['volume'].mean() * 1.8 and current_range < avg_range * 0.6:
+        result['absorption_detected'] = True
+        result['absorption_side'] = 'BULL' if df['close'].iloc[-1] > df['open'].iloc[-1] else 'BEAR'
+    
+    # Volume imbalance (buy vs sell pressure)
+    buy_vol = df[(df['close'] > df['open'])]['volume'].iloc[-20:].sum()
+    sell_vol = df[(df['close'] < df['open'])]['volume'].iloc[-20:].sum()
+    total = buy_vol + sell_vol
+    if total > 0:
+        result['imbalance_ratio'] = max(buy_vol, sell_vol) / min(buy_vol, sell_vol) if min(buy_vol, sell_vol) > 0 else 2.0
+        result['imbalance_side'] = 'BULL' if buy_vol > sell_vol else 'BEAR'
+    
+    return result
+
+
+def detect_divergences(df, period=14):
+    """Detect RSI & MACD divergences"""
+    result = {
+        'rsi_divergence': 'NONE',
+        'macd_divergence': 'NONE',
+        'macd_confirmed': False
+    }
+    
+    # RSI divergence
+    df['rsi'] = talib.RSI(df['close'], period)
+    for i in range(len(df)-20, len(df)-5):
+        # Bullish divergence: lower low in price, higher low in RSI
+        if df['low'].iloc[i] > df['low'].iloc[i-10] and df['rsi'].iloc[i] < df['rsi'].iloc[i-10]:
+            if df['close'].iloc[-1] > df['close'].iloc[i]:
+                result['rsi_divergence'] = 'BULL'
+                break
+        # Bearish divergence
+        elif df['high'].iloc[i] < df['high'].iloc[i-10] and df['rsi'].iloc[i] > df['rsi'].iloc[i-10]:
+            if df['close'].iloc[-1] < df['close'].iloc[i]:
+                result['rsi_divergence'] = 'BEAR'
+                break
+    
+    # MACD divergence (simplified)
+    macd, signal, hist = talib.MACD(df['close'])
+    for i in range(len(df)-20, len(df)-5):
+        if df['low'].iloc[i] > df['low'].iloc[i-10] and hist.iloc[i] < hist.iloc[i-10]:
+            if df['close'].iloc[-1] > df['close'].iloc[i] and hist.iloc[-1] > 0:
+                result['macd_divergence'] = 'BULL'
+                result['macd_confirmed'] = hist.iloc[-1] > hist.iloc[-3]
+                break
+        elif df['high'].iloc[i] < df['high'].iloc[i-10] and hist.iloc[i] > hist.iloc[i-10]:
+            if df['close'].iloc[-1] < df['close'].iloc[i] and hist.iloc[-1] < 0:
+                result['macd_divergence'] = 'BEAR'
+                result['macd_confirmed'] = hist.iloc[-1] < hist.iloc[-3]
+                break
+    
+    return result
+
+
+def check_mtf_alignment(exchange, symbol, df, base_tf='1h'):
+    """Check alignment across 3 timeframes"""
+    timeframes = ['15m', '1h', '4h'] if base_tf == '1h' else ['5m', '15m', '1h']
+    signals = []
+    
+    for tf in timeframes:
+        try:
+            ohlcv = exchange.fetch_ohlcv(symbol, tf, limit=50)
+            tf_df = pd.DataFrame(ohlcv, columns=['timestamp','open','high','low','close','volume'])
+            
+            # Simple trend: EMA20 vs EMA50
             tf_df['ema20'] = talib.EMA(tf_df['close'], 20)
             tf_df['ema50'] = talib.EMA(tf_df['close'], 50)
-            tf_df['adx'] = talib.ADX(tf_df['high'], tf_df['low'], tf_df['close'], 14)
-            tf_df['plus_di'] = talib.PLUS_DI(tf_df['high'], tf_df['low'], tf_df['close'], 14)
-            tf_df['minus_di'] = talib.MINUS_DI(tf_df['high'], tf_df['low'], tf_df['close'], 14)
             
-            last_row = tf_df.iloc[-1]
-            adx = last_row['adx']
-            plus_di = last_row['plus_di']
-            minus_di = last_row['minus_di']
-
-            weight = 0.7 if tf_value == '1d' else 0.3
-            
-            # Hitung score tren untuk timeframe ini
-            tf_score = 0
-            tf_direction = 0  # 1 = bull, -1 = bear, 0 = neutral
-            
-            # 1. Kekuatan tren (ADX)
-            # if adx > 25:
-            #     tf_score += 0.4
-            # elif adx > 20:
-            #     tf_score += 0.3
-            # elif adx > 15:
-            #     tf_score += 0.2
-
-            adx_threshold = 20 if tf_value == '1d' else 15
-            if adx > adx_threshold + 10:
-                tf_score += 0.5 * weight
-            elif adx > adx_threshold + 5:
-                tf_score += 0.3 * weight
-            elif adx > adx_threshold:
-                tf_score += 0.2 * weight
-                
-            # 2. Arah tren (DI+ vs DI-)
-            # if plus_di > minus_di + 5 and plus_di > 20:
-            #     tf_score += 0.3
-            #     tf_direction = 1
-            # elif minus_di > plus_di + 5 and minus_di > 20:
-            #     tf_score += 0.3
-            #     tf_direction = -1
-            di_threshold = 25 if tf_value == '1d' else 20
-            if plus_di > minus_di + 5 and plus_di > di_threshold:
-                tf_score += 0.4 * weight
-                tf_direction = 1
-            elif minus_di > plus_di + 5 and minus_di > di_threshold:
-                tf_score += 0.4 * weight
-                tf_direction = -1
-                
-            # 3. EMA alignment
-            # if last_row['ema20'] > last_row['ema50']:
-            #     tf_score += 0.2
-            #     if tf_direction == 0:
-            #         tf_direction = 1
-            # elif last_row['ema20'] < last_row['ema50']:
-            #     tf_score += 0.2
-            #     if tf_direction == 0:
-            #         tf_direction = -1
-            if last_row['ema20'] > last_row['ema50'] * 1.01:  # Lebih ketat untuk daily
-                tf_score += 0.3 * weight
-                if tf_direction == 0:
-                    tf_direction = 1
-            elif last_row['ema20'] < last_row['ema50'] * 0.99:
-                tf_score += 0.3 * weight
-                if tf_direction == 0:
-                    tf_direction = -1
-            
-             # 4. ✅ Daily close position (HANYA UNTUK 1D)
-            if tf_value == '1d':
-                daily_close = last_row['close']
-                daily_open = tf_df['open'].iloc[-1]
-                if daily_close > daily_open * 1.02:  # Strong bullish candle
-                    tf_score += 0.2 * weight
-                elif daily_close < daily_open * 0.98:  # Strong bearish candle
-                    tf_score += 0.2 * weight
-                    
-            trend_scores.append(tf_score)
-            trend_directions.append(tf_direction)
-            
-            # print(f"   📈 {tf_name.upper()}: Score={tf_score:.2f} | Arah={tf_direction} | ADX={adx:.1f} | DI+={plus_di:.1f}/DI-={minus_di:.1f}")
-            
-        except Exception as e:
-            # print(f"   ⚠️ Error {tf_name}: {e}")
-            continue
+            last = tf_df.iloc[-1]
+            if last['ema20'] > last['ema50'] * 1.002:
+                signals.append(1)  # Bullish
+            elif last['ema20'] < last['ema50'] * 0.998:
+                signals.append(-1)  # Bearish
+            else:
+                signals.append(0)  # Neutral
+        except:
+            signals.append(0)
     
-    if not trend_scores:
-        return 0.5, 0  # Default neutral
-    
-    # Hitung average score dan konsensus arah
-    # avg_score = sum(trend_scores) / len(trend_scores)
-    # direction_consensus = sum(trend_directions) / len(trend_directions) if trend_directions else 0
-    total_weight = sum([0.7 if tf == '1d' else 0.3 for tf in higher_timeframes.keys()])
-    weighted_score = sum(score * (0.7 if i == 0 else 0.3) for i, score in enumerate(trend_scores)) / total_weight
-    
-    # Normalisasi direction consensus (-1 to 1)
-    # direction_consensus = max(-1, min(1, direction_consensus))
-    direction_consensus = trend_directions[0] if len(trend_directions) > 0 else 0
-    
-    return weighted_score, direction_consensus
-
-def get_coin_age_days(exchange, symbol):
-    """Hitung umur koin dalam hari sejak listing pertama"""
-    try:
-        # Ambil data trading terlama yang tersedia
-        earliest_ohlcv = exchange.fetch_ohlcv(symbol, '1d', limit=1, since=0)  # since=0 = dari awal
-        
-        if earliest_ohlcv and len(earliest_ohlcv) > 0:
-            first_candle_time = earliest_ohlcv[0][0]  # timestamp pertama
-            first_date = datetime.fromtimestamp(first_candle_time / 1000)
-            current_date = datetime.now()
-            age_days = (current_date - first_date).days
-            return max(1, age_days)  # minimal 1 hari
-        
-    except Exception as e:
-        print(f"Error cek umur {symbol}: {e}")
-        # Fallback: cek dari metadata exchange
-        market = exchange.market(symbol)
-        if 'info' in market and 'listingTime' in market['info']:
-            listing_time = int(market['info']['listingTime']) / 1000
-            listing_date = datetime.fromtimestamp(listing_time)
-            return max(1, (datetime.now() - listing_date).days)
-    
-    return 365  # Default: asumsi koin lama jika gagal deteksi
-
-def execute_order_simulated(symbol, side, qty, price, sl_price, tp_price, balance, leverage,exchange):
-    """Simulasikan eksekusi order market"""
-    print(f"🎯 SIMULATED {side.upper()} Order @ {price:.4f} | Qty: {qty:.4f} | SL: {sl_price:.4f} | TP: {tp_price:.4f}")
-    position_value = qty * price
-    max_loss = abs((price - sl_price) * qty) * leverage
-    max_profit = abs((tp_price - price) * qty) * leverage
-
-    realistic_price = get_realistic_execution_price(exchange, symbol, side, qty)
-    slippage_pct = abs(realistic_price - price) / price
-
-    # margin_required = position_value / leverage
-
-    print(f"🎯 SIMULATED {side.upper()} Order @ {realistic_price:.4f} (Request: {price:.4f}) | Qty: {qty:.4f} | SL: {sl_price:.4f} | TP: {tp_price:.4f}")
-    print(f"   📊 Slippage: {slippage_pct:.4%} | Arah: {'LONG' if side == 'LONG' else 'SHORT'}")
-    print(f"   💰 Simulated Position Value: {position_value:.4f} USDT | Max Loss: {max_loss:.4f} | Max Profit: {max_profit:.4f}")
-
-
-    position_info = {
-        'status': 'simulated',
-        'symbol': symbol,
-        'side': side,
-        'qty': qty,
-        'entry_price': realistic_price,
-        'sl_price': sl_price,
-        'tp_price': tp_price,
-        'balance': balance,  # ✅ Balance TIDAK berkurang di awal
-        'max_risk': max_loss,  # Simpan sebagai info saja
-        'used_margin': position_value,  # Untuk perhitungan leverage
-        'slippage_pct': slippage_pct
-    }
-
-    return position_info
-
-
-
-def get_realistic_execution_price(exchange, symbol, side, qty):
-    """Simulasi eksekusi harga realistis dengan slippage"""
-    try:
-        ob = exchange.fetch_order_book(symbol, limit=ORDER_BOOK_DEPTH)
-        if 'asks' not in ob or 'bids' not in ob:
-            print(f"⚠️ Format order book tidak valid untuk {symbol}")
-            return price * 1.001 if side == 'LONG' else price * 0.999
-        
-        if side == 'LONG':
-            asks = ob['asks']
-            filled_price = 0
-            remaining_qty = qty
-            
-            # Simulasi isi dari order book
-            for price, volume in asks:
-                take_qty = min(remaining_qty, volume)
-                filled_price += price * take_qty
-                remaining_qty -= take_qty
-                if remaining_qty <= 0:
-                    break
-            
-            if remaining_qty > 0:  # Tidak semua terisi
-                filled_price += (price * 1.001) * remaining_qty  # Slippage tambahan
-            
-            avg_price = filled_price / qty
-            return avg_price * 1.0005  # Tambahan slippage
-        
-        else:  # SHORT
-            bids = ob['bids']
-            filled_price = 0
-            remaining_qty = qty
-            
-            for price, volume in bids:
-                take_qty = min(remaining_qty, volume)
-                filled_price += price * take_qty
-                remaining_qty -= take_qty
-                if remaining_qty <= 0:
-                    break
-            
-            if remaining_qty > 0:
-                filled_price += (price * 1.001) * remaining_qty
-            
-            avg_price = filled_price / qty
-            return avg_price * 1.0005  # Tambahan slippage
-    
-    except Exception as e:
-        print(f"⚠️ Error simulating execution: {e}")
-        # Fallback ke harga ticker dengan slippage
-        ticker = exchange.fetch_ticker(symbol)
-        if side == 'LONG':
-            return ticker['ask'] * 1.001
-        else:
-            return ticker['bid'] * 0.999
-
-def calculate_market_impact(exchange, symbol, qty, position_value):
-    """Estimasi market impact berdasarkan volume harian"""
-    try:
-        ticker = exchange.fetch_ticker(symbol)
-        daily_volume = ticker['quoteVolume']  # Volume dalam USDT
-        
-        if daily_volume == 0:
-            return 0.001  # Default 0.1%
-        
-        # Formula sederhana: impact = (position_value / daily_volume) * impact_factor
-        impact_factor = 0.3  # Faktor empiris untuk spot market
-        impact_pct = (position_value / daily_volume) * impact_factor
-        return max(0.0005, min(0.01, impact_pct))  # Batasi 0.05% - 1%
-    
-    except Exception as e:
-        print(f"⚠️ Error calculating market impact for {symbol}: {e}")
-        return 0.001  # Default 0.1%
-
-        
-
-def execute_order_live(exchange, symbol, side, qty, price, sl_price, tp_price):
-    """Eksekusi order live ke exchange (gunakan leverage jika perlu)"""
-    print(f"⚠️ LIVE ORDER: {side.upper()} {qty:.4f} {symbol.split('/')[0]} @ {price:.4f}")
-    print("   🚨 LIVE ORDER DICEGAH UNTUK KEAMANAN - HAPUS KOMENTAR UNTUK EKSEKUSI SEBENARNYA")
     return {
-        'status': 'pending',
-        'symbol': symbol,
-        'side': side,
-        'qty': qty,
-        'entry_price': price,
-        'sl_price': sl_price,
-        'tp_price': tp_price
+        'all_bullish': all(s == 1 for s in signals),
+        'all_bearish': all(s == -1 for s in signals),
+        'majority_bullish': sum(1 for s in signals if s == 1) >= 2,
+        'majority_bearish': sum(1 for s in signals if s == -1) >= 2,
+        'signals': signals
     }
 
-def check_exit_conditions(position, current_price, exchange):
-    """Cek apakah posisi harus exit karena SL atau TP"""
-    if position['side'] == 'LONG':
-        if current_price <= position['sl_price']:
-            print(f"🔴 SIMULATED LONG SL HIT @ {current_price:.4f} | Entry: {position['entry_price']:.4f}")
-            return 'SL_HIT'
-        elif current_price >= position['tp_price']:
-            print(f"🟢 SIMULATED LONG TP HIT @ {current_price:.4f} | Entry: {position['entry_price']:.4f}")
-            return 'TP_HIT'
-    else: # SHORT
-        if current_price >= position['sl_price']:
-            print(f"🔴 SIMULATED SHORT SL HIT @ {current_price:.4f} | Entry: {position['entry_price']:.4f}")
-            return 'SL_HIT'
-        elif current_price <= position['tp_price']:
-            print(f"🟢 SIMULATED SHORT TP HIT @ {current_price:.4f} | Entry: {position['entry_price']:.4f}")
-            return 'TP_HIT'
-    return None
 
-def enhanced_trend_detection(row_idx, df):
-    """Deteksi regime pasar - diambil dari backtest"""
-    if row_idx < 50:
-        return "INSUFFICIENT_DATA"
-    try:
-        if 'adx' not in df.columns or 'plus_di' not in df.columns or 'minus_di' not in df.columns:
-            df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-            df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-            df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-        adx = df['adx'].iloc[row_idx]
-        plus_di = df['plus_di'].iloc[row_idx]
-        minus_di = df['minus_di'].iloc[row_idx]
-        if 'ema_fast' not in df.columns or 'ema_slow' not in df.columns:
-            df['ema_fast'] = talib.EMA(df['close'], 20)
-            df['ema_slow'] = talib.EMA(df['close'], 50)
-        ema_fast = df['ema_fast'].iloc[row_idx]
-        ema_slow = df['ema_slow'].iloc[row_idx]
-        price = df['close'].iloc[row_idx]
-        trend_score = 0
-        if adx > 25: trend_score += 3
-        elif adx > 20: trend_score += 2
-        elif adx > 15: trend_score += 1
-        di_diff = plus_di - minus_di
-        if abs(di_diff) > 15: trend_score += 2
-        elif abs(di_diff) > 8: trend_score += 1
-        if ema_fast > ema_slow and price > ema_fast: trend_score += 2
-        elif ema_fast < ema_slow and price < ema_fast: trend_score += 2
-        elif (ema_fast > ema_slow and price < ema_fast) or (ema_fast < ema_slow and price > ema_fast): trend_score += 1
-        if trend_score >= 6: return "VERY_STRONG_TREND"
-        elif trend_score >= 4: return "STRONG_TREND"
-        elif trend_score >= 2: return "MODERATE_TREND"
-        else: return "SIDEWAYS"
-    except Exception as e:
-        print(f"⚠️ Error dalam trend detection: {e}")
-        return "SIDEWAYS"
-
-def calculate_professional_position_size(balance, entry_price, sl_price, risk_pct, leverage=10):
-    """Position sizing dari backtest"""
-    if sl_price <= 0 or entry_price <= 0 or balance <= 0:
-        return 0
-    risk_per_unit = abs(entry_price - sl_price) * leverage
-    if risk_per_unit <= 0:
-        return 0
-
-    risk_amount = balance * min(risk_pct, MAX_RISK_PER_TRADE)
-    position_size = risk_amount / risk_per_unit
-    # MAX_POSITION_VALUE = 0.30
-    # MIN_POSITION_VALUE = 0.5
+def check_correlation_filter(exchange, symbol, ext_data=None):
+    """Check BTC correlation and trend alignment"""
+    result = {'btc_correlation_ok': True, 'btc_trend': 'NEUTRAL'}
     
-    position_value = position_size * entry_price
-    max_position_value = balance * MAX_POSITION_VALUE
-    if position_value > max_position_value:
-        position_size = max_position_value / entry_price
-    min_position_size = MIN_POSITION_VALUE / entry_price
-    if position_value < MIN_POSITION_VALUE:
-        position_size = min_position_size if min_position_size <= max_position_value / entry_price else 0
-    if entry_price < 1:
-        position_size = round(position_size, 0)
+    try:
+        # Get BTC data
+        btc_ohlcv = exchange.fetch_ohlcv('BTC/USDT', '1h', limit=50)
+        btc_df = pd.DataFrame(btc_ohlcv, columns=['ts','o','h','l','c','v'])
+        btc_df['ema20'] = talib.EMA(btc_df['c'], 20)
+        btc_df['ema50'] = talib.EMA(btc_df['c'], 50)
+        
+        last_btc = btc_df.iloc[-1]
+        if last_btc['ema20'] > last_btc['ema50'] * 1.003:
+            result['btc_trend'] = 'BULL'
+        elif last_btc['ema20'] < last_btc['ema50'] * 0.997:
+            result['btc_trend'] = 'BEAR'
+        
+        # If altcoin and BTC trend is strong opposite, reduce confidence
+        base = symbol.split('/')[0]
+        if base not in ['BTC', 'ETH'] and ext_data:
+            if ext_data.get('btc_dominance', 52) > 58 and result['btc_trend'] == 'BEAR':
+                result['btc_correlation_ok'] = False
+    except:
+        pass
+    
+    return result
+
+
+def check_time_filter(timeframe):
+    """Check if current UTC time is in optimal trading window"""
+    now = datetime.utcnow()
+    hour = now.hour
+    
+    # Optimal windows: London open (7-10 UTC), NY open (12-15 UTC)
+    optimal_sessions = [(7, 10), (12, 15)]
+    avoid_sessions = [(0, 2), (5, 7)]  # Low liquidity / rollover
+    
+    result = {
+        'optimal_window': any(start <= hour < end for start, end in optimal_sessions),
+        'avoid_window': any(start <= hour < end for start, end in avoid_sessions),
+        'active_session': 'London' if 7 <= hour < 12 else 'NY' if 12 <= hour < 20 else 'Asian'
+    }
+    return result
+
+
+def validate_risk_reward(df, structure, smc, min_rr=1.5):
+    """Validate that structure-based SL/TP gives minimum RR"""
+    current = df['close'].iloc[-1]
+    atr = df['atr'].iloc[-1] if 'atr' in df.columns else (df['high'].iloc[-1] - df['low'].iloc[-1])
+    
+    # Estimate SL based on structure
+    if structure['bos_level']:
+        sl_distance = abs(current - structure['bos_level'])
     else:
-        position_size = round(position_size, 4)
-    return max(0, position_size)
-
-# --- FUNGSI UTAMA FORWARD TEST DENGAN SCANNING ULANG ---
-def run_forward_test():
-    send_telegram_message("test coba")
-    """Jalankan Forward Test Loop dengan scanning ulang otomatis"""
-    print(f"🚀 MULAI FORWARD TEST - MODE: {MODE.upper()} | INTERVAL SCAN: {RESCAN_INTERVAL_MINUTES} MENIT")
-    print("=" * 70)
-    LOG_FILENAME = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    scanner = MarketScanner()
-    balance = INITIAL_BALANCE
-    active_position = None
-    trade_log = []
-    current_symbol = None
-    # last_scan_time = datetime.now()
-
-    last_switch_time = datetime.utcnow()
-    next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
-    last_scan_time = next_scan_time - timedelta(minutes=RESCAN_INTERVAL_MINUTES)
-
-    print(f"📡 Bot dijalankan jam {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
-    print(f"⏰ Scan pertama akan terjadi di: {next_scan_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-
-    last_exit_time = None
-    last_oi = None
-    last_oi_update = datetime.now()
-    OI_MIN_CHANGE_THRESHOLD = 2.0
-    oi_confirmed_long = False
-    oi_confirmed_short = False
-    last_entry_time = None      # waktu entry terakhir (untuk cooldown)
-    last_entry_symbol = None    # simbol yang terakhir di-entry
-
-    oi_state = {
-                    'last_oi': None,
-                    'long': False,
-                    'short': False,
-                    'threshold': 2.0 
-                }
-
-    print("🔄 MENCARI ASET TERBAIK UNTUK TRADING AWAL...")
-    current_symbol, current_score = scanner.get_best_asset_for_trading()
-    if not current_symbol:
-        print("❌ Gagal mendapatkan aset awal, keluar.")
-        return
-
-    print(f"🎯 Memilih aset awal: {current_symbol}")
-    print(f"💰 Balance Awal: {balance:.4f}")
-
-    # Inisialisasi data dan indikator
-    print(f"📊 Mengambil data awal untuk {current_symbol}...")
-    df = fetch_ohlcv_data(current_symbol, TIMEFRAME, BARS_TO_FETCH)
-    if df is None or len(df) < BARS_TO_FETCH * 0.7:
-        print("❌ Data awal tidak cukup, keluar.")
-        return
-
-    # Hitung indikator awal
-    df['ema_fast'] = talib.EMA(df['close'], 20)
-    df['ema20'] = talib.EMA(df['close'], 20)
-    df['ema_slow'] = talib.EMA(df['close'], 50)
-    df['ema_200'] = talib.EMA(df['close'], 200)
-    df['rsi'] = talib.RSI(df['close'], 14)
-    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-    df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-    df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-    df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-    df['vol_ma'] = df['volume'].rolling(10).mean()
-    df['volume_ma20'] = df['volume'].rolling(20).mean()
-
-    # Ambil profil aset dan regime pasar
-    asset_profile = scanner.get_asset_profile(current_symbol, df)
-    market_regime = scanner.detect_market_regime(df)
-    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-
-    last_update_time = datetime.utcnow()
-    last_data_time = df['timestamp'].iloc[-1]
-
-    print(f"✅ Forward Test Siap - {current_symbol} | Regime: {market_regime} | Aset: {asset_profile.get('asset_class', 'N/A')}")
-    print("🔄 Memulai Loop Forward Test dengan SCANNING ULANG OTOMATIS... (Tekan Ctrl+C untuk berhenti)")
-
-    try:
-        while True:
-
-            # current_time = datetime.utcnow()
-            current_time = datetime.utcnow()
-            time.sleep(5) # Tunggu 5 detik sebelum cek lagi
-            # --- LOGIKA SCANNING ULANG OTOMATIS ---
-
-            if TIMEFRAME == '1h':
-                minute = current_time.minute
-                second = current_time.second
-                # Hanya jalankan tepat setelah candle 1h SELESAI (xx:00:02 UTC)
-                if minute != 0 or second < 2:
-                    continue
-            
-
-            oi_confirmed_long = oi_state['long']
-            oi_confirmed_short = oi_state['short']
-
-            should_rescan = False
-            
-            # Kondisi 1: Interval waktu tercapai
-            # if (current_time - last_scan_time).total_seconds() >= RESCAN_INTERVAL_MINUTES * 60:
-            #     print(f"⏰ [{current_time.strftime('%H:%M:%S')}] WAKTU SCAN ULANG TERJANGKAU ({RESCAN_INTERVAL_MINUTES} MENIT)")
-            #     should_rescan = True
-
-            if current_time >= next_scan_time:
-                next_scan_time = get_next_aligned_time(RESCAN_INTERVAL_MINUTES)
-                should_rescan = True
-                print(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit)")
-                send_telegram_message(f"🔄 [{current_time.strftime('%H:%M:%S')} UTC] SCAN ULANG TERJADWAL (interval: {RESCAN_INTERVAL_MINUTES} menit) current {current_time.strftime('%H:%M:%S')} next {next_scan_time.strftime('%H:%M:%S')}")
-                last_scan_time = current_time
-            
-            # Kondisi 2: Setelah exit posisi (tunggu minimal MIN_TIME_BETWEEN_SCANS menit)
-            # untuk konsistensi trade : 1 kali trade setiap timeframe waktu dan coin
-            # if last_exit_time and (current_time - last_exit_time).total_seconds() >= MIN_TIME_BETWEEN_SCANS * 60:
-            #     print(f"✅ [{current_time.strftime('%H:%M:%S')}] SCANNING ULANG SETELAH EXIT POSISI")
-            #     should_rescan = True
-            #     last_exit_time = None  # Reset agar tidak terus menerus scan
-            
-            # Kondisi 3: Tidak ada sinyal entry dalam waktu lama (opsional, bisa ditambahkan)
-            # ...
-
-            if should_rescan:
-                print("\n" + "="*50)
-                print(f"🔍 MEMULAI PROSES SCANNING ULANG...")
-                print("="*50)
-                new_score = None
-                new_symbol, new_score = scanner.get_best_asset_for_trading()
-                if new_symbol:
-
-                    if new_symbol != current_symbol:
-                        # Cek apakah minimal waktu antar switch terpenuhi
-                        if (current_time - last_switch_time).total_seconds() < MIN_TIME_BETWEEN_SCANS * 60:
-                            print(f"⏳ [{current_time.strftime('%H:%M:%S')}] TERLALU CEPAT UNTUK GANTI ASET! Tunggu {MIN_TIME_BETWEEN_SCANS} menit sejak switch terakhir")
-                            print(f"   Tetap di {current_symbol} untuk sekarang")
-                        else:
-                            print(f"🎯 [{current_time.strftime('%H:%M:%S')}] ASET BARU DITEMUKAN: {new_symbol} (sebelumnya: {current_symbol})")
-                            
-                            # Simpan data jika ada posisi aktif
-                            if active_position:
-                                print(f"⚠️ Simpan data posisi aktif sebelum switch aset...")
-                                old_score = active_position.get('activity_score_at_entry', 0)
-                                hold_duration = (current_time - active_position['entry_time']).total_seconds() / 60
-                                current_price = get_current_price(scanner.exchange, current_symbol)
-                                if current_price is None:
-                                    print(f"⚠️ Gagal ambil harga untuk {current_symbol}, batalkan force close")
-                                    continue
-
-                                if active_position['side'] == 'LONG':
-                                    current_pnl_pct = ((current_price - active_position['entry_price']) / active_position['entry_price']) * 100
-                                else:
-                                    current_pnl_pct = ((active_position['entry_price'] - current_price) / active_position['entry_price']) * 100
-                                
-                                # new_score = ranked_assets[0]['activity_score'] if ranked_assets else 0
-
-                                criteria_met = 0
-                                force_reasons = []
-                                force_val = False
-
-                                
-                                if new_score >= 30.0 and old_score <= 22.0 and (new_score - old_score) >= 8.0:
-                                    criteria_met += 1
-                                    force_reasons.append(f"Skor lebih tinggi ({new_score:.1f} vs {old_score:.1f})")
-                                else :
-                                    print('skor rendah')
-                                
-                                if TIMEFRAME == '1h':
-                                    timeframe_minutes = 60
-                                    base_hold = 240  # 4 jam (default untuk 1h)
-                                    max_hold = max(base_hold, 2.0 * (60 / timeframe_minutes))  # Min 4 jam
-                                elif TIMEFRAME == '15m':
-                                    timeframe_minutes = 15
-                                    base_hold = 25   # 25 menit (default untuk 15m)
-                                    max_hold = max(base_hold, 1.5 * (60 / timeframe_minutes))
-                                else:  # 5m
-                                    timeframe_minutes = 5
-                                    base_hold = 15   # 15 menit
-                                    max_hold = max(base_hold, 1.5 * (60 / timeframe_minutes))
-
-                                if hold_duration > max_hold:
-                                    force_val = True
-                                    force_reasons.append(f"Hold terlalu lama ({hold_duration:.0f}/{max_hold:.0f} menit)")
-                                else :
-                                    print('masih belum ges')
-
-                                # current_regime = scanner.detect_market_regime(df)
-                                temp_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, 50)
-                                if temp_df is not None and len(temp_df) >= 30:
-                                    current_regime = scanner.detect_market_regime(temp_df)
-                                else:
-                                    current_regime = "NEUTRAL"
-                                
-                                old_regime = active_position.get('market_regime', 'NEUTRAL')
-                                regime_map = {'STRONG_BULL': 1.0, 'BULL': 0.5, 'NEUTRAL': 0.0, 'BEAR': -0.5, 'STRONG_BEAR': -1.0}
-                                regime_threshold = 0.6 if TIMEFRAME == '1h' else 0.4
-
-                                if abs(regime_map[current_regime] - regime_map[old_regime]) >= regime_threshold:
-                                    criteria_met += 1
-                                    force_reasons.append(f"Regime berubah ({old_regime} → {current_regime})")
-                                else:
-                                    print('regime tidak berubah')
-
-                                # if abs(regime_map[current_regime] - regime_map[old_regime]) >= 0.4:
-                                #     criteria_met += 1
-                                #     force_reasons.append(f"Regime berubah ({old_regime} → {current_regime})")
-                                # else:
-                                #     print('regime tidak berubah')
-
-                                # expected_rr = TP_ATR_MULT / SL_ATR_MULT  # Contoh: 3.0 / 1.5 = 2.0
-                                # expected_pnl_pct = 1.0 * expected_rr if active_position['side'] == 'LONG' else 1.0
-
-                                risk_per_unit = abs(active_position['entry_price'] - active_position['sl_price']) * LEVERAGE
-                                reward_per_unit = abs(active_position['tp_price'] - active_position['entry_price']) * LEVERAGE
-                                expected_rr = reward_per_unit / risk_per_unit if risk_per_unit > 0 else 1.0
-                                expected_pnl_pct = expected_rr * abs(active_position['entry_price'] - active_position['sl_price']) / active_position['entry_price'] * 100
-                                
-                                if abs(current_pnl_pct) >= 0.5 and abs(current_pnl_pct) >= 0.5 * expected_pnl_pct:
-                                    criteria_met += 1
-                                    force_reasons.append(f"PnL optimal ({current_pnl_pct:+.2f}%)")
-
-                                if force_val :
-                                    should_force_close = True
-                                else:
-                                    should_force_close = (criteria_met >= 2)
-
-                                print('force close : ',should_force_close)
-
-                                if should_force_close:
-                                    print(f"🔄 [{current_time.strftime('%H:%M:%S')}] POSISI LAMA DITUTUP OTOMATIS: {current_symbol} → BERPINDAH KE {new_symbol}")
-                                    # Tutup posisi lama
-                                    current_price = get_current_price(scanner.exchange, current_symbol)
-                                    if current_price is not None:
-                                        # Hitung PnL & tutup
-                                        if active_position['side'] == 'LONG':
-                                            pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
-                                        else:
-                                            pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
-
-                                        position_value = active_position['entry_price'] * active_position['qty']
-                                        fee_cost = position_value * 0.001 * 2
-                                        slippage_cost = position_value * SLIPPAGE_RATE * LEVERAGE
-                                        market_impact = calculate_market_impact(scanner.exchange, current_symbol, active_position['qty'], position_value)
-                                        impact_cost = position_value * market_impact
-                                        net_pnl = pnl - fee_cost - slippage_cost - impact_cost
-                                        balance = balance + net_pnl
-
-                                        # Log exit
-                                        trade_result = {
-                                            'exit_time': datetime.now(),
-                                            'exit_reason': 'FORCED_SWITCH',
-                                            'exit_price': current_price,
-                                            'gross_pnl': pnl,
-                                            'fee_cost': fee_cost,
-                                            'slippage_cost': slippage_cost,
-                                            'impact_cost': impact_cost,
-                                            'net_pnl': net_pnl,
-                                            'balance_after_exit': balance,
-                                            'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60
-                                        }
-                                        trade_log.append({**active_position, **trade_result})
-                                        log_exit_to_excel(trade_log[-1], LOG_FILENAME)
-                                        send_telegram_message(f"🔄 <b>FORCED EXIT</b>\nCoin: {active_position['symbol']}\nReason: {force_reasons[0]} \nPnL Net: {net_pnl:+.4f}")
-
-                                        print(f"💰 Forced Close PnL: {net_pnl:+.4f} | Balance: {balance:.4f}")
-                                        active_position = None
-                                        last_exit_time = datetime.now()
-
-                                        # Ganti ke aset baru
-                                        print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {new_symbol}...")
-                                        new_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, BARS_TO_FETCH)
-                                        if new_df is not None and len(new_df) >= BARS_TO_FETCH * 0.7:
-                                            # Data baru berhasil diambil, ganti aset
-                                            current_symbol = new_symbol
-                                            last_switch_time = current_time
-                                            df = new_df # Ganti df dengan data baru
-                                            # Hitung ulang indikator
-                                            df['ema_fast'] = talib.EMA(df['close'], 20)
-                                            df['ema_slow'] = talib.EMA(df['close'], 50)
-                                            df['ema_200'] = talib.EMA(df['close'], 200)
-                                            df['rsi'] = talib.RSI(df['close'], 14)
-                                            df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-                                            df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-                                            df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-                                            df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-                                            df['vol_ma'] = df['volume'].rolling(10).mean()
-                                            df['volume_ma20'] = df['volume'].rolling(20).mean()
-
-                                            # reset OI
-                                            oi_state['last_oi'] = None
-                                            oi_state['long'] = False
-                                            oi_state['short'] = False
-
-                                            symbol_base = current_symbol.split('/')[0]
-                                            asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-                                            threshold_map = {
-                                                'MAJOR': 1.2,        # perubahan OI signifikan
-                                                'MID_CAP': 0.5,      # volatilitas sedang
-                                                'SMALL_CAP': 0.15,    # perubahan OI lebih halus
-                                                'MEME': 0.3,         # OI sangat stabil
-                                                'DEFAULT': 0.15       # Fallback aman untuk semua aset
-                                            }
-                                            oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
-                                            # end reset OI 
-
-                                            # Update profil aset dan regime
-                                            asset_profile = scanner.get_asset_profile(current_symbol, df)
-                                            market_regime = scanner.detect_market_regime(df)
-                                            dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                            last_data_time = df['timestamp'].iloc[-1]
-                                            print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
-                                        else:
-                                            print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {new_symbol}, TETAP DI {current_symbol}")
-                                            # Jika gagal mengambil data untuk aset baru, kita tetap di aset lama
-                                            # Tidak perlu mengganti current_symbol atau df
-                                            # Perbarui profil dan regime untuk aset lama (current_symbol) jika perlu
-                                            print(f"🔄 [{current_time.strftime('%H:%M:%S')}] Memperbarui profil dan regime untuk aset lama: {current_symbol}")
-                                            asset_profile = scanner.get_asset_profile(current_symbol, df)
-                                            market_regime = scanner.detect_market_regime(df)
-                                            dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                            # last_data_time dan df tetap sama
-                                            # last_switch_time TIDAK diupdate karena kita tidak benar-benar pindah
-                            else:
-                                print(f"🔄 [{current_time.strftime('%H:%M:%S')}] MENGAMBIL DATA BARU UNTUK {new_symbol}...")
-                                new_df = fetch_ohlcv_data(new_symbol, TIMEFRAME, BARS_TO_FETCH)
-                                if new_df is not None and len(new_df) >= BARS_TO_FETCH * 0.7:
-                                    # Data baru berhasil diambil, ganti aset
-                                    current_symbol = new_symbol
-                                    last_switch_time = current_time
-                                    df = new_df # Ganti df dengan data baru
-                                    # Hitung ulang indikator
-                                    df['ema_fast'] = talib.EMA(df['close'], 20)
-                                    df['ema_slow'] = talib.EMA(df['close'], 50)
-                                    df['ema_200'] = talib.EMA(df['close'], 200)
-                                    df['rsi'] = talib.RSI(df['close'], 14)
-                                    df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-                                    df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-                                    df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-                                    df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-                                    df['vol_ma'] = df['volume'].rolling(10).mean()
-                                    df['volume_ma20'] = df['volume'].rolling(20).mean()
-
-                                    # reset OI
-                                    oi_state['last_oi'] = None
-                                    oi_state['long'] = False
-                                    oi_state['short'] = False
-
-                                    symbol_base = current_symbol.split('/')[0]
-                                    asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-                                    threshold_map = {
-                                        'MAJOR': 1.2,        # perubahan OI signifikan
-                                        'MID_CAP': 0.5,      # volatilitas sedang
-                                        'SMALL_CAP': 0.15,    # perubahan OI lebih halus
-                                        'MEME': 0.3,         # OI sangat stabil
-                                        'DEFAULT': 0.15       # Fallback aman untuk semua aset
-                                    }
-                                    oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
-                                    # end reset OI 
-
-                                    # Update profil aset dan regime
-                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
-                                    market_regime = scanner.detect_market_regime(df)
-                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                    last_data_time = df['timestamp'].iloc[-1]
-                                    print(f"✅ [{current_time.strftime('%H:%M:%S')}] BERHASIL GANTI KE {current_symbol} | Regime: {market_regime}")
-                                else:
-                                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL AMBIL DATA UNTUK {new_symbol}, TETAP DI {current_symbol}")
-                                    # Jika gagal mengambil data untuk aset baru, kita tetap di aset lama
-                                    # Tidak perlu mengganti current_symbol atau df
-                                    # Perbarui profil dan regime untuk aset lama (current_symbol) jika perlu
-                                    print(f"🔄 [{current_time.strftime('%H:%M:%S')}] Memperbarui profil dan regime untuk aset lama: {current_symbol}")
-                                    asset_profile = scanner.get_asset_profile(current_symbol, df)
-                                    market_regime = scanner.detect_market_regime(df)
-                                    dynamic_thresholds = scanner.get_dynamic_entry_thresholds(asset_profile, market_regime)
-                                    
-                                # print(f"⏳ [{current_time.strftime('%H:%M:%S')}] POSISI AKTIF MASIH DIPERTAHANKAN. Tidak force-switch ke {new_symbol} (Skor baru: {new_score:.1f})")
-                                # # Tetap di aset lama, jangan ganti
-                                # last_scan_time = current_time
-                                # continue
-                    else:
-                        print(f"🔄 [{current_time.strftime('%H:%M:%S')}] ASET TERBAIK MASIH SAMA: {current_symbol}")
-                else:
-                    print(f"❌ [{current_time.strftime('%H:%M:%S')}] GAGAL MENDAPATKAN ASET BARU, TETAP DI {current_symbol}")
-                
-                last_scan_time = current_time
-                print("="*50 + "\n")
-
-            # Ambil data baru jika cukup waktu
-            if (current_time - last_update_time).seconds >= DATA_UPDATE_INTERVAL: # dinamis
-                try:
-                    new_ohlcv = scanner.exchange.fetch_ohlcv(current_symbol, TIMEFRAME, limit=2)
-                    new_df = pd.DataFrame(new_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-                    new_df['timestamp'] = pd.to_datetime(new_df['timestamp'], unit='ms')
-                    new_df = new_df.sort_values('timestamp').reset_index(drop=True)
-
-                    latest_candle_time = new_df['timestamp'].iloc[-1]
-
-                    if latest_candle_time > last_data_time:
-                        df = pd.concat([df, new_df.iloc[1:]], ignore_index=True)
-                        df = df.iloc[-BARS_TO_FETCH:]
-
-                        if df[['open', 'high', 'low', 'close', 'volume']].isna().any().any():
-                            print(f"⚠️ Data baru ({current_symbol}) mengandung NaN. Melewati pembaruan indikator.")
-                        
-                        # memulai perhitungan OI
-                        # if len(df) < 2:
-                        #     return
-                        
-                        symbol_base = current_symbol.split('/')[0]
-                        asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-                        threshold_map = {
-                            'MAJOR': 1.2,        # perubahan OI signifikan
-                            'MID_CAP': 0.5,      # volatilitas sedang
-                            'SMALL_CAP': 0.15,    # perubahan OI lebih halus
-                            'MEME': 0.3,         # OI sangat stabil
-                            'DEFAULT': 0.15       # Fallback aman untuk semua aset
-                        }
-                        oi_state['threshold'] = threshold_map.get(asset_class, 1.5)
-
-                        prev_close = df['close'].iloc[-2]
-                        current_close = df['close'].iloc[-1]
-                        # current_oi = get_open_interest(scanner.exchange, current_symbol)
-                        atr_value = df['atr'].iloc[-1]  
-
-                        # if asset_class == 'MAJOR':
-                        #     print(f"OI terbaru untuk {current_symbol}: {current_oi} dan sebelumnya: {oi_state['last_oi']}")
-
-                        #     long_confirm, short_confirm = get_oi_confirmation(df, current_oi, oi_state['last_oi'], atr_value,oi_state['threshold'])
-                        #     oi_state['long'] = long_confirm
-                        #     oi_state['short'] = short_confirm
-
-                        #     if current_oi is not None:
-                        #         oi_state['last_oi'] = current_oi
-                        #     else:
-                        #         print('data OI belum lengkap')
-                            
-                        #     oi_confirmed_long = long_confirm
-                        #     oi_confirmed_short = short_confirm
-                        # else:
-                        #     print('OI di SKIP karena asset bukan MAJOR')
-                        #     i_confirmed_long = True
-                        #     oi_confirmed_short = True
-
-                        # hasil perhitungan OI 
-
-                        # Update indikator dengan rolling calculation yang lebih efisien
-                        df['ema_fast'] = talib.EMA(df['close'], 20)
-                        df['ema_slow'] = talib.EMA(df['close'], 50)
-                        df['ema_200'] = talib.EMA(df['close'], 200)
-                        df['rsi'] = talib.RSI(df['close'], 14)
-                        df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
-                        df['plus_di'] = talib.PLUS_DI(df['high'], df['low'], df['close'], 14)
-                        df['minus_di'] = talib.MINUS_DI(df['high'], df['low'], df['close'], 14)
-                        df['adx'] = talib.ADX(df['high'], df['low'], df['close'], 14)
-                        df['vol_ma'] = df['volume'].rolling(10).mean()
-                        df['volume_ma20'] = df['volume'].rolling(20).mean()
-
-                        last_data_time = latest_candle_time
-                        last_update_time = current_time
-
-                        print(f"[{latest_candle_time.strftime('%Y-%m-%d %H:%M:%S')}] Data {current_symbol} diperbarui.")
-                    else:
-                        print(f"[{current_time.strftime('%Y-%m-%d %H:%M:%S')}] Data belum update, menunggu candle baru...")
-                except Exception as e:
-                    print(f"⚠️ Error mengambil data baru untuk {current_symbol}: {e}")
-                    continue
-
-
-            # Pastikan df tidak None sebelum melanjutkan ke logika utama
-            if df is None or len(df) < BARS_TO_FETCH * 0.7:
-                 print(f"❌ [{current_time.strftime('%Y-%m-%d %H:%M:%S')}] Data untuk {current_symbol} tidak valid (None atau tidak cukup), menunggu pembaruan atau scan ulang...")
-                 continue # Tunggu pembaruan data atau scan ulang
-
-
-            # Ambil harga real-time untuk cek exit
-            current_price = get_current_price(scanner.exchange, current_symbol)
-            if current_price is None:
-                print("⚠️ Gagal ambil harga real-time, lewati iterasi ini.")
-                continue
-
-            # --- CEK EXIT ---
-            if active_position is not None:
-                exit_reason = check_exit_conditions(active_position, current_price, scanner.exchange)
-                if exit_reason:
-                    # Hitung PnL sesuai arah posisi
-                    if active_position['side'] == 'LONG':
-                        pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
-                    else:  # SHORT
-                        pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
-
-                    position_value = active_position['entry_price'] * active_position['qty']
-                    fee_cost = position_value * 0.001 * 2  # 0.1% per trade × 2 (entry+exit)
-                    slippage_cost = position_value * SLIPPAGE_RATE * LEVERAGE  # 0.05% slippage
-                    market_impact = calculate_market_impact(scanner.exchange, active_position['symbol'], active_position['qty'], position_value)
-                    impact_cost = position_value * market_impact
-                    
-                    net_pnl = pnl - fee_cost - slippage_cost - impact_cost
-                    balance = balance + net_pnl
-                    
-                    print(f"💰 Gross PnL: {pnl:+.4f} | Biaya: Fee {fee_cost:.4f} + Slippage {slippage_cost:.4f} + Impact {impact_cost:.4f} | Net: {net_pnl:+.4f}")
-        
-                    
-                    # Log trade exit
-                    trade_result = {
-                        'exit_time': datetime.now(),
-                        'exit_reason': exit_reason,
-                        'exit_price': current_price,
-                        'gross_pnl': pnl,
-                        'fee_cost': fee_cost,
-                        'slippage_cost': slippage_cost,
-                        'impact_cost': impact_cost,
-                        # 'pnl': pnl,
-                        'net_pnl': net_pnl,
-                        'balance_after_exit': balance,
-                        'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60  # dalam menit
-                    }
-                    
-                    trade_log.append({
-                        **active_position, 
-                        **trade_result
-                    })
-
-                    log_exit_to_excel(trade_log[-1],LOG_FILENAME)
-
-                    send_telegram_message(f"❌ <b>EXIT</b>\n"
-                                          f"Coin: {active_position['symbol']}\n"
-                                          f"Arah: {active_position['side']}\n"
-                                          f"Exit Reason: {exit_reason}\n"
-                                          f"Harga: {current_price:.4f}\n"
-                                          f"PnL Net: {net_pnl:+.4f}\n"
-                                          f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    
-                    print(f"📋 Trade Log: {active_position['side']} {active_position['symbol']} exit on {exit_reason}")
-                    print(f"   💰 PnL: {pnl:+.4f} USDT | Balance: {balance:.4f} USDT | Hold Time: {trade_result['hold_time']:.1f} menit")
-                    
-                    active_position = None
-                    last_exit_time = datetime.now()  # Trigger scanning ulang setelah exit
-
-            # --- CEK ENTRY BARU (hanya jika tidak ada posisi aktif) ---
-            if active_position is not None:
-                continue  # Lewati jika ada posisi aktif
-
-            # Gunakan bar terakhir dari df yang diperbarui
-            if len(df) < 52:
-                continue # Data tidak cukup untuk analisis
-            
-            i = len(df) - 2
-            current_row = df.iloc[i]
-
-            regime = enhanced_trend_detection(i, df)
-            atr = current_row['atr']
-            close = current_row['close']
-            volume = current_row['volume']
-            vol_ma = current_row['vol_ma']
-            adx = current_row['adx']
-            vol_ratio = volume / vol_ma if vol_ma > 0 else 0
-            atr_pct = (atr / close) * 100 if close > 0 else 0
-
-            # print(f"[{current_time.strftime('%H:%M:%S')}] [DEBUG] ATR%: {atr_pct:.3f}% (Thres: {dynamic_thresholds['atr_threshold']:.3f}%) | ADX: {adx:.1f} (Thres: {dynamic_thresholds['adx_threshold']:.1f}) | VolRatio: {vol_ratio:.2f}x (Thres: {dynamic_thresholds['volume_multiplier']:.2f}x) | EMA: F{current_row['ema_fast']:.4f} vs S{current_row['ema_slow']:.4f}")
-
-            # print(f"[{current_time.strftime('%H:%M:%S')}] Cek Entry - Regime: {regime} | Market Regime: {market_regime} | ATR%: {atr_pct:.3f}% | Vol Ratio: {vol_ratio:.2f}x | ADX: {adx:.1f}")
-            # ------------------------
-            if regime in ["SIDEWAYS", "INSUFFICIENT_DATA"]:
-                continue
-
-            ema_slow = current_row['ema_slow']
-            ema_fast = current_row['ema_fast']
-            # ema_20 = current_row['ema_20']
-            recent_atr_pct = df['atr_pct'].iloc[-100:].quantile(0.3)
-            dynamic_atr_threshold = max(0.15, recent_atr_pct * 0.8)
-            # atr_threshold = dynamic_thresholds['atr_threshold']
-            atr_threshold = dynamic_atr_threshold
-            volume_multiplier = dynamic_thresholds['volume_multiplier']
-            adx_threshold = dynamic_thresholds['adx_threshold']
-            level_multiplier = dynamic_thresholds['level_multiplier']
-            risk_pct = dynamic_thresholds['risk_pct']
-
-            # print(f"[DEBUG] Volume Multiplier Dinamis: {volume_multiplier:.2f}x | Vol Ratio Saat Ini: {vol_ratio:.2f}x | Vol Confirmed: {vol_ratio >= volume_multiplier}")
-
-            vol_confirmed = vol_ratio >= (volume_multiplier * 0.9)
-            atr_confirmed = atr_pct >= atr_threshold
-            atr_50 = df['atr'].rolling(50).mean().iloc[i] if i >= 50 else atr  # Fallback jika data kurang
-            is_sideways = (
-                current_row['adx'] < 22 and  # ADX rendah = sideways
-                current_row['atr'] < (atr_50 * 0.8)  # Volatilitas menyempit
-            )
-            is_strong_trend = current_row['adx'] > 25
-            is_uptrend = (ema_fast > ema_slow * 1.003) and (close > ema_slow)
-            is_downtrend = (ema_fast < ema_slow * 0.997) and (close < ema_slow)
-
-            high_quality_long = False
-            high_quality_short = False
-            mtf_score, mtf_direction = get_multi_timeframe_confirmation(scanner.exchange, current_symbol)
-
-            market_regime = "NEUTRAL"
-            allow_long = True
-            allow_short = True
-
-            if current_row['adx'] > 30:
-                if ema_fast > ema_slow * 1.01:  # Uptrend kuat
-                    market_regime = "STRONG_BULL"
-                elif ema_fast < ema_slow * 0.99:  # Downtrend kuat
-                    market_regime = "STRONG_BEAR"
-            elif current_row['adx'] > 20:
-                if ema_fast > ema_slow:
-                    market_regime = "BULL"
-                elif ema_fast < ema_slow:
-                    market_regime = "BEAR"
-
-            if market_regime in ['STRONG_BULL', 'BULL']:
-                allow_short = False  # Jangan short di bull market
-                print(f"🚫 SHORT DISABLED - Market Regime: {market_regime}")
-            elif market_regime in ['STRONG_BEAR', 'BEAR']:
-                allow_long = False  # Jangan long di bear market
-                print(f"🚫 LONG DISABLED - Market Regime: {market_regime}")
-
-            
-            if is_sideways :
-                print('trade terindikasi sideways')
-            
-            if is_strong_trend:
-                print('trade terindikasi strong trend')
-                if is_uptrend:
-                    print('trade terindikasi uptrend')
-                elif is_downtrend:
-                    print('trade terindikasi downtrend')
-            
-
-
-            if is_sideways:
-                # Hitung level breakout (gunakan Bollinger Band jika tersedia, else swing high/low)
-                if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
-                    long_level = df['bb_upper'].iloc[i-1]
-                    short_level = df['bb_lower'].iloc[i-1]
-                else:
-                    # Fallback ke swing levels seperti kode lama
-                    lookback_bars = 8 if TIMEFRAME == '1h' else 15  # Lebih pendek untuk 1h
-                    lookback_start_swing = max(0, i - lookback_bars)
-                    # lookback_start_swing = max(0, i - 15)
-                    lookback_end_swing = i - 2
-                    
-                    if lookback_end_swing > lookback_start_swing:
-                        swing_high = df['high'].iloc[lookback_start_swing:lookback_end_swing].max()
-                        swing_low = df['low'].iloc[lookback_start_swing:lookback_end_swing].min()
-                    else:
-                        swing_high = df['high'].iloc[:i-2].max()
-                        swing_low = df['low'].iloc[:i-2].min()
-                    
-                    long_level = swing_high
-                    short_level = swing_low
-                
-                # # Breakout confirmation
-                # broke_resistance = close > long_level * 1.002  # Break minimal 0.2%
-                # broke_support = close < short_level * 0.998    # Break minimal 0.2%
-
-                buffer_pct = 0.005 if TIMEFRAME == '1h' else 0.002  # 0.5% untuk 1h
-                broke_resistance = close > long_level * (1 + buffer_pct)
-                broke_support = close < short_level * (1 - buffer_pct)
-
-                # volume_confirmed = volume > (current_row['volume_ma20'] * 1.5)
-
-                volume_multiplier = 1.8 if TIMEFRAME == '1h' else 1.5  # Lebih tinggi untuk 1h
-                volume_confirmed = volume > (current_row['volume_ma20'] * volume_multiplier)
-                
-                # RSI filter untuk breakout
-                # rsi_long_ok = current_row['rsi'] < 75  # Hindari overbought ekstrem
-                # rsi_short_ok = current_row['rsi'] > 25  # Hindari oversold ekstrem
-                rsi = current_row['rsi']
-
-                # rsi_long_ok = 45 <= rsi <= 75
-                # rsi_short_ok = 25 <= rsi <= 55
-
-                rsi_long_ok = rsi <= 80 
-                rsi_short_ok = rsi >= 20
-
-                # MTF confirmation (lebih longgar untuk breakout)
-                # mtf_ok_long = mtf_direction > -0.1  # Izinkan netral untuk long
-                # mtf_ok_short = mtf_direction < 0.1  # Izinkan netral untuk short
-
-                mtf_ok_long = mtf_direction > -0.05  # Lebih ketat untuk 1h
-                mtf_ok_short = mtf_direction < 0.05
-                
-                # Entry condition untuk breakout mode
-                if broke_resistance and volume_confirmed and rsi_long_ok and mtf_ok_long and allow_long:
-                    high_quality_long = True
-                    print(f"🔥 BREAKOUT MODE - LONG SIGNAL: {current_symbol} @ {close:.6f}")
-                    
-                if broke_support and volume_confirmed and rsi_short_ok and mtf_ok_short and allow_short:
-                    high_quality_short = True
-                    print(f"🔥 BREAKOUT MODE - SHORT SIGNAL: {current_symbol} @ {close:.6f}")
-            
-            elif is_strong_trend:
-                # LONG di Uptrend
-                buffer_pullback = 0.008 if TIMEFRAME == '1h' else 0.004  # 0.8% untuk 1h
-                # ema20 = df['ema20'].iloc[i]
-                ema20 = ema_fast 
-                if is_uptrend and allow_long:                    
-                    pullback_ok = (
-                        (df['low'].iloc[i] <= ema20 * (1 + buffer_pullback)) and
-                        (close >= ema20 * (1 - buffer_pullback/2))
-                    )
-
-                    volume_ok = volume < (current_row['volume_ma20'] * 0.9)
-
-                    rsi_ok = current_row['rsi'] < 70  # Tidak terlalu overbought
-                    di_ok = current_row['plus_di'] > (current_row['minus_di'] + 3)  # Momentum positif
-                    
-                    # MTF confirmation (lebih ketat untuk trend continuation)
-                    mtf_ok = mtf_direction > 0.05  # Minimal bullish bias
-                    
-                    if pullback_ok and volume_ok and rsi_ok and di_ok and mtf_ok:
-                        high_quality_long = True
-                        print(f"📈 TREND MODE - LONG SIGNAL: {current_symbol} @ {close:.6f}")
-                
-                # SHORT di Downtrend
-                elif is_downtrend and allow_short:   
-                    pullback_ok = (
-                        (df['high'].iloc[i] >= ema20 * (1 - buffer_pullback)) and
-                        (close <= ema20 * (1 + buffer_pullback/2))
-                    )
-
-                    volume_ok = volume < (current_row['volume_ma20'] * 0.9)
-
-                    rsi_ok = current_row['rsi'] > 30  # Tidak terlalu oversold
-                    di_ok = current_row['minus_di'] > (current_row['plus_di'] + 3)  # Momentum negatif
-                    
-                    mtf_ok = mtf_direction < -0.05  # Minimal bearish bias
-                    
-                    if pullback_ok and volume_ok and rsi_ok and di_ok and mtf_ok:
-                        high_quality_short = True
-                        print(f"📉 TREND MODE - SHORT SIGNAL: {current_symbol} @ {close:.6f}")
-
-            current_price = get_current_price(scanner.exchange, current_symbol)
-            if current_price is None:
-                current_price = close  # fallback ke harga close terakhir
-            
-            symbol_base = current_symbol.split('/')[0]
-            asset_class = scanner.asset_classification.get(symbol_base, 'DEFAULT')
-
-            TP_MULT_MAP = {
-                'MAJOR': 1.8,      # Aset besar, lebih stabil
-                'MID_CAP': 2.2,    # Aset menengah
-                'SMALL_CAP': 3.0,  # Aset kecil, lebih volatil
-                'MEME': 4.0,       # Aset meme, sangat volatil
-                'DEFAULT': 2.5
-            }
-
-            SL_MULT_MAP = {
-                'MAJOR': 1.2,
-                'MID_CAP': 1.5,
-                'SMALL_CAP': 2.0,
-                'MEME': 2.5,
-                'DEFAULT': 1.8
-            }
-
-            tp_mult = TP_MULT_MAP.get(asset_class, 2.5)
-            sl_mult = SL_MULT_MAP.get(asset_class, 1.8)
-
-            if active_position is None:
-                time_since_last_entry = (current_time - last_entry_time).total_seconds() / 60 if last_entry_time else float('inf')
-                if last_entry_symbol == current_symbol and time_since_last_entry < RESCAN_INTERVAL_MINUTES:
-                    send_telegram_message(f"entry ditunda karena suda ada sesi sebelumnya. {current_symbol} baru di-trade {time_since_last_entry:.0f} menit lalu. Tunggu hingga {RESCAN_INTERVAL_MINUTES} menit.")
-                    print(f"⏳ [{current_time.strftime('%H:%M:%S')}] COOLDOWN: {current_symbol} baru di-trade {time_since_last_entry:.0f} menit lalu. Tunggu hingga {RESCAN_INTERVAL_MINUTES} menit.")
-                    continue
-            
-            if high_quality_long:
-                entry_price = current_price
-
-                sl = entry_price - atr * sl_mult
-                tp = entry_price + atr * tp_mult
-
-                entry_price = float(scanner.exchange.price_to_precision(current_symbol, entry_price))
-                sl = float(scanner.exchange.price_to_precision(current_symbol, sl))
-                tp = float(scanner.exchange.price_to_precision(current_symbol, tp))
-
-                if sl >= entry_price or tp <= entry_price:
-                    print(f"⚠️ Invalid SL/TP after precision: SL={sl}, TP={tp}, Entry={entry_price}")
-                    continue
-
-                # if sl <= 0 or tp <= entry_price or sl >= entry_price:
-                #     print(f"⚠️ SL/TP tidak valid untuk LONG: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
-                #     continue
-                
-                qty = calculate_professional_position_size(balance, entry_price, sl, risk_pct, LEVERAGE)
-                if qty > 0:
-                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal LONG DETECTED untuk {current_symbol} @ {entry_price:.4f}")
-                    print(f"   📊 ATR: {atr:.4f} | SL: {sl:.4f} ({sl_mult}x) | TP: {tp:.4f} ({tp_mult}x)")
-                    print(f"   📈 Kelas Aset: {asset_class} | Market Regime: {market_regime}")
-                    
-                    if MODE == 'simulated':
-                        active_position = execute_order_simulated(current_symbol, 'LONG', qty, entry_price, sl, tp, balance, LEVERAGE, scanner.exchange)
-                        last_entry_time = datetime.now()
-                        last_entry_symbol = current_symbol
-                        balance = active_position['balance'] 
-                        active_position['entry_time'] = datetime.now()
-                        active_position['regime'] = regime
-                        active_position['market_regime'] = market_regime
-                        active_position['activity_score_at_entry'] = current_score
-                        active_position['market_regime_at_entry'] = market_regime
-                        active_position['expected_rr'] = TP_ATR_MULT / SL_ATR_MULT
-
-
-                        send_telegram_message(f"📊 <b>ENTRY</b>\n"
-                                            f"Coin: {active_position['symbol']}\n"
-                                            f"Arah: {active_position['side']}\n"
-                                            f"Harga: {active_position['entry_price']:.4f}\n"
-                                            f"Qty: {active_position['qty']:.4f}\n"
-                                            f"SL: {active_position['sl_price']:.4f}\n"
-                                            f"TP: {active_position['tp_price']:.4f}\n"
-                                            f"Time: {active_position['entry_time'].strftime('%H:%M:%S')}\n"
-                                            f"Regime: {active_position['regime']}\n"
-                                            f"RSI Current: {current_row['rsi']}\n"
-                                            f"Expected RR: {active_position['expected_rr']:.2f}")
-                        log_entry_to_excel(active_position, LOG_FILENAME)
-                                
-
-                    elif MODE == 'live':
-                        active_position = execute_order_live(scanner.exchange, current_symbol, 'LONG', qty, long_level, sl, tp)
-                        active_position['entry_time'] = datetime.now()
-                        active_position['regime'] = regime
-                        active_position['market_regime'] = market_regime
-
-            # elif (retest_short and vol_confirmed and atr_confirmed and
-            #       ema_fast < ema_slow and adx > adx_threshold and allow_short):
-            #     sl = short_level + atr * SL_ATR_MULT
-            #     tp = short_level - atr * TP_ATR_MULT
-            elif high_quality_short:
-                entry_price = current_price
-                sl = entry_price + atr * sl_mult
-                tp = entry_price - atr * tp_mult
-
-                entry_price = float(scanner.exchange.price_to_precision(current_symbol, entry_price))
-                sl = float(scanner.exchange.price_to_precision(current_symbol, sl))
-                tp = float(scanner.exchange.price_to_precision(current_symbol, tp))
-
-                if sl <= entry_price or tp >= entry_price:
-                    print(f"⚠️ Invalid SL/TP after precision: SL={sl}, TP={tp}, Entry={entry_price}")
-                    continue
-
-                # if sl <= 0 or tp <= entry_price or sl >= entry_price:
-                #     print(f"⚠️ SL/TP tidak valid untuk SHORT: SL={sl:.4f}, TP={tp:.4f}, Entry={entry_price:.4f}")
-                #     continue
-                
-                qty = calculate_professional_position_size(balance, entry_price, sl, risk_pct, LEVERAGE)
-                if qty > 0:
-                    print(f"🔍 [{current_time.strftime('%H:%M:%S')}] Sinyal SHORT DETECTED untuk {current_symbol} @ {entry_price:.4f}")
-                    print(f"   📊 ATR: {atr:.4f} | SL: {sl:.4f} ({sl_mult}x) | TP: {tp:.4f} ({tp_mult}x)")
-                    print(f"   📈 Kelas Aset: {asset_class} | Market Regime: {market_regime}")
-                    
-                    if MODE == 'simulated':
-                        active_position = execute_order_simulated(current_symbol, 'SHORT', qty, entry_price, sl, tp, balance, LEVERAGE,scanner.exchange)
-                        last_entry_time = datetime.now()
-                        last_entry_symbol = current_symbol
-                        balance = active_position['balance'] 
-                        active_position['entry_time'] = datetime.now()
-                        active_position['regime'] = regime
-                        active_position['market_regime'] = market_regime
-                        active_position['activity_score_at_entry'] = current_score
-                        active_position['market_regime_at_entry'] = market_regime
-                        active_position['expected_rr'] = TP_ATR_MULT / SL_ATR_MULT
-
-                    elif MODE == 'live':
-                        active_position = execute_order_live(scanner.exchange, current_symbol, 'SHORT', qty, short_level, sl, tp)
-                        active_position['entry_time'] = datetime.now()
-                        active_position['regime'] = regime
-                        active_position['market_regime'] = market_regime
-
-    except KeyboardInterrupt:
-        print("\n🛑 Forward Test dihentikan oleh pengguna.")
-        if active_position:
-            print(f"⚠️ Masih ada posisi aktif: {active_position}")
-            current_price = get_current_price(scanner.exchange, current_symbol)
-            if current_price:
-                exit_reason = check_exit_conditions(active_position, current_price, scanner.exchange)
-                if exit_reason:
-                    if active_position['side'] == 'LONG':
-                        pnl = (current_price - active_position['entry_price']) * active_position['qty'] * LEVERAGE
-                    else:
-                        pnl = (active_position['entry_price'] - current_price) * active_position['qty'] * LEVERAGE
-                    
-                    position_value = active_position['entry_price'] * active_position['qty']
-                    fee_cost = position_value * 0.001 * 2  # 0.1% per trade × 2 (entry+exit)
-                    slippage_cost = position_value * 0.0005 * LEVERAGE  # 0.05% slippage
-                    market_impact = calculate_market_impact(scanner.exchange, current_symbol, active_position['qty'], position_value)
-                    impact_cost = position_value * market_impact
-                    net_pnl = pnl - fee_cost - slippage_cost - impact_cost
-                    balance = balance + net_pnl
-
-                    print(f"💰 Gross PnL: {pnl:+.4f} | Biaya: Fee {fee_cost:.4f} + Slippage {slippage_cost:.4f} + Impact {impact_cost:.4f} | Net: {net_pnl:+.4f}")
-
-                    trade_log.append(
-                        {
-                            **active_position, 
-                            'exit_time': datetime.now(), 
-                            'exit_reason': exit_reason, 
-                            'exit_price': current_price, 
-                            'net_pnl': net_pnl, 
-                            'balance_after_exit': balance, 
-                            'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60
-                        }
-                    )
-
-                else:
-                    trade_log.append({**active_position, 'exit_time': datetime.now(), 'exit_reason': 'MANUAL_STOP', 'exit_price': current_price, 'net_pnl': 'N/A', 'balance_after_exit': balance, 'hold_time': (datetime.now() - active_position['entry_time']).total_seconds() / 60})
-
-        if trade_log:
-
-            # log_df = pd.DataFrame(trade_log)
-            # filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            # log_df.to_csv(filename, index=False)
-            # print(f"💾 Log Forward Test disimpan ke: {filename}")
-
-            log_df = pd.DataFrame(trade_log)
+        sl_distance = atr * 1.5
     
-            # 🔑 KONVERSI KOLOM WAKTU KE STRING YANG RAMAH EXCEL
-            datetime_columns = ['entry_time', 'exit_time']
-            for col in datetime_columns:
-                if col in log_df.columns:
-                    if pd.api.types.is_datetime64_any_dtype(log_df[col]):
-                        log_df[col] = log_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    elif log_df[col].dtype == 'object':  # Sudah string
-                        # Opsional: validasi format string
-                        pass
-            
-            # 📁 BUAT NAMA FILE YANG AMAN
-            filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            
-            # 💾 SIMPAN KE EXCEL DENGAN FORMAT RAPI
-            log_df.to_excel(filename, index=False, engine='openpyxl')
-            
-            # ✅ KONFIRMASI SUKSES
-            print(f"✅ Log Forward Test BERHASIL disimpan ke: {filename}")
-            print(f"   📊 Total baris: {len(log_df)} | Kolom: {', '.join(log_df.columns)}")
-            
-            # Tampilkan ringkasan performa
-            if not log_df.empty:
-                # completed_trades = log_df[log_df['exit_reason'].isin(['SL_HIT', 'TP_HIT'])]
-                completed_trades = log_df[
-                    (log_df['exit_reason'].isin(['SL_HIT', 'TP_HIT'])) & 
-                    (log_df['net_pnl'] != 'N/A') &
-                    (pd.to_numeric(log_df['net_pnl'], errors='coerce').notnull())
-                ]
-                
-                if len(completed_trades) > 0:
-                    completed_trades['net_pnl'] = pd.to_numeric(completed_trades['net_pnl'])
-                    win_rate = len(completed_trades[completed_trades['net_pnl'] > 0]) / len(completed_trades)
-                    total_pnl = completed_trades['net_pnl'].sum()     
-                else:
-                    print("⚠️ Tidak ada trade yang selesai dengan SL/TP hit")
+    # Estimate TP based on next structure level
+    tp_distance = sl_distance * 2.2  # Conservative estimate
+    
+    estimated_rr = tp_distance / sl_distance if sl_distance > 0 else 0
+    
+    return {
+        'min_rr_met': estimated_rr >= min_rr,
+        'estimated_rr': round(estimated_rr, 2),
+        'sl_distance': sl_distance,
+        'tp_distance': tp_distance
+    }
 
-                
 
-                if not completed_trades.empty:
-                    win_rate = len(completed_trades[completed_trades['net_pnl'] > 0]) / len(completed_trades)
-                    total_pnl = completed_trades['net_pnl'].sum()
-                    avg_hold_time = completed_trades['hold_time'].mean()
-                    
-                    print("\n" + "="*50)
-                    print("📊 RINGKASAN PERFORMA FORWARD TEST")
-                    print("="*50)
-                    print(f"   Total Trade: {len(completed_trades)}")
-                    print(f"   Win Rate: {win_rate:.2%}")
-                    print(f"   Total PnL: {total_pnl:+.4f} USDT")
-                    print(f"   Final Balance: {balance:.4f} USDT")
-                    print(f"   Rata-rata Hold Time: {avg_hold_time:.1f} menit")
-                    print(f"   Aset yang diperdagangkan: {', '.join(completed_trades['symbol'].unique())}")
-                    print("="*50)
-        
-        print(f"💰 Balance Akhir (Simulated): {balance:.4f}")
+def calculate_structure_based_sl_tp(df, direction, structure, smc):
+    """Calculate SL/TP based on market structure, not fixed ATR"""
+    current = df['close'].iloc[-1]
+    atr = df['atr'].iloc[-1] if 'atr' in df.columns else (df['high'].iloc[-1] - df['low'].iloc[-1]) * 0.5
+    
+    if direction == 'LONG':
+        # SL: below recent swing low or order block
+        # sl = min(
+        #     structure['swing_lows'][-1][1] * 0.998 if structure['swing_lows'] else current - atr * 2,
+        #     smc['ob_price'] * 0.995 if smc['ob_price'] and smc['order_block_signal'] == 'BULL' else current
+        # )
+        # # TP: above recent swing high or liquidity zone
+        # tp = max(
+        #     structure['swing_highs'][-1][1] * 1.005 if structure['swing_highs'] else current + atr * 4,
+        #     current + atr * 3
+        # )
+        sl_candidates = [current - atr * 2]  # fallback
+        if structure['swing_lows']:
+            sl_candidates.append(structure['swing_lows'][-1][1] * 0.998)
+        if smc.get('ob_price') and smc.get('order_block_signal') == 'BULL':
+            sl_candidates.append(smc['ob_price'] * 0.995)
+        sl = min(sl_candidates)
+
+        tp_candidates = [current + atr * 4]
+        if structure['swing_highs']:
+            tp_candidates.append(structure['swing_highs'][-1][1] * 1.005)
+        tp = max(tp_candidates)
+
+    else:  # SHORT
+
+        sl_candidates = [current + atr * 2]  # fallback
+        if structure['swing_lows']:
+            sl_candidates.append(structure['swing_lows'][-1][1] * 0.998)
+        if smc.get('ob_price') and smc.get('order_block_signal') == 'BULL':
+            sl_candidates.append(smc['ob_price'] * 0.995)
+        sl = min(sl_candidates)
+
+        tp_candidates = [current - atr * 4]
+        if structure['swing_highs']:
+            tp_candidates.append(structure['swing_highs'][-1][1] * 1.005)
+        tp = max(tp_candidates)
+
+        # sl = max(
+        #     structure['swing_highs'][-1][1] * 1.002 if structure['swing_highs'] else current + atr * 2,
+        #     smc['ob_price'] * 1.005 if smc['ob_price'] and smc['order_block_signal'] == 'BEAR' else current
+        # )
+        # tp = min(
+        #     structure['swing_lows'][-1][1] * 0.995 if structure['swing_lows'] else current - atr * 4,
+        #     current - atr * 3
+        # )
+    
+    rr = abs(tp - current) / abs(current - sl) if sl != current else 0
+    
+    return {
+        'sl': sl,
+        'tp1': current + (tp - current) * 0.5 if direction == 'LONG' else current - (current - tp) * 0.5,
+        'tp2': tp,
+        'rr': round(rr, 2)
+    }
 
 # --- FUNGSI FETCH DATA ---
 def fetch_ohlcv_data(symbol, timeframe, limit):
@@ -2195,28 +1582,48 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.sort_values('timestamp').reset_index(drop=True)
+
+        if len(df) >= 20:
+            df['ema20'] = talib.EMA(df['close'], 20)
+            df['ema50'] = talib.EMA(df['close'], 50)
+            df['atr'] = talib.ATR(df['high'], df['low'], df['close'], 14)
+
         return df
     except Exception as e:
         print(f"❌ Error mengambil data {symbol}: {e}")
         return None
 
-def send_telegram_message(message):
-    """Kirim pesan ke chat Telegram"""
+def send_telegram_call(signal):
+    """Kirim signal call rapi ke Telegram"""
     if not ENABLE_TELEGRAM:
+        print("⚠️ Telegram dinonaktifkan atau token/kosong.")
         return
+        
+    text = f"""
+        📢 <b>SIGNAL CALL [{signal['timeframe'].upper()}]</b>
+        🪙 <b>Coin:</b> {signal['symbol'].split('/')[0]}
+        📈 <b>Direction:</b> {'🟢 LONG' if signal['direction'] == 'LONG' else '🔴 SHORT'}
+        💰 <b>Entry Zone:</b> {signal['entry_low']:.5f} - {signal['entry_high']:.5f}
+        🛑 <b>SL:</b> {signal['sl']:.5f}
+        🎯 <b>TP1:</b> {signal['tp1']:.5f} (RR {signal['rr1']})
+        🚀 <b>TP2:</b> {signal['tp2']:.5f} (RR {signal['rr2']})
+        📊 <b>Win Rate Est:</b> {signal['win_rate']}% ({signal['confidence']})
+        🔍 <b>Context:</b> {', '.join(signal['factors'][:3])}
+        ⏰ <b>Next Scan:</b> {signal['next_scan']}
+        ⚠️ <i>Gunakan risk 0.5-1% per trade. Tidak ada jaminan profit.</i>
+        ⚠️ <b>Confidence:</b> {signal['confidence']}</b>
+        ⚠️ <b>Reason:</b> {signal['reason']}</b>
+    """
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {
-            'chat_id': TELEGRAM_CHAT_ID,
-            'text': message,
-            'parse_mode': 'HTML' # Untuk format HTML opsional
-        }
-        response = requests.post(url, data=payload)
-        if response.status_code != 200:
-            print(f"❌ Gagal kirim Telegram: {response.text}")
+        payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': text.strip(), 'parse_mode': 'HTML'}
+        r = requests.post(url, json=payload, timeout=5)
+        if r.status_code == 200:
+            print("✅ Call Telegram terkirim.")
+        else:
+            print(f"❌ Gagal kirim: {r.text}")
     except Exception as e:
-        print(f"⚠️ Error kirim Telegram: {e}")
-
+        print(f"⚠️ Error Telegram: {e}")
 
 def get_next_aligned_time(interval_minutes):
     """Hitung waktu UTC berikutnya yang merupakan kelipatan dari interval_minutes (misal 6 jam)."""
@@ -2239,147 +1646,6 @@ def get_next_aligned_time(interval_minutes):
     return next_aligned
 
 
-def log_entry_to_excel(entry_data,filelog):
-    """Simpan data entry ke file Excel"""
-    # filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
-    filename = filelog
-    df_entry = pd.DataFrame([{
-        'entry_time': entry_data['entry_time'].strftime('%Y-%m-%d %H:%M:%S'), # Konversi ke string
-        'exit_time': '', # Kosongkan untuk entry
-        'symbol': entry_data['symbol'],
-        'side': entry_data['side'],
-        'entry_price': entry_data['entry_price'],
-        'exit_price': '', # Kosongkan untuk entry
-        'qty': entry_data['qty'],
-        'sl_price': entry_data['sl_price'],
-        'tp_price': entry_data['tp_price'],
-        'exit_reason': '', # Kosongkan untuk entry
-        'gross_pnl': '', # Kosongkan untuk entry
-        'fee_cost': '', # Kosongkan untuk entry
-        'slippage_cost': '', # Kosongkan untuk entry
-        'impact_cost': '', # Kosongkan untuk entry
-        'net_pnl': '', # Kosongkan untuk entry
-        'balance_after_exit': entry_data['balance'], # Balance saat entry
-        'hold_time': '' # Kosongkan untuk entry
-    }])
-
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            existing_df = pd.read_excel(filename, engine='openpyxl')
-            updated_df = pd.concat([existing_df, df_entry], ignore_index=True)
-        except FileNotFoundError:
-            updated_df = df_entry
-
-        try:
-            updated_df.to_excel(filename, index=False, engine='openpyxl')
-            print(f"✅ Entry log disimpan ke: {filename}")
-            return  # Sukses, keluar
-        except Exception as e:
-            print(f"⚠️ Gagal menyimpan entry (percobaan {attempt+1}/{max_retries}): {e}")
-            time.sleep(1)
-    
-    # Jika semua percobaan gagal
-    print("❌ SEMUA PERCOBAAN GAGAL: Simpan cadangan ke file teks")
-    with open(f"entry_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", "w") as f:
-        f.write(str(entry_data))
-
-def log_exit_to_excel(exit_data,filelog):
-    """Simpan data exit ke file Excel yang sama dengan entry"""
-    # filename = f"forward_test_log_{datetime.now().strftime('%Y%m%d')}.xlsx" # Gunakan tanggal hari ini
-    filename = filelog
-    df_exit = pd.DataFrame([{
-        'entry_time': exit_data['entry_time'].strftime('%Y-%m-%d %H:%M:%S'), # Konversi ke string
-        'exit_time': exit_data['exit_time'], # Sudah string
-        'symbol': exit_data['symbol'],
-        'side': exit_data['side'],
-        'entry_price': exit_data['entry_price'],
-        'exit_price': exit_data['exit_price'],
-        'qty': exit_data['qty'],
-        'sl_price': exit_data['sl_price'],
-        'tp_price': exit_data['tp_price'],
-        'exit_reason': exit_data['exit_reason'],
-        'gross_pnl': exit_data['gross_pnl'],
-        'fee_cost': exit_data['fee_cost'],
-        'slippage_cost': exit_data['slippage_cost'],
-        'impact_cost': exit_data['impact_cost'],
-        'net_pnl': exit_data['net_pnl'],
-        'balance_after_exit': exit_data['balance_after_exit'],
-        'hold_time': exit_data['hold_time']
-    }])
-
-    try:
-        # Coba baca file yang sudah ada
-        existing_df = pd.read_excel(filename, engine='openpyxl')
-        # Gabungkan data baru
-        updated_df = pd.concat([existing_df, df_exit], ignore_index=True)
-    except FileNotFoundError:
-        # Jika file belum ada, gunakan data baru sebagai awal
-        updated_df = df_exit
-
-    # Simpan kembali ke file
-    updated_df.to_excel(filename, index=False, engine='openpyxl')
-    print(f"✅ Exit log disimpan ke: {filename}")
-
-def get_open_interest(exchange, symbol):
-        try:
-            base = symbol.split('/')[0]
-            MULTIPLIER_SYMBOLS = {
-                'PEPE': '100PEPE',
-                'SHIB': '1000SHIB',
-                'FLOKI': '1000FLOKI',
-            }
-    
-            if base in MULTIPLIER_SYMBOLS:
-                futures_symbol = MULTIPLIER_SYMBOLS[base] + 'USDT'
-            else:
-                futures_symbol = base + 'USDT'
-            oi_data = exchange.fapiPublicGetOpenInterest({'symbol': futures_symbol})
-            oi = float(oi_data['openInterest'])
-            print(f"✅ OI untuk {symbol}: {oi:,.0f}")
-            return oi
-        except Exception as e:
-            print(f"⚠️ Error ambil OI untuk {symbol}: {e}")
-            return None
-
-def calculate_oi_change(current_oi, previous_oi):
-    if previous_oi is None or previous_oi == 0:
-        return 0.0
-    return ((current_oi - previous_oi) / previous_oi) * 100
-
-def get_oi_confirmation(df, current_oi, last_oi, atr, treshold = 0.35):
-
-    if last_oi is None or current_oi is None:
-        return False, False
-
-    oi_change_pct = ((current_oi - last_oi) / last_oi) * 100
-    candle_body = abs(df['close'].iloc[-1] - df['open'].iloc[-1])
-    price_up = df['close'].iloc[-1] > df['open'].iloc[-1]
-    price_down = df['close'].iloc[-1] < df['open'].iloc[-1]
-
-    # ATR lebih kecil biar sering valid
-    big_candle = candle_body > (0.08 * atr)
-
-    long_confirm = False
-    short_confirm = False
-
-    print(f"📊 Perubahan OI sekarang {oi_change_pct:.2f}% dengan treshold {treshold}")
-    # Valid breakout
-    if oi_change_pct > treshold and big_candle:
-        if price_up:
-            long_confirm = True
-        if price_down:
-            short_confirm = True
-        print(f"🟢 OI naik {oi_change_pct:.2f}%, valid breakout → {('LONG' if price_up else 'SHORT')}")
-
-    # If OI turun, jangan entry
-    if oi_change_pct < -0.3:
-        long_confirm = False
-        short_confirm = False
-        print(f"🔴 OI turun {oi_change_pct:.2f}% → Hindari entry")
-
-    return long_confirm, short_confirm
-
 # --- MAIN ---
 if __name__ == "__main__":
-    run_forward_test()
+   run_signal_generator()
