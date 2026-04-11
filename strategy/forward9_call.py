@@ -923,7 +923,24 @@ def run_signal_generator():
                     }
 
                     send_telegram_call(signal_payload)
-                
+                else:
+                    direction = 'LONG' if close > df['ema20'].iloc[-1] else 'SHORT'
+                    text = f"""
+                    📡 <b>MODE: SIGNAL GENERATOR TANPA PENGECEKAN</b>
+                    📢 <b>SIGNAL CALL [{signal.upper()}]</b>
+                    🪙 <b>Coin:</b> {signal['symbol'].split('/')[0]}
+                    📈 <b>Direction:</b> {'🟢 LONG' if direction == 'LONG' else '🔴 SHORT'}
+                    💰 <b>Entry Zone:</b> {signal['entry_low']:.5f} - {signal['entry_high']:.5f}
+                    🛑 <b>SL:</b> {signal['sl']:.5f}
+                    🎯 <b>TP1:</b> {signal['tp1']:.5f} (RR {signal['rr1']})
+                    🚀 <b>TP2:</b> {signal['tp2']:.5f} (RR {signal['rr2']})
+                    📊 <b>Win Rate Est:</b>({confidence})
+                    📜 <b>Reasons:</b> {reasons}
+                    ⏰ <b>Next Scan:</b> {signal['next_scan']}
+                    ⚠️ <i>Gunakan risk 0.5-1% per trade. Tidak ada jaminan profit.</i>
+                    ⚠️ """
+                    send_telegram_message(text)
+
                 time.sleep(1.5)  # Hindari rate limit
                 
             next_scan = get_next_aligned_time(360)
@@ -1593,6 +1610,22 @@ def fetch_ohlcv_data(symbol, timeframe, limit):
         print(f"❌ Error mengambil data {symbol}: {e}")
         return None
 
+def send_telegram_message(message):
+    """Kirim pesan ke chat Telegram"""
+    if not ENABLE_TELEGRAM:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'text': message,
+            'parse_mode': 'HTML' # Untuk format HTML opsional
+        }
+        response = requests.post(url, data=payload)
+        if response.status_code != 200:
+            print(f"❌ Gagal kirim Telegram: {response.text}")
+    except Exception as e:
+        print(f"⚠️ Error kirim Telegram: {e}")
 def send_telegram_call(signal):
     """Kirim signal call rapi ke Telegram"""
     if not ENABLE_TELEGRAM:
