@@ -928,7 +928,7 @@ def run_signal_generator():
                     text = f"""
                     📡 <b>MODE: SIGNAL GENERATOR TANPA PENGECEKAN</b>
                     📢 <b>SIGNAL CALL [{signal.upper()}]</b>
-                    🪙 <b>Coin:</b> {signal['symbol'].split('/')[0]}
+                    🪙 <b>Coin:</b> {sym}
                     📈 <b>Direction:</b> {'🟢 LONG' if direction == 'LONG' else '🔴 SHORT'}
                     💰 <b>Entry Zone:</b> {signal['entry_low']:.5f} - {signal['entry_high']:.5f}
                     🛑 <b>SL:</b> {signal['sl']:.5f}
