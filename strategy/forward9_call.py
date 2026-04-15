@@ -887,9 +887,7 @@ def run_signal_generator():
                 
                 # Ambil data eksternal
                 ext_data = fetch_external_market_data(sym, TIMEFRAME,scanner)
-                
-                # Generate range TP/SL
-                # ranges = generate_tp_sl_ranges(close, atr, df, direction, TIMEFRAME)
+               
                 signal, confidence, reasons, sl_tp = professional_entry_decision(
                     sym, df, scanner, TIMEFRAME, ext_data
                 )
@@ -925,18 +923,19 @@ def run_signal_generator():
                     send_telegram_call(signal_payload)
                 else:
                     direction = 'LONG' if close > df['ema20'].iloc[-1] else 'SHORT'
+                    # Generate range TP/SL
+                    ranges = generate_tp_sl_ranges(close, atr, df, direction, TIMEFRAME,scanner, sym)
+
                     text = f"""
                     📡 <b>MODE: SIGNAL GENERATOR TANPA PENGECEKAN</b>
                     📢 <b>SIGNAL CALL [{signal.upper()}]</b>
                     🪙 <b>Coin:</b> {sym}
                     📈 <b>Direction:</b> {'🟢 LONG' if direction == 'LONG' else '🔴 SHORT'}
-                    💰 <b>Entry Zone:</b> {signal['entry_low']:.5f} - {signal['entry_high']:.5f}
-                    🛑 <b>SL:</b> {signal['sl']:.5f}
-                    🎯 <b>TP1:</b> {signal['tp1']:.5f} (RR {signal['rr1']})
-                    🚀 <b>TP2:</b> {signal['tp2']:.5f} (RR {signal['rr2']})
+                    🛑 <b>SL:</b> {ranges['sl']:.5f}
+                    🎯 <b>TP1:</b> {ranges['tp1']:.5f} (RR {ranges['rr1']})
+                    🚀 <b>TP2:</b> {ranges['tp2']:.5f} (RR {ranges['rr2']})
                     📊 <b>Win Rate Est:</b>({confidence})
                     📜 <b>Reasons:</b> {reasons}
-                    ⏰ <b>Next Scan:</b> {signal['next_scan']}
                     ⚠️ <i>Gunakan risk 0.5-1% per trade. Tidak ada jaminan profit.</i>
                     ⚠️ """
                     send_telegram_message(text)
